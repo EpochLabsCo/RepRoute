@@ -1,3 +1,5 @@
+import { uiText } from '../constants/uiText'
+
 export type CrmExportFormat =
   | 'generic'
   | 'hubspot'
@@ -39,9 +41,9 @@ export type CrmExportProfile = {
 const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
   generic: {
     id: 'generic',
-    label: 'CSV for any CRM',
+    label: uiText.crmExport.formats.generic,
     fileStem: 'reproute-generic',
-    futureApiTarget: 'Generic CSV importer',
+    futureApiTarget: uiText.crmExport.futureTargets.generic,
     columnMap: {
       businessName: 'Business Name',
       contactName: 'Contact Name',
@@ -63,9 +65,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
   },
   hubspot: {
     id: 'hubspot',
-    label: 'HubSpot-ready CSV',
+    label: uiText.crmExport.formats.hubspot,
     fileStem: 'reproute-hubspot',
-    futureApiTarget: 'HubSpot',
+    futureApiTarget: uiText.crmExport.futureTargets.hubspot,
     columnMap: {
       businessName: 'Company name',
       contactName: 'Contact name',
@@ -87,9 +89,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
   },
   salesforce: {
     id: 'salesforce',
-    label: 'Salesforce-ready CSV',
+    label: uiText.crmExport.formats.salesforce,
     fileStem: 'reproute-salesforce',
-    futureApiTarget: 'Salesforce',
+    futureApiTarget: uiText.crmExport.futureTargets.salesforce,
     columnMap: {
       businessName: 'Account Name',
       contactName: 'Contact Name',
@@ -111,9 +113,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
   },
   zoho: {
     id: 'zoho',
-    label: 'Zoho-ready CSV',
+    label: uiText.crmExport.formats.zoho,
     fileStem: 'reproute-zoho',
-    futureApiTarget: 'Zoho',
+    futureApiTarget: uiText.crmExport.futureTargets.zoho,
     columnMap: {
       businessName: 'Account Name',
       contactName: 'Contact Name',
@@ -135,9 +137,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
   },
   pipedrive: {
     id: 'pipedrive',
-    label: 'Pipedrive-ready CSV',
+    label: uiText.crmExport.formats.pipedrive,
     fileStem: 'reproute-pipedrive',
-    futureApiTarget: 'Pipedrive',
+    futureApiTarget: uiText.crmExport.futureTargets.pipedrive,
     columnMap: {
       businessName: 'Organization name',
       contactName: 'Person name',
@@ -242,10 +244,10 @@ export function getCrmExportFormats() {
 
 export function getCrmExportScopes() {
   return [
-    { id: 'saved', label: 'Saved prospects only' },
-    { id: 'route', label: 'Today’s route only' },
-    { id: 'followups', label: 'Follow-ups only' },
-    { id: 'all', label: 'All RepRoute data' },
+    { id: 'saved', label: uiText.crmExport.scopes.saved },
+    { id: 'route', label: uiText.crmExport.scopes.route },
+    { id: 'followups', label: uiText.crmExport.scopes.followups },
+    { id: 'all', label: uiText.crmExport.scopes.all },
   ] as const
 }
 

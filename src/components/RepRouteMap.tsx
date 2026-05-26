@@ -6,6 +6,7 @@ import {
   useJsApiLoader,
   type Libraries,
 } from '@react-google-maps/api'
+import { uiText } from '../constants/uiText'
 
 const AUSTIN_CENTER = { lat: 30.2672, lng: -97.7431 }
 const GOOGLE_MAPS_LIBRARIES: Libraries = ['places']
@@ -66,14 +67,14 @@ function createMarkerIcon(fill: string) {
 
 function formatRating(rating: number | null) {
   if (rating === null) {
-    return 'No rating yet'
+    return uiText.errors.noRatingYet
   }
 
   return `${rating.toFixed(1)} stars`
 }
 
 function normalizeWebsite(website: string) {
-  if (!website || website === 'Website unavailable') {
+  if (!website || website === uiText.errors.websiteUnavailable) {
     return ''
   }
 
@@ -130,7 +131,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
   if (!hasApiKey) {
     return (
       <div className="google-map-shell google-map-shell--error">
-        <div className="google-map-shell__state">Google Maps API key missing</div>
+        <div className="google-map-shell__state">{uiText.errors.mapApiKeyMissing}</div>
       </div>
     )
   }
@@ -138,7 +139,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
   if (loadError) {
     return (
       <div className="google-map-shell google-map-shell--error">
-        <div className="google-map-shell__state">Map failed to load</div>
+        <div className="google-map-shell__state">{uiText.errors.mapFailedToLoad}</div>
       </div>
     )
   }
@@ -146,7 +147,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
   if (!isLoaded) {
     return (
       <div className="google-map-shell google-map-shell--loading">
-        <div className="google-map-shell__state">Loading map...</div>
+        <div className="google-map-shell__state">{uiText.errors.loadingMap}</div>
       </div>
     )
   }
@@ -171,7 +172,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
         {userLocation ? (
           <MarkerF
             position={userLocation}
-            title="Your current location"
+            title={uiText.routes.currentLocation}
             icon={createMarkerIcon('#4a7bff')}
           />
         ) : null}
@@ -211,10 +212,10 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
             <article className="map-info-window">
               <div className="map-info-window__eyebrow">
                 {selectedMarker.categories.includes('route')
-                  ? `Route stop ${selectedMarker.routeOrder ?? ''}`
+                  ? uiText.routes.routeStopInfo(selectedMarker.routeOrder)
                   : selectedMarker.categories.includes('saved')
-                    ? 'Saved prospect'
-                    : 'Search result'}
+                    ? uiText.followUps.savedStatus
+                    : uiText.search.card.searchResult}
               </div>
               <h3>{selectedMarker.businessName}</h3>
               <p>{selectedMarker.address}</p>
@@ -234,7 +235,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
                   {selectedMarker.website}
                 </a>
               ) : (
-                <p className="map-link map-link--muted">Website unavailable</p>
+                <p className="map-link map-link--muted">{uiText.errors.websiteUnavailable}</p>
               )}
 
               <div className="map-info-window__actions">
@@ -243,14 +244,14 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
                   className={`button ${selectedMarker.isSaved ? 'button--secondary' : ''}`}
                   onClick={() => onToggleSaved(selectedMarker.id)}
                 >
-                  {selectedMarker.isSaved ? 'Remove Saved' : 'Save Prospect'}
+                  {selectedMarker.isSaved ? uiText.search.card.removeSaved : uiText.search.card.save}
                 </button>
                 <button
                   type="button"
                   className={`button ${selectedMarker.isInRoute ? 'button--secondary' : ''}`}
                   onClick={() => onToggleRoute(selectedMarker.id)}
                 >
-                  {selectedMarker.isInRoute ? 'Remove Route' : 'Add to Route'}
+                  {selectedMarker.isInRoute ? uiText.search.card.removeRoute : uiText.search.card.addToRoute}
                 </button>
               </div>
             </article>

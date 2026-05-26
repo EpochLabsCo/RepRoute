@@ -48,6 +48,7 @@ import {
   Users,
 } from 'lucide-react'
 import './App.css'
+import { uiText } from './constants/uiText'
 import RepRouteMap, { type RepRouteMapMarker } from './components/RepRouteMap'
 import {
   buildCrmExportRecord,
@@ -154,25 +155,9 @@ type ConnectionTestState = {
   details?: string
 }
 
-const SUGGESTED_SEARCH_KEYWORDS = [
-  'equipment rental',
-  'pipeline operators',
-  'natural gas companies',
-  'oilfield services',
-  'industrial supply',
-  'HVAC contractors',
-  'electrical contractors',
-  'plumbing contractors',
-  'construction companies',
-] as const
+const SUGGESTED_SEARCH_KEYWORDS = uiText.search.suggestedKeywords
 
-const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [
-  'No Answer',
-  'Decision Maker Met',
-  'Follow-Up Needed',
-  'Quote Opportunity',
-  'Not Interested',
-]
+const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
 
 const STORAGE_KEYS = {
   liveProspects: 'reproute:live-prospects',
@@ -184,32 +169,7 @@ const STORAGE_KEYS = {
 
 const AUSTIN_FALLBACK = { lat: 30.2672, lng: -97.7431 }
 
-const screenMeta: Record<View, { title: string; subtitle: string }> = {
-  dashboard: {
-    title: 'Territory command',
-    subtitle: 'Search real businesses with Google Places and keep your route work saved locally.',
-  },
-  map: {
-    title: 'Today’s route',
-    subtitle: 'Stack nearby stops, remove low-value detours, and clear the day when you are done.',
-  },
-  search: {
-    title: 'Prospect search',
-    subtitle: 'Run live Google Places searches by keyword and city, then save or route the real accounts.',
-  },
-  saved: {
-    title: 'Saved prospects',
-    subtitle: 'Keep promising accounts ready for future route days and follow-up work.',
-  },
-  'follow-ups': {
-    title: 'Follow-ups',
-    subtitle: 'Every scheduled callback and visit, sorted by date and saved on this device.',
-  },
-  settings: {
-    title: 'Workspace settings',
-    subtitle: 'Test Google Places, export your local data, and manage workspace preferences.',
-  },
-}
+const screenMeta: Record<View, { title: string; subtitle: string }> = uiText.navigation.screenMeta
 
 function usePersistentState<T>(key: string, initialValue: T) {
   const [value, setValue] = useState<T>(() => {
@@ -249,7 +209,7 @@ function formatDriveTime(minutes: number) {
 
 function formatFollowUpDate(date: string) {
   if (!date) {
-    return 'No follow-up set'
+    return uiText.followUps.noDate
   }
 
   return new Intl.DateTimeFormat('en-US', {
@@ -263,7 +223,7 @@ function formatBackupTimestamp(timestamp: string) {
   const date = new Date(timestamp)
 
   if (Number.isNaN(date.getTime())) {
-    return 'Unknown export date'
+    return uiText.settings.unknownExportDate
   }
 
   return new Intl.DateTimeFormat('en-US', {
@@ -533,10 +493,10 @@ function openExternalNavigation(url: string) {
 
 function getDataSourceLabel(source: SearchDataSource) {
   if (source === 'live') {
-    return 'Live Google Places'
+    return uiText.navigation.liveBadge
   }
 
-  return 'API error'
+  return uiText.errors.apiErrorLabel
 }
 
 function sanitizeBaseProspect(value: unknown): BaseProspect | null {
@@ -712,18 +672,18 @@ function getFollowUpStatus(date: string) {
   const daysUntil = getDaysUntil(date)
 
   if (daysUntil <= 0) {
-    return 'Due now'
+    return uiText.followUps.statuses.dueNow
   }
 
   if (daysUntil === 1) {
-    return 'Tomorrow'
+    return uiText.followUps.statuses.tomorrow
   }
 
   if (daysUntil <= 7) {
-    return 'This week'
+    return uiText.followUps.statuses.thisWeek
   }
 
-  return 'Later'
+  return uiText.followUps.statuses.later
 }
 
 function StatCard({
@@ -831,13 +791,17 @@ function RouteWorkflowStopCard({
             type="button"
             className={`route-stop-check ${prospect.routeCompleted ? 'route-stop-check--checked' : ''}`}
             onClick={() => onToggleCompleted(prospect.id)}
-            aria-label={prospect.routeCompleted ? 'Mark stop incomplete' : 'Mark stop complete'}
+            aria-label={
+              prospect.routeCompleted
+                ? uiText.routes.markStopIncompleteAria
+                : uiText.routes.markStopCompleteAria
+            }
           >
             {prospect.routeCompleted ? <CheckCircle2 size={22} /> : <Circle size={22} />}
           </button>
 
           <div className="route-stop-card__title-block">
-            <div className="route-stop-card__eyebrow">Stop {index + 1}</div>
+            <div className="route-stop-card__eyebrow">{uiText.routes.stopLabel(index)}</div>
             <h3>{prospect.businessName}</h3>
             <p>
               {prospect.category} · {formatDistance(prospect.distance)}
@@ -848,7 +812,7 @@ function RouteWorkflowStopCard({
         <button
           type="button"
           className="drag-handle"
-          aria-label="Reorder stop"
+          aria-label={uiText.routes.reorderStopAria}
           {...attributes}
           {...listeners}
         >
@@ -863,30 +827,32 @@ function RouteWorkflowStopCard({
         {prospect.visitOutcome ? (
           <span className="meta-pill meta-pill--accent">{prospect.visitOutcome}</span>
         ) : null}
-        {prospect.routeCompleted ? <span className="meta-pill">Completed</span> : null}
+        {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
       <div className="route-action-row">
         {callHref ? (
           <a className="route-action-button" href={callHref}>
             <Phone size={16} />
-            Call Business
+            {uiText.routes.actions.callBusiness}
           </a>
         ) : null}
         {websiteHref ? (
           <a className="route-action-button" href={websiteHref} target="_blank" rel="noreferrer">
             <ExternalLink size={16} />
-            Open Website
+            {uiText.routes.actions.openWebsite}
           </a>
         ) : null}
         <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
           <Navigation size={16} />
-          Navigate {travelMode === 'walking' ? 'Walk' : 'Drive'}
+          {travelMode === 'walking'
+            ? uiText.routes.actions.navigateWalk
+            : uiText.routes.actions.navigateDrive}
         </button>
       </div>
 
       <div className="field-group">
-        <span className="field-label">Visit outcome</span>
+        <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
         <div className="route-outcome-grid">
           {ROUTE_OUTCOME_OPTIONS.map((option) => (
             <button
@@ -906,20 +872,20 @@ function RouteWorkflowStopCard({
       </div>
 
       <label className="field-group">
-        <span className="field-label">Quick note after visit</span>
+        <span className="field-label">{uiText.routes.quickNoteLabel}</span>
         <textarea
           className="text-area text-area--compact"
           rows={3}
           value={prospect.visitNote}
           onChange={(event) => onUpdateVisitNote(prospect.id, event.target.value)}
-          placeholder="Add what happened at this stop..."
+          placeholder={uiText.routes.quickNotePlaceholder}
         />
       </label>
 
       <div className="route-stop-card__footer">
         <p>{prospect.address}</p>
         <button type="button" className="mini-button" onClick={() => onRemove(prospect.id)}>
-          Remove
+          {uiText.routes.actions.remove}
         </button>
       </div>
     </article>
@@ -950,7 +916,7 @@ function LiveSearchResultCard({
     <article className="live-result-card">
       <div className="live-result-card__header">
         <div>
-          <div className="eyebrow eyebrow--tight">Live Google Places</div>
+          <div className="eyebrow eyebrow--tight">{uiText.search.card.badge}</div>
           <h3>{prospect.businessName}</h3>
           <p>{prospect.category}</p>
         </div>
@@ -973,18 +939,20 @@ function LiveSearchResultCard({
           className={`button ${isSaved ? 'button--secondary' : ''}`}
           onClick={() => onToggleSaved(prospect.id)}
         >
-          {isSaved ? 'Saved' : 'Save Prospect'}
+          {isSaved ? uiText.search.card.saved : uiText.search.card.save}
         </button>
         <button
           type="button"
           className={`button ${isInRoute ? 'button--secondary' : ''}`}
           onClick={() => onToggleRoute(prospect.id)}
         >
-          {isInRoute ? 'In Route' : 'Add to Route'}
+          {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
         </button>
         <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
           <Navigation size={16} />
-          Navigate {travelMode === 'walking' ? 'Walk' : 'Drive'}
+          {travelMode === 'walking'
+            ? uiText.search.card.navigateWalk
+            : uiText.search.card.navigateDrive}
         </button>
       </div>
     </article>
@@ -1030,7 +998,9 @@ function ProspectCard({
         <button
           type="button"
           className={`icon-button ${isSaved ? 'icon-button--active' : ''}`}
-          aria-label={isSaved ? 'Remove from saved prospects' : 'Save prospect'}
+          aria-label={
+            isSaved ? uiText.search.prospectCard.removeFromSavedAria : uiText.search.prospectCard.saveProspectAria
+          }
           onClick={() => onToggleSaved(prospect.id)}
         >
           <Star size={16} fill={isSaved ? 'currentColor' : 'none'} />
@@ -1045,19 +1015,19 @@ function ProspectCard({
         <span className="meta-pill">{prospect.lastContact}</span>
         {prospect.followUpDate ? (
           <span className="meta-pill meta-pill--accent">
-            Follow-up {formatFollowUpDate(prospect.followUpDate)}
+            {uiText.search.prospectCard.followUpPrefix} {formatFollowUpDate(prospect.followUpDate)}
           </span>
         ) : null}
       </div>
 
       <div className="prospect-card__notes-block">
-        <p className="prospect-card__footer-label">Notes</p>
+        <p className="prospect-card__footer-label">{uiText.search.prospectCard.notes}</p>
         <p className="prospect-card__notes">{prospect.notes}</p>
       </div>
 
       <div className="prospect-card__footer">
         <div>
-          <p className="prospect-card__footer-label">Next touch</p>
+          <p className="prospect-card__footer-label">{uiText.search.prospectCard.nextTouch}</p>
           <p className="prospect-card__footer-copy">{prospect.nextTouch}</p>
         </div>
 
@@ -1067,21 +1037,23 @@ function ProspectCard({
             className={`button ${isInRoute ? 'button--secondary' : ''}`}
             onClick={() => onToggleRoute(prospect.id)}
           >
-            {isInRoute ? 'Remove Route' : 'Add to Route'}
+            {isInRoute ? uiText.search.prospectCard.removeRoute : uiText.search.card.addToRoute}
           </button>
           <button
             type="button"
             className="button button--ghost"
             onClick={() => onToggleExpanded(prospect.id)}
           >
-            {isExpanded ? 'Hide' : 'Manage'}
+            {isExpanded ? uiText.search.prospectCard.hide : uiText.search.prospectCard.manage}
           </button>
           <button
             type="button"
             className="button button--ghost"
             onClick={() => onNavigate(prospect)}
           >
-            Navigate {travelMode === 'walking' ? 'Walk' : 'Drive'}
+            {travelMode === 'walking'
+              ? uiText.search.card.navigateWalk
+              : uiText.search.card.navigateDrive}
           </button>
         </div>
       </div>
@@ -1089,7 +1061,7 @@ function ProspectCard({
       {isExpanded ? (
         <div className="prospect-editor">
           <div className="field-group">
-            <span className="field-label">Priority</span>
+            <span className="field-label">{uiText.search.prospectCard.priority}</span>
             <div className="segment-row">
               {(['Hot', 'Warm', 'Cold'] as Priority[]).map((option) => (
                 <button
@@ -1108,14 +1080,14 @@ function ProspectCard({
 
           <div className="field-group">
             <div className="field-header">
-              <span className="field-label">Follow-up date</span>
+              <span className="field-label">{uiText.search.prospectCard.followUpDate}</span>
               {prospect.followUpDate ? (
                 <button
                   type="button"
                   className="text-button"
                   onClick={() => onUpdateFollowUp(prospect.id, '')}
                 >
-                  Clear
+                  {uiText.search.prospectCard.clear}
                 </button>
               ) : null}
             </div>
@@ -1128,7 +1100,7 @@ function ProspectCard({
           </div>
 
           <label className="field-group">
-            <span className="field-label">Prospect notes</span>
+            <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
             <textarea
               className="text-area"
               rows={4}
@@ -1137,7 +1109,7 @@ function ProspectCard({
             />
           </label>
 
-          <p className="editor-hint">Edits save instantly to local storage on this device.</p>
+          <p className="editor-hint">{uiText.search.prospectCard.editorHint}</p>
         </div>
       ) : null}
     </article>
@@ -1181,7 +1153,7 @@ function App() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [connectionTest, setConnectionTest] = useState<ConnectionTestState>({
     status: 'idle',
-    message: 'Run a live Google Places test to verify this API key and search flow.',
+    message: uiText.settings.googlePlacesDescription,
   })
   const routeSensors = useSensors(
     useSensor(PointerSensor, {
@@ -1251,12 +1223,12 @@ function App() {
       (googleMapsApiKey
         ? {
             source: 'live',
-            message: 'Enter a keyword and city to search live Google Places results.',
+            message: uiText.search.prominentDescription,
           }
         : {
             source: 'api-error',
-            message: 'Connect Google Places to search real businesses.',
-            details: 'Add a valid `VITE_GOOGLE_MAPS_API_KEY` to load real Places results.',
+            message: uiText.errors.connectGooglePlaces,
+            details: uiText.errors.connectGooglePlacesDetail,
           }),
     [googleMapsApiKey, searchStatus],
   )
@@ -1267,20 +1239,28 @@ function App() {
     () =>
       routeIds.length > 0
         ? [
-            { id: 'search', label: 'Search', icon: Search },
-            { id: 'map', label: 'Route', icon: MapIcon },
-            { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-            { id: 'saved', label: 'Saved', icon: Bookmark },
-            { id: 'follow-ups', label: 'Follow-Ups', icon: CalendarClock },
-            { id: 'settings', label: 'Settings', icon: Settings2 },
+            { id: 'search', label: uiText.navigation.items.search, icon: Search },
+            { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
+            { id: 'dashboard', label: uiText.navigation.items.dashboard, icon: LayoutDashboard },
+            { id: 'saved', label: uiText.navigation.items.saved, icon: Bookmark },
+            {
+              id: 'follow-ups',
+              label: uiText.navigation.items.followUps,
+              icon: CalendarClock,
+            },
+            { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
           ]
         : [
-            { id: 'search', label: 'Search', icon: Search },
-            { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-            { id: 'saved', label: 'Saved', icon: Bookmark },
-            { id: 'follow-ups', label: 'Follow-Ups', icon: CalendarClock },
-            { id: 'settings', label: 'Settings', icon: Settings2 },
-            { id: 'map', label: 'Route', icon: MapIcon },
+            { id: 'search', label: uiText.navigation.items.search, icon: Search },
+            { id: 'dashboard', label: uiText.navigation.items.dashboard, icon: LayoutDashboard },
+            { id: 'saved', label: uiText.navigation.items.saved, icon: Bookmark },
+            {
+              id: 'follow-ups',
+              label: uiText.navigation.items.followUps,
+              icon: CalendarClock,
+            },
+            { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
+            { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
           ],
     [routeIds.length],
   )
@@ -1506,7 +1486,7 @@ function App() {
   }).length
 
   const dueNowCount = scheduledFollowUps.filter(
-    (prospect) => getFollowUpStatus(prospect.followUpDate) === 'Due now',
+    (prospect) => getFollowUpStatus(prospect.followUpDate) === uiText.followUps.statuses.dueNow,
   ).length
 
   const currentBackupPayload = useMemo<BackupPayload>(
@@ -1632,8 +1612,8 @@ function App() {
       setLiveSearchIds([])
       setSearchStatus({
         source: 'api-error',
-        message: 'Enter both a keyword and city before running a live Google Places search.',
-        details: 'Google Places needs both fields to run a real business search.',
+        message: uiText.errors.searchMissingFields,
+        details: uiText.errors.searchMissingFieldsDetail,
       })
       return
     }
@@ -1664,8 +1644,8 @@ function App() {
         source: 'live',
         message:
           normalizedProspects.length > 0
-            ? `Live Google Places returned ${normalizedProspects.length} result(s) for "${result.query}".`
-            : `Google Places returned 0 live results for "${result.query}".`,
+            ? uiText.search.statusMessages.liveResults(normalizedProspects.length, result.query)
+            : uiText.search.statusMessages.noLiveResults(result.query),
         resultsCount: normalizedProspects.length,
         query: result.query,
       })
@@ -1674,7 +1654,7 @@ function App() {
       setSearchStatus({
         source: 'api-error',
         message: result.error,
-        details: 'Google Places search failed. Review the API error and try again.',
+        details: uiText.errors.searchFailedDetail,
         query: result.query,
       })
     }
@@ -1695,7 +1675,7 @@ function App() {
   async function handleTestGooglePlacesConnection() {
     setConnectionTest({
       status: 'running',
-      message: 'Testing Google Places with "equipment rental Austin TX"...',
+      message: uiText.errors.googlePlacesConnectionRunning,
     })
 
     const result = await searchGooglePlaces({
@@ -1708,7 +1688,7 @@ function App() {
     if (result.ok) {
       setConnectionTest({
         status: 'success',
-        message: 'Google Places connection succeeded.',
+        message: uiText.errors.googlePlacesConnectionSucceeded,
         resultsCount: result.places.length,
       })
       return
@@ -1716,7 +1696,7 @@ function App() {
 
     setConnectionTest({
       status: 'error',
-      message: 'Google Places connection failed.',
+      message: uiText.errors.googlePlacesConnectionFailed,
       details: result.error,
       resultsCount: 0,
     })
@@ -1746,7 +1726,7 @@ function App() {
     setAccountMenuOpen(false)
     setAccountMenuMessage({
       type: 'info',
-      text: 'Sign in is coming soon. This profile area is ready for future authentication support.',
+      text: uiText.navigation.accountMenu.signInPlaceholder,
     })
   }
 
@@ -1754,7 +1734,7 @@ function App() {
     if (crmExportPreview.records.length === 0) {
       setCrmExportMessage({
         type: 'error',
-        text: 'No prospects are available for that CRM export scope yet.',
+        text: uiText.errors.noCrmDataForScope,
       })
       return
     }
@@ -1775,12 +1755,15 @@ function App() {
 
       setCrmExportMessage({
         type: 'success',
-        text: `Exported ${crmExportPreview.records.length} record(s) as ${crmExportPreview.profile.label}.`,
+        text: uiText.crmExport.successMessage(
+          crmExportPreview.records.length,
+          crmExportPreview.profile.label,
+        ),
       })
     } catch {
       setCrmExportMessage({
         type: 'error',
-        text: 'RepRoute could not generate that CRM export CSV.',
+        text: uiText.errors.crmExportFailed,
       })
     }
   }
@@ -1810,12 +1793,12 @@ function App() {
 
       setBackupMessage({
         type: 'success',
-        text: 'RepRoute data exported as a JSON backup.',
+        text: uiText.errors.backupExported,
       })
     } catch {
       setBackupMessage({
         type: 'error',
-        text: 'RepRoute could not export a backup file.',
+        text: uiText.errors.backupExportFailed,
       })
     }
   }
@@ -1845,16 +1828,13 @@ function App() {
       })
       setBackupMessage({
         type: 'success',
-        text: 'Backup loaded. Review the preview before replacing current local data.',
+        text: uiText.errors.backupLoaded,
       })
     } catch (error) {
       setImportPreview(null)
       setBackupMessage({
         type: 'error',
-        text:
-          error instanceof Error
-            ? error.message
-            : 'RepRoute could not read that backup file.',
+        text: error instanceof Error ? error.message : uiText.errors.backupReadFailed,
       })
     } finally {
       event.target.value = ''
@@ -1883,7 +1863,7 @@ function App() {
     setImportPreview(null)
     setBackupMessage({
       type: 'success',
-      text: `Imported ${importPreview.fileName}. Existing local RepRoute data was replaced.`,
+      text: uiText.errors.backupImported(importPreview.fileName),
     })
   }
 
@@ -1893,11 +1873,11 @@ function App() {
       <section className="panel section-panel">
         <div className="section-heading">
           <div>
-            <div className="eyebrow eyebrow--tight">Today’s route focus</div>
-            <h2>Route snapshot</h2>
+            <div className="eyebrow eyebrow--tight">{uiText.routes.routeSnapshotEyebrow}</div>
+            <h2>{uiText.routes.routeSnapshotHeading}</h2>
           </div>
           <button type="button" className="link-button" onClick={() => setActiveView('map')}>
-            Open route <ChevronRight size={16} />
+            {uiText.routes.openRoute} <ChevronRight size={16} />
           </button>
         </div>
 
@@ -1920,10 +1900,10 @@ function App() {
           </div>
         ) : (
           <EmptyState
-            title="No route loaded yet"
-            copy="Add a few prospects from Search or Saved Prospects to build today’s drive plan."
+            title={uiText.emptyStates.noRouteLoadedTitle}
+            copy={uiText.emptyStates.noRouteLoadedCopy}
             icon={Route}
-            actionLabel="Go to search"
+            actionLabel={uiText.onboarding.hotTargetsEmptyAction}
             onAction={() => setActiveView('search')}
           />
         )}
@@ -1935,35 +1915,32 @@ function App() {
         <section className="panel hero-panel">
           <div className="hero-panel__badge">
             <Compass size={14} />
-            Live route planning
+            {uiText.onboarding.heroBadge}
           </div>
-          <h1>Build a sharper field day with real businesses, routes, and follow-ups that stick.</h1>
-          <p className="hero-panel__copy">
-            RepRoute remembers your real prospects, saved list, route stops, notes, priorities,
-            and follow-up dates between visits.
-          </p>
+          <h1>{uiText.onboarding.heroHeading}</h1>
+          <p className="hero-panel__copy">{uiText.onboarding.heroDescription}</p>
 
           <div className="hero-panel__metrics">
             <div>
-              <span>Saved prospects</span>
+              <span>{uiText.onboarding.metrics.savedProspects}</span>
               <strong>{savedProspects.length}</strong>
             </div>
             <div>
-              <span>Route stops</span>
+              <span>{uiText.onboarding.metrics.routeStops}</span>
               <strong>{routeProspects.length}</strong>
             </div>
             <div>
-              <span>Follow-ups due</span>
+              <span>{uiText.onboarding.metrics.followUpsDue}</span>
               <strong>{dueNowCount}</strong>
             </div>
           </div>
 
           <div className="button-row">
             <button type="button" className="button" onClick={() => setActiveView('search')}>
-              Find prospects
+              {uiText.onboarding.actions.findProspects}
             </button>
             <button type="button" className="button button--ghost" onClick={() => setActiveView('map')}>
-              View route
+              {uiText.onboarding.actions.viewRoute}
             </button>
           </div>
         </section>
@@ -1971,15 +1948,13 @@ function App() {
         <section className="panel section-panel prospect-cta-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Start here</div>
-              <h2>Find real prospects</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.onboarding.startHereEyebrow}</div>
+              <h2>{uiText.search.heading}</h2>
             </div>
             <DataSourceBadge source={effectiveSearchStatus.source} />
           </div>
 
-          <p className="section-copy">
-            Search live Google Places first, save the strongest accounts, and only move into route work once you have stops worth running.
-          </p>
+          <p className="section-copy">{uiText.search.prominentDescription}</p>
 
           <div className="chip-row">
             {SUGGESTED_SEARCH_KEYWORDS.slice(0, 4).map((keyword) => (
@@ -1998,27 +1973,27 @@ function App() {
           </div>
 
           <button type="button" className="button button--wide" onClick={() => setActiveView('search')}>
-            Find real prospects
+            {uiText.routes.suggestedKeywordCta}
           </button>
         </section>
 
         <section className="stat-grid">
           <StatCard
-            label="Real prospects loaded"
+            label={uiText.onboarding.metrics.realProspectsLoaded}
             value={`${prospects.length}`}
-            detail="Live Google Places businesses currently stored on this device"
+            detail={uiText.onboarding.realProspectsDetail}
             icon={Search}
           />
           <StatCard
-            label="Today’s route"
+            label={uiText.routes.stats.routeStopsLabel}
             value={`${routeProspects.length} stops`}
-            detail={`${routeMiles.toFixed(1)} mi currently loaded into the route`}
+            detail={uiText.routes.stats.routeStopsDetail(`${routeMiles.toFixed(1)} mi`)}
             icon={Truck}
           />
           <StatCard
-            label="Upcoming follow-ups"
+            label={uiText.followUps.stats.scheduled}
             value={`${scheduledFollowUps.length}`}
-            detail={`${upcomingThisWeek} scheduled in the next seven days`}
+            detail={uiText.onboarding.upcomingFollowUpsDetail(upcomingThisWeek)}
             icon={CalendarClock}
           />
         </section>
@@ -2026,11 +2001,11 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Live search status</div>
-              <h2>Google Places catalog</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.search.statusHeading}</div>
+              <h2>{uiText.search.catalogHeading}</h2>
             </div>
             <button type="button" className="link-button" onClick={() => setActiveView('settings')}>
-              Test <ChevronRight size={16} />
+              {uiText.search.testButton} <ChevronRight size={16} />
             </button>
           </div>
 
@@ -2039,17 +2014,17 @@ function App() {
               <div className="saved-summary__block">
                 <Search size={18} />
                 <div>
-                  <strong>{prospects.length} real businesses stored locally</strong>
-                  <p>Saved prospects, route stops, and follow-ups all come from live Google Places searches.</p>
+                  <strong>{uiText.onboarding.storedProspectsSummary(prospects.length)}</strong>
+                  <p>{uiText.onboarding.catalogSummary}</p>
                 </div>
               </div>
             </div>
           ) : (
             <EmptyState
-              title="No real prospects loaded yet"
-              copy="Connect Google Places to search real businesses."
+              title={uiText.emptyStates.noRealProspectsTitle}
+              copy={uiText.emptyStates.noRealProspectsCopy}
               icon={Search}
-              actionLabel="Open search"
+              actionLabel={uiText.onboarding.hotTargetsEmptyAction}
               onAction={() => setActiveView('search')}
             />
           )}
@@ -2060,8 +2035,8 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Best nearby opportunities</div>
-              <h2>Hot targets</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.onboarding.hotTargetsEyebrow}</div>
+              <h2>{uiText.onboarding.hotTargetsHeading}</h2>
             </div>
           </div>
 
@@ -2096,10 +2071,10 @@ function App() {
             </div>
           ) : (
             <EmptyState
-              title="No hot prospects yet"
-              copy="Use Search to qualify accounts and mark the best opportunities as Hot."
+              title={uiText.emptyStates.noHotProspectsTitle}
+              copy={uiText.emptyStates.noHotProspectsCopy}
               icon={Flame}
-              actionLabel="Open search"
+              actionLabel={uiText.onboarding.hotTargetsEmptyAction}
               onAction={() => setActiveView('search')}
             />
           )}
@@ -2108,7 +2083,7 @@ function App() {
             <div className="mini-callout">
               <CalendarClock size={16} />
               <div>
-                <strong>Next follow-up</strong>
+                <strong>{uiText.onboarding.nextFollowUp}</strong>
                 <p>
                   {nextFollowUp.businessName} on {formatFollowUpDate(nextFollowUp.followUpDate)}
                 </p>
@@ -2128,8 +2103,8 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Live territory board</div>
-              <h2>Route map</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.routes.routeMapEyebrow}</div>
+              <h2>{uiText.routes.routeMapHeading}</h2>
             </div>
             <DataSourceBadge source={effectiveSearchStatus.source} />
           </div>
@@ -2137,7 +2112,7 @@ function App() {
             <div className="button-row route-map-actions">
               <button type="button" className="button" onClick={handleNavigateEntireRoute}>
                 <Navigation size={16} />
-                Navigate Entire Route
+                {uiText.routes.navigateEntireRoute}
               </button>
               <button
                 type="button"
@@ -2145,12 +2120,12 @@ function App() {
                 onClick={clearRoute}
               >
                 <Trash2 size={16} />
-                Clear route
+                {uiText.routes.clearRoute}
               </button>
             </div>
           ) : null}
           <p className="section-copy map-panel__copy">
-            Search results, saved prospects, and route stops stay visible on the map while you work the day.
+            {uiText.routes.routeMapDescription}
           </p>
 
           <div
@@ -2173,23 +2148,23 @@ function App() {
           <div className="map-marker-summary">
             <span className="map-marker-summary__item">
               <span className="map-key map-key--search" />
-              {searchResultProspects.length} search results
+              {uiText.routes.mapSummary.searchResults(searchResultProspects.length)}
             </span>
             <span className="map-marker-summary__item">
               <span className="map-key map-key--saved" />
-              {savedProspects.length} saved prospects
+              {uiText.routes.mapSummary.savedProspects(savedProspects.length)}
             </span>
             <span className="map-marker-summary__item">
               <span className="map-key map-key--route" />
-              {routeProspects.length} route stops
+              {uiText.routes.mapSummary.routeStops(routeProspects.length)}
             </span>
           </div>
 
           <div className="inline-summary">
-            <span>{mapMarkers.length} visible pins</span>
-            <span>{routeProspects.length} stops in today’s list</span>
-            <span>{routeMiles.toFixed(1)} total route miles</span>
-            <span>{nearbyRouteProspects.length} nearby suggestions</span>
+            <span>{uiText.routes.mapSummary.visiblePins(mapMarkers.length)}</span>
+            <span>{uiText.routes.todayListSummary(routeProspects.length)}</span>
+            <span>{uiText.routes.mapSummary.routeMiles(routeMiles.toFixed(1))}</span>
+            <span>{uiText.routes.mapSummary.nearbySuggestions(nearbyRouteProspects.length)}</span>
           </div>
         </section>
 
@@ -2197,8 +2172,8 @@ function App() {
           <section className="panel section-panel">
             <div className="section-heading">
               <div>
-                <div className="eyebrow eyebrow--tight">Live results</div>
-                <h2>Search results</h2>
+                <div className="eyebrow eyebrow--tight">{uiText.search.resultsEyebrow}</div>
+                <h2>{uiText.search.resultsHeading}</h2>
               </div>
               <DataSourceBadge source={effectiveSearchStatus.source} />
             </div>
@@ -2224,27 +2199,27 @@ function App() {
           <>
             <section className="stat-grid">
               <StatCard
-                label="Completed stops"
+                label={uiText.routes.stats.completedStops}
                 value={`${completedRouteStops}`}
-                detail={`${remainingRouteStops} remaining on today’s route`}
+                detail={uiText.routes.stats.completedStopsDetail(remainingRouteStops)}
                 icon={CheckCircle2}
               />
               <StatCard
-                label="Estimated drive time"
+                label={uiText.routes.stats.estimatedDriveTime}
                 value={formatDriveTime(estimatedDriveMinutes)}
-                detail={`${routeMiles.toFixed(1)} route miles currently planned`}
+                detail={uiText.routes.stats.estimatedDriveTimeDetail(`${routeMiles.toFixed(1)} route miles`)}
                 icon={Clock3}
               />
               <StatCard
-                label="Completion"
+                label={uiText.routes.stats.completion}
                 value={`${completionPercentage}%`}
-                detail="Progress across the active route"
+                detail={uiText.routes.stats.completionDetail}
                 icon={Target}
               />
               <StatCard
-                label="Nearby prospects"
+                label={uiText.routes.stats.nearbyProspects}
                 value={`${nearbyRouteProspects.length}`}
-                detail="Within 5 miles of the current route"
+                detail={uiText.routes.stats.nearbyProspectsDetail}
                 icon={Truck}
               />
             </section>
@@ -2252,10 +2227,14 @@ function App() {
             <section className="panel section-panel">
               <div className="section-heading">
                 <div>
-                  <div className="eyebrow eyebrow--tight">Field workflow</div>
-                  <h2>Today’s Route</h2>
+                  <div className="eyebrow eyebrow--tight">{uiText.routes.fieldWorkflowEyebrow}</div>
+                  <h2>{uiText.routes.fieldWorkflowHeading}</h2>
                 </div>
-                <span className="meta-pill">{currentRouteStop ? `Next: ${currentRouteStop.businessName}` : 'Route ready'}</span>
+                <span className="meta-pill">
+                  {currentRouteStop
+                    ? uiText.routes.nextStop(currentRouteStop.businessName)
+                    : uiText.routes.routeReady}
+                </span>
               </div>
 
               <div className="route-progress-track" aria-hidden="true">
@@ -2269,7 +2248,7 @@ function App() {
                 <div className="mini-callout">
                   <Navigation size={16} />
                   <div>
-                    <strong>Current focus</strong>
+                    <strong>{uiText.routes.currentFocusTitle}</strong>
                     <p>
                       {currentRouteStop.businessName} · {currentRouteStop.address}
                     </p>
@@ -2308,10 +2287,10 @@ function App() {
             <section className="panel section-panel">
               <div className="section-heading">
                 <div>
-                  <div className="eyebrow eyebrow--tight">Nearby coverage</div>
-                  <h2>Nearby Prospects</h2>
+                  <div className="eyebrow eyebrow--tight">{uiText.routes.nearbyEyebrow}</div>
+                  <h2>{uiText.routes.nearbyHeading}</h2>
                 </div>
-                <span className="meta-pill">Within 5 miles</span>
+                <span className="meta-pill">{uiText.routes.withinFiveMiles}</span>
               </div>
 
               {nearbyRouteProspects.length > 0 ? (
@@ -2321,7 +2300,7 @@ function App() {
                       <div>
                         <h3>{prospect.businessName}</h3>
                         <p>
-                          {prospect.category} · {nearestDistance.toFixed(1)} mi from route
+                          {prospect.category} · {uiText.routes.nearbyDistanceLabel(nearestDistance)}
                         </p>
                       </div>
                       <button
@@ -2333,17 +2312,17 @@ function App() {
                           )
                         }
                       >
-                        Add to Route
+                        {uiText.routes.actions.addToRoute}
                       </button>
                     </article>
                   ))}
                 </div>
               ) : (
                 <EmptyState
-                  title="No nearby prospects right now"
-                  copy="Search a few more real businesses to get route-side suggestions within 5 miles."
+                  title={uiText.emptyStates.noNearbyTitle}
+                  copy={uiText.emptyStates.noNearbyCopy}
                   icon={Search}
-                  actionLabel="Search prospects"
+                  actionLabel={uiText.saved.emptyAction}
                   onAction={() => setActiveView('search')}
                 />
               )}
@@ -2352,16 +2331,16 @@ function App() {
             {nearbyRouteProspects.length > 0 ? (
               <button type="button" className="floating-route-fab" onClick={addNearbyProspect}>
                 <Plus size={18} />
-                Add Nearby Prospect
+                {uiText.routes.actions.addNearbyProspect}
               </button>
             ) : null}
           </>
         ) : (
           <EmptyState
-            title="Your route is empty"
-            copy="Add prospects to today’s route from Search or Saved Prospects, then come back here to review the sequence."
+            title={uiText.emptyStates.noRouteTitle}
+            copy={uiText.emptyStates.noRouteCopy}
             icon={MapIcon}
-            actionLabel="Search prospects"
+            actionLabel={uiText.saved.emptyAction}
             onAction={() => setActiveView('search')}
           />
         )}
@@ -2375,48 +2354,48 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Google Places first</div>
-              <h2>Find real prospects</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.search.eyebrow}</div>
+              <h2>{uiText.search.heading}</h2>
             </div>
             <DataSourceBadge source={effectiveSearchStatus.source} />
           </div>
 
           <div className="prominent-search-callout">
-            <strong>Find real prospects</strong>
-            <p>Use keyword + city searches to load live Google Places businesses, then save or route the best fits.</p>
+            <strong>{uiText.search.prominentTitle}</strong>
+            <p>{uiText.search.prominentDescription}</p>
           </div>
 
           <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">
-              <span className="field-label">Keyword</span>
+              <span className="field-label">{uiText.search.keywordLabel}</span>
               <div className="search-field">
                 <Search size={18} />
                 <input
                   type="search"
                   value={searchKeyword}
                   onChange={(event) => setSearchKeyword(event.target.value)}
-                  placeholder="equipment rental"
-                  aria-label="Search keyword"
+                  placeholder={uiText.search.keywordPlaceholder}
+                  aria-label={uiText.search.keywordLabel}
                 />
               </div>
             </label>
 
             <label className="field-group">
-              <span className="field-label">City or market</span>
+              <span className="field-label">{uiText.search.locationLabel}</span>
               <div className="search-field">
                 <MapIcon size={18} />
                 <input
                   type="search"
                   value={searchLocation}
                   onChange={(event) => setSearchLocation(event.target.value)}
-                  placeholder="Austin TX"
-                  aria-label="Search location"
+                  placeholder={uiText.search.locationPlaceholder}
+                  aria-label={uiText.search.locationLabel}
                 />
               </div>
             </label>
 
             <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
-              {isSearchingPlaces ? 'Searching Google Places...' : 'Search Google Places'}
+              {isSearchingPlaces ? uiText.search.searchingButton : uiText.search.searchButton}
             </button>
           </form>
 
@@ -2442,15 +2421,15 @@ function App() {
           >
             <p>{effectiveSearchStatus.message}</p>
             {typeof effectiveSearchStatus.resultsCount === 'number' ? (
-              <p>{effectiveSearchStatus.resultsCount} result(s) returned.</p>
+              <p>{uiText.search.summary.resultsReturned(effectiveSearchStatus.resultsCount)}</p>
             ) : null}
             {effectiveSearchStatus.details ? <p>{effectiveSearchStatus.details}</p> : null}
           </div>
 
           <div>
-            <p className="field-label">Priority filter</p>
+            <p className="field-label">{uiText.search.priorityFilterLabel}</p>
             <div className="chip-row">
-              {(['All', 'Hot', 'Warm', 'Cold'] as Array<'All' | Priority>).map((option) => (
+              {uiText.search.priorityOptions.map((option) => (
                 <button
                   type="button"
                   key={option}
@@ -2466,11 +2445,11 @@ function App() {
           <div className="inline-summary">
             <span>
               {effectiveSearchStatus.source === 'live'
-                ? `${searchResultProspects.length} live Google Places results`
-                : 'Google Places error'}
+                ? uiText.search.summary.results(searchResultProspects.length)
+                : uiText.search.summary.error}
             </span>
             <button type="button" className="text-button" onClick={() => setActiveView('settings')}>
-              Open settings
+              {uiText.search.openSettings}
             </button>
           </div>
         </section>
@@ -2494,20 +2473,22 @@ function App() {
           <EmptyState
             title={
               !googleMapsApiKey
-                ? 'Connect Google Places'
+                ? uiText.emptyStates.connectGooglePlacesTitle
                 : effectiveSearchStatus.source === 'api-error'
-                  ? 'Google Places search failed'
-                  : 'No real businesses found'
+                  ? uiText.emptyStates.googlePlacesSearchFailedTitle
+                  : uiText.emptyStates.noSearchResultsTitle
             }
             copy={
               !googleMapsApiKey
-                ? 'Connect Google Places to search real businesses.'
+                ? uiText.emptyStates.noRealProspectsCopy
                 : effectiveSearchStatus.source === 'api-error'
                   ? effectiveSearchStatus.message
-                  : 'No real businesses found. Try a different keyword or location.'
+                  : uiText.emptyStates.noSearchResultsCopy
             }
             icon={Search}
-            actionLabel={effectiveSearchStatus.source === 'api-error' ? 'Open settings' : undefined}
+            actionLabel={
+              effectiveSearchStatus.source === 'api-error' ? uiText.search.openSettings : undefined
+            }
             onAction={
               effectiveSearchStatus.source === 'api-error'
                 ? () => setActiveView('settings')
@@ -2525,25 +2506,25 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Saved pipeline</div>
-              <h2>Saved prospects</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.saved.eyebrow}</div>
+              <h2>{uiText.saved.heading}</h2>
             </div>
-            <span className="meta-pill">{savedProspects.length} saved</span>
+            <span className="meta-pill">{uiText.saved.countLabel(savedProspects.length)}</span>
           </div>
 
           <div className="saved-summary">
             <div className="saved-summary__block">
               <Bookmark size={18} />
               <div>
-                <strong>Keep the bench warm</strong>
-                <p>Saved prospects stay available even if they are not on today’s route.</p>
+                <strong>{uiText.saved.summaryPrimaryTitle}</strong>
+                <p>{uiText.saved.summaryPrimaryDescription}</p>
               </div>
             </div>
             <div className="saved-summary__block">
               <NotebookPen size={18} />
               <div>
-                <strong>Notes travel with them</strong>
-                <p>Every note, priority, and follow-up date is stored locally for revisit later.</p>
+                <strong>{uiText.saved.summarySecondaryTitle}</strong>
+                <p>{uiText.saved.summarySecondaryDescription}</p>
               </div>
             </div>
           </div>
@@ -2580,10 +2561,10 @@ function App() {
           </div>
         ) : (
           <EmptyState
-            title="No saved prospects yet"
-            copy="Tap the star on a prospect to keep it in your saved pipeline."
+            title={uiText.emptyStates.noSavedTitle}
+            copy={uiText.emptyStates.noSavedCopy}
             icon={Bookmark}
-            actionLabel="Browse prospects"
+            actionLabel={uiText.saved.emptyAction}
             onAction={() => setActiveView('search')}
           />
         )}
@@ -2596,21 +2577,21 @@ function App() {
       <>
         <section className="stat-grid">
           <StatCard
-            label="Scheduled follow-ups"
+            label={uiText.followUps.stats.scheduled}
             value={`${scheduledFollowUps.length}`}
-            detail="Every local follow-up date currently tracked"
+            detail={uiText.followUps.stats.scheduledDetail}
             icon={CalendarClock}
           />
           <StatCard
-            label="Due now"
+            label={uiText.followUps.stats.dueNow}
             value={`${dueNowCount}`}
-            detail="Prospects that should be touched today or earlier"
+            detail={uiText.followUps.stats.dueNowDetail}
             icon={Flame}
           />
           <StatCard
-            label="This week"
+            label={uiText.followUps.stats.thisWeek}
             value={`${upcomingThisWeek}`}
-            detail="Follow-ups landing within the next seven days"
+            detail={uiText.followUps.stats.thisWeekDetail}
             icon={Users}
           />
         </section>
@@ -2630,9 +2611,10 @@ function App() {
                     </div>
                     <span
                       className={`meta-pill ${
-                        followUpStatus === 'Due now'
+                        followUpStatus === uiText.followUps.statuses.dueNow
                           ? 'meta-pill--hot'
-                          : followUpStatus === 'Tomorrow' || followUpStatus === 'This week'
+                          : followUpStatus === uiText.followUps.statuses.tomorrow ||
+                              followUpStatus === uiText.followUps.statuses.thisWeek
                             ? 'meta-pill--warm'
                             : 'meta-pill--cold'
                       }`}
@@ -2644,7 +2626,11 @@ function App() {
                   <div className="follow-up-card__meta">
                     <span>{formatFollowUpDate(prospect.followUpDate)}</span>
                     <span>{prospect.priority} priority</span>
-                    <span>{savedIds.includes(prospect.id) ? 'Saved prospect' : 'Unsaved prospect'}</span>
+                    <span>
+                      {savedIds.includes(prospect.id)
+                        ? uiText.followUps.savedStatus
+                        : uiText.followUps.unsavedStatus}
+                    </span>
                   </div>
 
                   <p className="follow-up-card__notes">{prospect.notes}</p>
@@ -2659,7 +2645,7 @@ function App() {
                         setActiveView(savedIds.includes(prospect.id) ? 'saved' : 'search')
                       }}
                     >
-                      Open prospect
+                      {uiText.followUps.openProspect}
                     </button>
                   </div>
                 </article>
@@ -2668,10 +2654,10 @@ function App() {
           </section>
         ) : (
           <EmptyState
-            title="No follow-ups scheduled"
-            copy="Use the Manage panel on any prospect to set a follow-up date, then it will appear here in date order."
+            title={uiText.emptyStates.noFollowUpsTitle}
+            copy={uiText.emptyStates.noFollowUpsCopy}
             icon={CalendarClock}
-            actionLabel="Open search"
+            actionLabel={uiText.onboarding.hotTargetsEmptyAction}
             onAction={() => setActiveView('search')}
           />
         )}
@@ -2688,8 +2674,8 @@ function App() {
               <UserRound size={22} />
             </div>
             <div>
-              <h2>RepRoute workspace</h2>
-              <p>No account connected yet. Authentication hooks can plug into this area later.</p>
+              <h2>{uiText.navigation.accountMenu.workspaceTitle}</h2>
+              <p>{uiText.navigation.accountMenu.workspaceDescription}</p>
             </div>
           </div>
 
@@ -2700,10 +2686,12 @@ function App() {
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
               <div>
-                <strong>Appearance</strong>
-                <p>Switch between dark and light route views.</p>
+                <strong>{uiText.settings.appearanceTitle}</strong>
+                <p>{uiText.settings.appearanceDescription}</p>
               </div>
-              <span className="meta-pill">{theme === 'dark' ? 'Dark mode' : 'Light mode'}</span>
+              <span className="meta-pill">
+                {theme === 'dark' ? uiText.settings.darkMode : uiText.settings.lightMode}
+              </span>
             </button>
           </div>
         </section>
@@ -2711,15 +2699,15 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Google Places</div>
-              <h2>Connection test</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.settings.googlePlacesEyebrow}</div>
+              <h2>{uiText.settings.googlePlacesHeading}</h2>
             </div>
-            <span className="meta-pill">{googleMapsApiKey ? 'API key detected' : 'API key missing'}</span>
+            <span className="meta-pill">
+              {googleMapsApiKey ? uiText.settings.apiKeyDetected : uiText.settings.apiKeyMissing}
+            </span>
           </div>
 
-          <p className="section-copy">
-            Run a real test search for <code>equipment rental Austin TX</code> to confirm live results are working.
-          </p>
+          <p className="section-copy">{uiText.settings.googlePlacesDescription}</p>
 
           <button
             type="button"
@@ -2727,7 +2715,7 @@ function App() {
             onClick={handleTestGooglePlacesConnection}
             disabled={connectionTest.status === 'running'}
           >
-            Test Google Places Connection
+            {uiText.settings.testConnectionButton}
           </button>
 
           <div
@@ -2741,28 +2729,25 @@ function App() {
           >
             <p>{connectionTest.message}</p>
             {typeof connectionTest.resultsCount === 'number' ? (
-              <p>Results returned: {connectionTest.resultsCount}</p>
+              <p>{uiText.settings.resultsReturned(connectionTest.resultsCount)}</p>
             ) : null}
-            {connectionTest.details ? <p>Error details: {connectionTest.details}</p> : null}
+            {connectionTest.details ? <p>{uiText.settings.errorDetails(connectionTest.details)}</p> : null}
           </div>
         </section>
 
         <section ref={crmExportSectionRef} className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">CRM Export</div>
-              <h2>CRM Export</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.crmExport.eyebrow}</div>
+              <h2>{uiText.crmExport.heading}</h2>
             </div>
-            <span className="meta-pill">{crmExportPreview.records.length} rows</span>
+            <span className="meta-pill">{uiText.crmExport.rowsLabel(crmExportPreview.records.length)}</span>
           </div>
 
-          <p className="section-copy">
-            Keep everything local for now. RepRoute maps your fields into CRM-friendly CSV headers
-            so direct API integrations can plug into the same export profiles later.
-          </p>
+          <p className="section-copy">{uiText.crmExport.description}</p>
 
           <div className="field-group">
-            <span className="field-label">Export format</span>
+            <span className="field-label">{uiText.crmExport.exportFormatLabel}</span>
             <div className="crm-option-grid">
               {crmExportFormats.map((format) => (
                 <button
@@ -2784,7 +2769,7 @@ function App() {
           </div>
 
           <div className="field-group">
-            <span className="field-label">Export scope</span>
+            <span className="field-label">{uiText.crmExport.exportScopeLabel}</span>
             <div className="chip-row">
               {crmExportScopes.map((scope) => (
                 <button
@@ -2811,10 +2796,12 @@ function App() {
           <div className="crm-preview-panel">
             <div className="crm-preview-panel__header">
               <div>
-                <div className="eyebrow eyebrow--tight">Preview</div>
+                <div className="eyebrow eyebrow--tight">{uiText.crmExport.previewEyebrow}</div>
                 <h3>{crmExportPreview.profile.label}</h3>
               </div>
-              <span className="meta-pill">{crmExportPreview.records.length} records</span>
+              <span className="meta-pill">
+                {uiText.crmExport.recordsLabel(crmExportPreview.records.length)}
+              </span>
             </div>
 
             {crmExportPreview.records.length > 0 ? (
@@ -2832,7 +2819,7 @@ function App() {
                       <tr key={`${crmExportPreview.profile.id}-${rowIndex}`}>
                         {row.map((value, cellIndex) => (
                           <td key={`${crmExportPreview.profile.id}-${rowIndex}-${cellIndex}`}>
-                            {value || '—'}
+                            {value || uiText.crmExport.previewFallback}
                           </td>
                         ))}
                       </tr>
@@ -2842,15 +2829,15 @@ function App() {
               </div>
             ) : (
               <EmptyState
-                title="No export data for this scope"
-                copy="Search and save real prospects, add them to today’s route, or schedule follow-ups before exporting to your CRM."
+                title={uiText.emptyStates.noCrmDataTitle}
+                copy={uiText.emptyStates.noCrmDataCopy}
                 icon={Download}
               />
             )}
           </div>
 
           <div className="inline-summary">
-            <span>Future direct integrations planned: {futureCrmApiTargets.join(', ')}</span>
+            <span>{uiText.crmExport.futureIntegrationsLabel(futureCrmApiTargets)}</span>
           </div>
 
           <button
@@ -2860,21 +2847,19 @@ function App() {
             disabled={crmExportPreview.records.length === 0}
           >
             <Download size={16} />
-            Download {crmExportPreview.profile.label}
+            {uiText.crmExport.downloadLabel(crmExportPreview.profile.label)}
           </button>
         </section>
 
         <section ref={backupSectionRef} className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Data Backup</div>
-              <h2>Data Backup</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.settings.backupEyebrow}</div>
+              <h2>{uiText.settings.backupHeading}</h2>
             </div>
           </div>
 
-          <p className="section-copy">
-            Export a JSON snapshot of your local RepRoute data, or preview a backup before replacing what is stored on this device.
-          </p>
+          <p className="section-copy">{uiText.settings.backupDescription}</p>
 
           <input
             ref={importFileInputRef}
@@ -2887,11 +2872,11 @@ function App() {
           <div className="backup-actions">
             <button type="button" className="button" onClick={handleExportBackup}>
               <Download size={16} />
-              Export JSON
+              {uiText.settings.exportJson}
             </button>
             <button type="button" className="button button--ghost" onClick={openImportPicker}>
               <Upload size={16} />
-              Import JSON
+              {uiText.settings.importJson}
             </button>
           </div>
 
@@ -2903,27 +2888,27 @@ function App() {
 
           <div className="backup-summary-grid">
             <div className="backup-summary-card">
-              <span className="field-label">Real prospects</span>
+              <span className="field-label">{uiText.settings.backupSummaryLabels.realProspects}</span>
               <strong>{currentBackupSummary.liveProspects}</strong>
             </div>
             <div className="backup-summary-card">
-              <span className="field-label">Saved prospects</span>
+              <span className="field-label">{uiText.settings.backupSummaryLabels.savedProspects}</span>
               <strong>{currentBackupSummary.saved}</strong>
             </div>
             <div className="backup-summary-card">
-              <span className="field-label">Route stops</span>
+              <span className="field-label">{uiText.settings.backupSummaryLabels.routeStops}</span>
               <strong>{currentBackupSummary.route}</strong>
             </div>
             <div className="backup-summary-card">
-              <span className="field-label">Notes</span>
+              <span className="field-label">{uiText.settings.backupSummaryLabels.notes}</span>
               <strong>{currentBackupSummary.notes}</strong>
             </div>
             <div className="backup-summary-card">
-              <span className="field-label">Priority edits</span>
+              <span className="field-label">{uiText.settings.backupSummaryLabels.priorityEdits}</span>
               <strong>{currentBackupSummary.priorities}</strong>
             </div>
             <div className="backup-summary-card">
-              <span className="field-label">Follow-ups</span>
+              <span className="field-label">{uiText.settings.backupSummaryLabels.followUps}</span>
               <strong>{currentBackupSummary.followUps}</strong>
             </div>
           </div>
@@ -2932,51 +2917,51 @@ function App() {
             <div className="backup-preview">
               <div className="backup-preview__header">
                 <div>
-                  <div className="eyebrow eyebrow--tight">Import preview</div>
+                  <div className="eyebrow eyebrow--tight">{uiText.settings.importPreviewEyebrow}</div>
                   <h3>{importPreview.fileName}</h3>
                   <p>{formatBackupTimestamp(importPreview.exportedAt)}</p>
                 </div>
-                <span className="meta-pill">Ready to replace</span>
+                <span className="meta-pill">{uiText.settings.readyToReplace}</span>
               </div>
 
               <div className="backup-summary-grid">
                 <div className="backup-summary-card">
-                  <span className="field-label">Real prospects</span>
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.realProspects}</span>
                   <strong>{importPreviewSummary.liveProspects}</strong>
                 </div>
                 <div className="backup-summary-card">
-                  <span className="field-label">Saved prospects</span>
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.savedProspects}</span>
                   <strong>{importPreviewSummary.saved}</strong>
                 </div>
                 <div className="backup-summary-card">
-                  <span className="field-label">Route stops</span>
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.routeStops}</span>
                   <strong>{importPreviewSummary.route}</strong>
                 </div>
                 <div className="backup-summary-card">
-                  <span className="field-label">Notes</span>
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.notes}</span>
                   <strong>{importPreviewSummary.notes}</strong>
                 </div>
                 <div className="backup-summary-card">
-                  <span className="field-label">Priority edits</span>
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.priorityEdits}</span>
                   <strong>{importPreviewSummary.priorities}</strong>
                 </div>
                 <div className="backup-summary-card">
-                  <span className="field-label">Follow-ups</span>
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.followUps}</span>
                   <strong>{importPreviewSummary.followUps}</strong>
                 </div>
               </div>
 
               <div className="backup-warning">
                 <AlertTriangle size={18} />
-                <p>Confirming this import will replace the current RepRoute local data on this device.</p>
+                <p>{uiText.settings.importWarning}</p>
               </div>
 
               <div className="backup-actions">
                 <button type="button" className="button" onClick={confirmImport}>
-                  Replace local data
+                  {uiText.settings.replaceLocalData}
                 </button>
                 <button type="button" className="button button--ghost" onClick={cancelImportPreview}>
-                  Cancel
+                  {uiText.settings.cancel}
                 </button>
               </div>
             </div>
@@ -2986,8 +2971,8 @@ function App() {
         <section className="panel section-panel">
           <div className="section-heading">
             <div>
-              <div className="eyebrow eyebrow--tight">Storage status</div>
-              <h2>Local-first MVP</h2>
+              <div className="eyebrow eyebrow--tight">{uiText.settings.storageEyebrow}</div>
+              <h2>{uiText.settings.storageHeading}</h2>
             </div>
           </div>
 
@@ -2995,15 +2980,15 @@ function App() {
             <div className="saved-summary__block">
               <Star size={18} />
               <div>
-                <strong>Saved locally</strong>
-                <p>Real prospects, saved prospects, route stops, notes, priorities, and dates live in local storage only.</p>
+                <strong>{uiText.settings.storageLocalTitle}</strong>
+                <p>{uiText.settings.storageLocalDescription}</p>
               </div>
             </div>
             <div className="saved-summary__block">
               <Route size={18} />
               <div>
-                <strong>Live search only</strong>
-                <p>RepRoute now depends on Google Places for real business search and no longer includes mock fallback data.</p>
+                <strong>{uiText.settings.storageLiveTitle}</strong>
+                <p>{uiText.settings.storageLiveDescription}</p>
               </div>
             </div>
           </div>
@@ -3045,8 +3030,8 @@ function App() {
               <Route size={18} />
             </div>
             <div>
-              <p className="brand-lockup__name">RepRoute</p>
-              <p className="brand-lockup__copy">Outside sales route planner</p>
+              <p className="brand-lockup__name">{uiText.navigation.appName}</p>
+              <p className="brand-lockup__copy">{uiText.navigation.tagline}</p>
             </div>
           </div>
 
@@ -3055,7 +3040,7 @@ function App() {
               type="button"
               className="icon-button"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              aria-label="Toggle color theme"
+              aria-label={uiText.navigation.themeToggleAriaLabel}
             >
               {theme === 'dark' ? <SunMedium size={16} /> : <MoonStar size={16} />}
             </button>
@@ -3066,7 +3051,7 @@ function App() {
                 onClick={() => setAccountMenuOpen((current) => !current)}
                 aria-expanded={accountMenuOpen}
                 aria-haspopup="menu"
-                aria-label="Open profile menu"
+                aria-label={uiText.navigation.accountMenu.ariaLabel}
               >
                 <span className="account-menu__icon">
                   <UserRound size={18} />
@@ -3078,11 +3063,11 @@ function App() {
                 <div className="account-menu__dropdown" role="menu">
                   <button type="button" className="account-menu__item" onClick={() => openSettingsPanel('top')}>
                     <Settings2 size={16} />
-                    Settings
+                    {uiText.navigation.accountMenu.settings}
                   </button>
                   <button type="button" className="account-menu__item" onClick={() => openSettingsPanel('crm')}>
                     <Download size={16} />
-                    Export CRM Data
+                    {uiText.navigation.accountMenu.exportCrm}
                   </button>
                   <button
                     type="button"
@@ -3090,11 +3075,11 @@ function App() {
                     onClick={() => openSettingsPanel('backup')}
                   >
                     <Upload size={16} />
-                    Backup Data
+                    {uiText.navigation.accountMenu.backup}
                   </button>
                   <button type="button" className="account-menu__item" onClick={handlePlaceholderSignIn}>
                     <UserRound size={16} />
-                    Sign In
+                    {uiText.navigation.accountMenu.signIn}
                   </button>
                 </div>
               ) : null}
@@ -3103,14 +3088,14 @@ function App() {
         </header>
 
         <section className="screen-intro">
-          <div className="eyebrow">Live Google Places</div>
+          <div className="eyebrow">{uiText.navigation.liveBadge}</div>
           <h2>{displayMeta.title}</h2>
           <p>{displayMeta.subtitle}</p>
         </section>
 
         {(['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
           <section className="travel-mode-toolbar">
-            <span className="field-label">Travel mode</span>
+            <span className="field-label">{uiText.navigation.travelMode.label}</span>
             <div className="chip-row">
               {(['driving', 'walking'] as TravelMode[]).map((mode) => (
                 <button
@@ -3119,7 +3104,9 @@ function App() {
                   className={`chip ${travelMode === mode ? 'chip--active' : ''}`}
                   onClick={() => setTravelMode(mode)}
                 >
-                  {mode === 'driving' ? 'Driving' : 'Walking'}
+                  {mode === 'driving'
+                    ? uiText.navigation.travelMode.driving
+                    : uiText.navigation.travelMode.walking}
                 </button>
               ))}
             </div>
@@ -3134,7 +3121,7 @@ function App() {
 
         <section className="screen-content">{renderActiveView()}</section>
 
-        <nav className="bottom-nav" aria-label="Primary">
+        <nav className="bottom-nav" aria-label={uiText.navigation.primaryNavAriaLabel}>
           {navigationItems.map((item) => {
             const Icon = item.icon
             const isActive = activeView === item.id
