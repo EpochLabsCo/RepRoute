@@ -19,6 +19,7 @@ import {
   Bookmark,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Circle,
   Clock3,
@@ -43,6 +44,7 @@ import {
   Trash2,
   Truck,
   Upload,
+  UserRound,
   Users,
 } from 'lucide-react'
 import './App.css'
@@ -126,7 +128,7 @@ type BackupFile = {
 }
 
 type BackupMessage = {
-  type: 'success' | 'error'
+  type: 'success' | 'error' | 'info'
   text: string
 }
 
@@ -151,6 +153,18 @@ type ConnectionTestState = {
   details?: string
 }
 
+const SUGGESTED_SEARCH_KEYWORDS = [
+  'equipment rental',
+  'pipeline operators',
+  'natural gas companies',
+  'oilfield services',
+  'industrial supply',
+  'HVAC contractors',
+  'electrical contractors',
+  'plumbing contractors',
+  'construction companies',
+] as const
+
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [
   'No Answer',
   'Decision Maker Met',
@@ -168,15 +182,6 @@ const STORAGE_KEYS = {
 } as const
 
 const AUSTIN_FALLBACK = { lat: 30.2672, lng: -97.7431 }
-
-const navigationItems: Array<{ id: View; label: string; icon: typeof Route }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'map', label: 'Route', icon: MapIcon },
-  { id: 'search', label: 'Search', icon: Search },
-  { id: 'saved', label: 'Saved', icon: Bookmark },
-  { id: 'follow-ups', label: 'Follow-Ups', icon: CalendarClock },
-  { id: 'settings', label: 'Settings', icon: Settings2 },
-]
 
 const screenMeta: Record<View, { title: string; subtitle: string }> = {
   dashboard: {
@@ -824,6 +829,68 @@ function RouteWorkflowStopCard({
   )
 }
 
+function LiveSearchResultCard({
+  prospect,
+  isSaved,
+  isInRoute,
+  onToggleSaved,
+  onToggleRoute,
+}: {
+  prospect: Prospect
+  isSaved: boolean
+  isInRoute: boolean
+  onToggleSaved: (prospectId: string) => void
+  onToggleRoute: (prospectId: string) => void
+}) {
+  const navigateHref = createNavigateHref(prospect)
+  const websiteHref = normalizeWebsiteUrl(prospect.website)
+  const hasPhone = prospect.phone !== 'Phone unavailable'
+
+  return (
+    <article className="live-result-card">
+      <div className="live-result-card__header">
+        <div>
+          <div className="eyebrow eyebrow--tight">Live Google Places</div>
+          <h3>{prospect.businessName}</h3>
+          <p>{prospect.category}</p>
+        </div>
+        {prospect.rating !== null ? <span className="meta-pill">{prospect.rating.toFixed(1)} stars</span> : null}
+      </div>
+
+      <div className="live-result-card__details">
+        <p>{prospect.address}</p>
+        {hasPhone ? <p>{prospect.phone}</p> : null}
+        {websiteHref ? (
+          <a href={websiteHref} target="_blank" rel="noreferrer">
+            {prospect.website}
+          </a>
+        ) : null}
+      </div>
+
+      <div className="live-result-card__actions">
+        <button
+          type="button"
+          className={`button ${isSaved ? 'button--secondary' : ''}`}
+          onClick={() => onToggleSaved(prospect.id)}
+        >
+          {isSaved ? 'Saved' : 'Save Prospect'}
+        </button>
+        <button
+          type="button"
+          className={`button ${isInRoute ? 'button--secondary' : ''}`}
+          onClick={() => onToggleRoute(prospect.id)}
+        >
+          {isInRoute ? 'In Route' : 'Add to Route'}
+        </button>
+        <a className="route-action-button" href={navigateHref} target="_blank" rel="noreferrer">
+          <MapIcon size={16} />
+          Open in Google Maps
+        </a>
+      </div>
+    </article>
+  )
+}
+
 function ProspectCard({
   prospect,
   isSaved,
@@ -968,11 +1035,17 @@ function ProspectCard({
 
 function App() {
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
+  const accountMenuRef = useRef<HTMLDivElement | null>(null)
+  const pendingSettingsSectionRef = useRef<'top' | 'crm' | 'backup' | null>(null)
+  const settingsTopRef = useRef<HTMLElement | null>(null)
+  const crmExportSectionRef = useRef<HTMLElement | null>(null)
+  const backupSectionRef = useRef<HTMLElement | null>(null)
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
-  const [activeView, setActiveView] = useState<View>('dashboard')
+  const [activeView, setActiveView] = useState<View>('search')
   const [expandedProspectId, setExpandedProspectId] = useState<string | null>(null)
   const [backupMessage, setBackupMessage] = useState<BackupMessage | null>(null)
   const [crmExportMessage, setCrmExportMessage] = useState<BackupMessage | null>(null)
+  const [accountMenuMessage, setAccountMenuMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [theme, setTheme] = usePersistentState<Theme>(STORAGE_KEYS.theme, 'dark')
   const [liveProspects, setLiveProspects] = usePersistentState<BaseProspect[]>(
@@ -993,6 +1066,7 @@ function App() {
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [connectionTest, setConnectionTest] = useState<ConnectionTestState>({
     status: 'idle',
     message: 'Run a live Google Places test to verify this API key and search flow.',
@@ -1005,6 +1079,17 @@ function App() {
     }),
   )
 
+  function scrollToSettingsSection(section: 'top' | 'crm' | 'backup') {
+    const target =
+      section === 'crm'
+        ? crmExportSectionRef.current
+        : section === 'backup'
+          ? backupSectionRef.current
+          : settingsTopRef.current
+
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
@@ -1012,6 +1097,41 @@ function App() {
   useEffect(() => {
     console.info('[RepRoute] VITE_GOOGLE_MAPS_API_KEY detected:', googleMapsApiKey.length > 0)
   }, [googleMapsApiKey])
+
+  useEffect(() => {
+    if (!accountMenuOpen) {
+      return
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!accountMenuRef.current?.contains(event.target as Node)) {
+        setAccountMenuOpen(false)
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setAccountMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [accountMenuOpen])
+
+  useEffect(() => {
+    if (activeView !== 'settings' || !pendingSettingsSectionRef.current) {
+      return
+    }
+
+    scrollToSettingsSection(pendingSettingsSectionRef.current)
+    pendingSettingsSectionRef.current = null
+  }, [activeView])
 
   const effectiveSearchStatus = useMemo<SearchStatus>(
     () =>
@@ -1031,6 +1151,27 @@ function App() {
   const crmExportFormats = useMemo(() => getCrmExportFormats(), [])
   const crmExportScopes = useMemo(() => getCrmExportScopes(), [])
   const futureCrmApiTargets = useMemo(() => getFutureCrmApiTargets(), [])
+  const navigationItems = useMemo<Array<{ id: View; label: string; icon: typeof Route }>>(
+    () =>
+      routeIds.length > 0
+        ? [
+            { id: 'search', label: 'Search', icon: Search },
+            { id: 'map', label: 'Route', icon: MapIcon },
+            { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+            { id: 'saved', label: 'Saved', icon: Bookmark },
+            { id: 'follow-ups', label: 'Follow-Ups', icon: CalendarClock },
+            { id: 'settings', label: 'Settings', icon: Settings2 },
+          ]
+        : [
+            { id: 'search', label: 'Search', icon: Search },
+            { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+            { id: 'saved', label: 'Saved', icon: Bookmark },
+            { id: 'follow-ups', label: 'Follow-Ups', icon: CalendarClock },
+            { id: 'settings', label: 'Settings', icon: Settings2 },
+            { id: 'map', label: 'Route', icon: MapIcon },
+          ],
+    [routeIds.length],
+  )
 
   const liveCatalogProspects = useMemo(
     () =>
@@ -1362,12 +1503,7 @@ function App() {
     setExpandedProspectId((current) => (current === prospectId ? null : prospectId))
   }
 
-  async function handleLiveSearch(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault()
-
-    const keyword = searchKeyword.trim()
-    const location = searchLocation.trim()
-
+  async function runLiveSearch(keyword: string, location: string) {
     if (!keyword || !location) {
       setLiveSearchIds([])
       setSearchStatus({
@@ -1422,6 +1558,16 @@ function App() {
     setIsSearchingPlaces(false)
   }
 
+  async function handleLiveSearch(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault()
+    await runLiveSearch(searchKeyword.trim(), searchLocation.trim())
+  }
+
+  async function handleSuggestedSearch(keyword: string) {
+    setSearchKeyword(keyword)
+    await runLiveSearch(keyword, searchLocation.trim())
+  }
+
   async function handleTestGooglePlacesConnection() {
     setConnectionTest({
       status: 'running',
@@ -1454,6 +1600,30 @@ function App() {
 
   function openImportPicker() {
     importFileInputRef.current?.click()
+  }
+
+  function openSettingsPanel(section: 'top' | 'crm' | 'backup') {
+    pendingSettingsSectionRef.current = section
+    setActiveView('settings')
+    setAccountMenuOpen(false)
+    setAccountMenuMessage(null)
+
+    if (activeView === 'settings') {
+      window.requestAnimationFrame(() => {
+        if (pendingSettingsSectionRef.current) {
+          scrollToSettingsSection(pendingSettingsSectionRef.current)
+          pendingSettingsSectionRef.current = null
+        }
+      })
+    }
+  }
+
+  function handlePlaceholderSignIn() {
+    setAccountMenuOpen(false)
+    setAccountMenuMessage({
+      type: 'info',
+      text: 'Sign in is coming soon. This profile area is ready for future authentication support.',
+    })
   }
 
   function handleDownloadCrmExport() {
@@ -1595,6 +1765,46 @@ function App() {
 
   function renderDashboard() {
     const nextFollowUp = scheduledFollowUps[0]
+    const routeSnapshotSection = (
+      <section className="panel section-panel">
+        <div className="section-heading">
+          <div>
+            <div className="eyebrow eyebrow--tight">Today’s route focus</div>
+            <h2>Route snapshot</h2>
+          </div>
+          <button type="button" className="link-button" onClick={() => setActiveView('map')}>
+            Open route <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {routeProspects.length > 0 ? (
+          <div className="route-preview">
+            {routeProspects.slice(0, 3).map((prospect, index) => (
+              <div className="route-preview__item" key={prospect.id}>
+                <div className="route-preview__step">{index + 1}</div>
+                <div className="route-preview__content">
+                  <h3>{prospect.businessName}</h3>
+                  <p>
+                    {prospect.category} · {formatDistance(prospect.distance)}
+                  </p>
+                </div>
+                <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
+                  {prospect.priority}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No route loaded yet"
+            copy="Add a few prospects from Search or Saved Prospects to build today’s drive plan."
+            icon={Route}
+            actionLabel="Go to search"
+            onAction={() => setActiveView('search')}
+          />
+        )}
+      </section>
+    )
 
     return (
       <>
@@ -1632,6 +1842,40 @@ function App() {
               View route
             </button>
           </div>
+        </section>
+
+        <section className="panel section-panel prospect-cta-panel">
+          <div className="section-heading">
+            <div>
+              <div className="eyebrow eyebrow--tight">Start here</div>
+              <h2>Find real prospects</h2>
+            </div>
+            <DataSourceBadge source={effectiveSearchStatus.source} />
+          </div>
+
+          <p className="section-copy">
+            Search live Google Places first, save the strongest accounts, and only move into route work once you have stops worth running.
+          </p>
+
+          <div className="chip-row">
+            {SUGGESTED_SEARCH_KEYWORDS.slice(0, 4).map((keyword) => (
+              <button
+                type="button"
+                key={keyword}
+                className="chip"
+                onClick={() => {
+                  setSearchKeyword(keyword)
+                  setActiveView('search')
+                }}
+              >
+                {keyword}
+              </button>
+            ))}
+          </div>
+
+          <button type="button" className="button button--wide" onClick={() => setActiveView('search')}>
+            Find real prospects
+          </button>
         </section>
 
         <section className="stat-grid">
@@ -1687,44 +1931,7 @@ function App() {
           )}
         </section>
 
-        <section className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">Today’s route focus</div>
-              <h2>Route snapshot</h2>
-            </div>
-            <button type="button" className="link-button" onClick={() => setActiveView('map')}>
-              Open route <ChevronRight size={16} />
-            </button>
-          </div>
-
-          {routeProspects.length > 0 ? (
-            <div className="route-preview">
-              {routeProspects.slice(0, 3).map((prospect, index) => (
-                <div className="route-preview__item" key={prospect.id}>
-                  <div className="route-preview__step">{index + 1}</div>
-                  <div className="route-preview__content">
-                    <h3>{prospect.businessName}</h3>
-                    <p>
-                      {prospect.category} · {formatDistance(prospect.distance)}
-                    </p>
-                  </div>
-                  <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
-                    {prospect.priority}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No route loaded yet"
-              copy="Add a few prospects from Search or Saved Prospects to build today’s drive plan."
-              icon={Route}
-              actionLabel="Go to search"
-              onAction={() => setActiveView('search')}
-            />
-          )}
-        </section>
+        {routeProspects.length > 0 ? routeSnapshotSection : null}
 
         <section className="panel section-panel">
           <div className="section-heading">
@@ -1783,6 +1990,8 @@ function App() {
             </div>
           ) : null}
         </section>
+
+        {routeProspects.length === 0 ? routeSnapshotSection : null}
       </>
     )
   }
@@ -1847,6 +2056,31 @@ function App() {
             <span>{nearbyRouteProspects.length} nearby suggestions</span>
           </div>
         </section>
+
+        {searchResultProspects.length > 0 ? (
+          <section className="panel section-panel">
+            <div className="section-heading">
+              <div>
+                <div className="eyebrow eyebrow--tight">Live results</div>
+                <h2>Search results</h2>
+              </div>
+              <DataSourceBadge source={effectiveSearchStatus.source} />
+            </div>
+
+            <div className="live-results-stack">
+              {searchResultProspects.map((prospect) => (
+                <LiveSearchResultCard
+                  key={prospect.id}
+                  prospect={prospect}
+                  isSaved={savedIds.includes(prospect.id)}
+                  isInRoute={routeIds.includes(prospect.id)}
+                  onToggleSaved={toggleSaved}
+                  onToggleRoute={toggleRoute}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {routeProspects.length > 0 ? (
           <>
@@ -2002,9 +2236,14 @@ function App() {
           <div className="section-heading">
             <div>
               <div className="eyebrow eyebrow--tight">Google Places first</div>
-              <h2>Prospect search</h2>
+              <h2>Find real prospects</h2>
             </div>
             <DataSourceBadge source={effectiveSearchStatus.source} />
+          </div>
+
+          <div className="prominent-search-callout">
+            <strong>Find real prospects</strong>
+            <p>Use keyword + city searches to load live Google Places businesses, then save or route the best fits.</p>
           </div>
 
           <form className="live-search-form" onSubmit={handleLiveSearch}>
@@ -2040,6 +2279,19 @@ function App() {
               {isSearchingPlaces ? 'Searching Google Places...' : 'Search Google Places'}
             </button>
           </form>
+
+          <div className="chip-row">
+            {SUGGESTED_SEARCH_KEYWORDS.map((keyword) => (
+              <button
+                type="button"
+                key={keyword}
+                className={`chip ${searchKeyword === keyword ? 'chip--active' : ''}`}
+                onClick={() => void handleSuggestedSearch(keyword)}
+              >
+                {keyword}
+              </button>
+            ))}
+          </div>
 
           <div
             className={`status-banner ${
@@ -2084,29 +2336,15 @@ function App() {
         </section>
 
         {searchResultProspects.length > 0 ? (
-          <div className="stack">
+          <div className="live-results-stack">
             {searchResultProspects.map((prospect) => (
-              <ProspectCard
+              <LiveSearchResultCard
                 key={prospect.id}
                 prospect={prospect}
                 isSaved={savedIds.includes(prospect.id)}
                 isInRoute={routeIds.includes(prospect.id)}
-                isExpanded={expandedProspectId === prospect.id}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
-                onToggleExpanded={toggleExpandedProspect}
-                onUpdateNotes={(prospectId, notes) =>
-                  updateProspectRecord(prospectId, (current) => ({ ...current, notes }))
-                }
-                onUpdatePriority={(prospectId, priority) =>
-                  updateProspectRecord(prospectId, (current) => ({ ...current, priority }))
-                }
-                onUpdateFollowUp={(prospectId, followUpDate) =>
-                  updateProspectRecord(prospectId, (current) => ({
-                    ...current,
-                    followUpDate,
-                  }))
-                }
               />
             ))}
           </div>
@@ -2300,12 +2538,14 @@ function App() {
   function renderSettingsView() {
     return (
       <>
-        <section className="panel section-panel">
+        <section ref={settingsTopRef} className="panel section-panel">
           <div className="profile-card">
-            <div className="profile-card__avatar">JR</div>
+            <div className="profile-card__avatar">
+              <UserRound size={22} />
+            </div>
             <div>
-              <h2>Jordan Reeves</h2>
-              <p>West Texas outside sales</p>
+              <h2>RepRoute workspace</h2>
+              <p>No account connected yet. Authentication hooks can plug into this area later.</p>
             </div>
           </div>
 
@@ -2363,7 +2603,7 @@ function App() {
           </div>
         </section>
 
-        <section className="panel section-panel">
+        <section ref={crmExportSectionRef} className="panel section-panel">
           <div className="section-heading">
             <div>
               <div className="eyebrow eyebrow--tight">CRM Export</div>
@@ -2480,7 +2720,7 @@ function App() {
           </button>
         </section>
 
-        <section className="panel section-panel">
+        <section ref={backupSectionRef} className="panel section-panel">
           <div className="section-heading">
             <div>
               <div className="eyebrow eyebrow--tight">Data Backup</div>
@@ -2675,7 +2915,46 @@ function App() {
             >
               {theme === 'dark' ? <SunMedium size={16} /> : <MoonStar size={16} />}
             </button>
-            <div className="user-pill">JR</div>
+            <div ref={accountMenuRef} className="account-menu">
+              <button
+                type="button"
+                className={`account-menu__trigger ${accountMenuOpen ? 'account-menu__trigger--open' : ''}`}
+                onClick={() => setAccountMenuOpen((current) => !current)}
+                aria-expanded={accountMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Open profile menu"
+              >
+                <span className="account-menu__icon">
+                  <UserRound size={18} />
+                </span>
+                <ChevronDown size={16} />
+              </button>
+
+              {accountMenuOpen ? (
+                <div className="account-menu__dropdown" role="menu">
+                  <button type="button" className="account-menu__item" onClick={() => openSettingsPanel('top')}>
+                    <Settings2 size={16} />
+                    Settings
+                  </button>
+                  <button type="button" className="account-menu__item" onClick={() => openSettingsPanel('crm')}>
+                    <Download size={16} />
+                    Export CRM Data
+                  </button>
+                  <button
+                    type="button"
+                    className="account-menu__item"
+                    onClick={() => openSettingsPanel('backup')}
+                  >
+                    <Upload size={16} />
+                    Backup Data
+                  </button>
+                  <button type="button" className="account-menu__item" onClick={handlePlaceholderSignIn}>
+                    <UserRound size={16} />
+                    Sign In
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 
@@ -2684,6 +2963,12 @@ function App() {
           <h2>{displayMeta.title}</h2>
           <p>{displayMeta.subtitle}</p>
         </section>
+
+        {accountMenuMessage ? (
+          <section className={`status-banner status-banner--${accountMenuMessage.type}`}>
+            <p>{accountMenuMessage.text}</p>
+          </section>
+        ) : null}
 
         <section className="screen-content">{renderActiveView()}</section>
 
