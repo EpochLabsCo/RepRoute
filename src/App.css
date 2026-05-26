@@ -209,6 +209,12 @@
   margin-top: 22px;
 }
 
+.travel-mode-toolbar {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -384,6 +390,10 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 20px;
+}
+
+.route-map-actions {
+  margin-top: 0;
 }
 
 .button,

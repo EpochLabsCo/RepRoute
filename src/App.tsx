@@ -63,6 +63,7 @@ import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlace
 
 type Priority = 'Hot' | 'Warm' | 'Cold'
 type Theme = 'dark' | 'light'
+type TravelMode = 'driving' | 'walking'
 type View = 'dashboard' | 'map' | 'search' | 'saved' | 'follow-ups' | 'settings'
 type SearchDataSource = 'live' | 'api-error'
 type OutcomeTag =
@@ -429,12 +430,105 @@ function createCallHref(phone: string) {
   return digits ? `tel:${digits}` : ''
 }
 
-function createNavigateHref(prospect: Prospect) {
-  if (prospect.address) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(prospect.address)}&travelmode=driving`
+function getMapsDestination(prospect: Prospect) {
+  return prospect.address
+    ? prospect.address
+    : `${prospect.location.lat},${prospect.location.lng}`
+}
+
+function getGoogleMapsHref(prospect: Prospect, travelMode: TravelMode) {
+  const url = new URL('https://www.google.com/maps/dir/')
+
+  url.searchParams.set('api', '1')
+  url.searchParams.set('destination', getMapsDestination(prospect))
+  url.searchParams.set('travelmode', travelMode)
+
+  if (prospect.googlePlaceId) {
+    url.searchParams.set('destination_place_id', prospect.googlePlaceId)
   }
 
-  return `https://www.google.com/maps/dir/?api=1&destination=${prospect.location.lat},${prospect.location.lng}&travelmode=driving`
+  return url.toString()
+}
+
+function getAppleMapsHref(prospect: Prospect, travelMode: TravelMode) {
+  const url = new URL('https://maps.apple.com/')
+
+  url.searchParams.set('daddr', `${prospect.location.lat},${prospect.location.lng}`)
+  url.searchParams.set('dirflg', travelMode === 'walking' ? 'w' : 'd')
+  url.searchParams.set('q', prospect.businessName)
+
+  return url.toString()
+}
+
+function prefersAppleMaps() {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const userAgent = navigator.userAgent
+  const vendor = navigator.vendor ?? ''
+  const isIos = /iPhone|iPad|iPod/i.test(userAgent)
+  const isMacSafari =
+    /Macintosh/i.test(userAgent) &&
+    /Safari/i.test(userAgent) &&
+    !/Chrome|CriOS|Chromium|Edg|OPR|Firefox/i.test(userAgent) &&
+    /Apple/i.test(vendor)
+
+  return isIos || isMacSafari
+}
+
+function prefersGoogleMaps() {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const userAgent = navigator.userAgent
+  return /Android/i.test(userAgent) || /Chrome|CriOS/i.test(userAgent)
+}
+
+function createNavigateHref(prospect: Prospect, travelMode: TravelMode) {
+  if (prefersAppleMaps()) {
+    return getAppleMapsHref(prospect, travelMode)
+  }
+
+  if (prefersGoogleMaps()) {
+    return getGoogleMapsHref(prospect, travelMode)
+  }
+
+  return getGoogleMapsHref(prospect, travelMode)
+}
+
+function createEntireRouteNavigateHref(routeProspects: Prospect[], travelMode: TravelMode) {
+  if (routeProspects.length <= 1) {
+    return routeProspects[0] ? createNavigateHref(routeProspects[0], travelMode) : ''
+  }
+
+  const url = new URL('https://www.google.com/maps/dir/')
+  const orderedStops = routeProspects.map((prospect) => getMapsDestination(prospect))
+
+  url.searchParams.set('api', '1')
+  url.searchParams.set('destination', orderedStops[orderedStops.length - 1] ?? '')
+  url.searchParams.set('travelmode', travelMode)
+
+  const waypoints = orderedStops.slice(0, -1)
+
+  if (waypoints.length > 0) {
+    url.searchParams.set('waypoints', waypoints.join('|'))
+  }
+
+  return url.toString()
+}
+
+function openExternalNavigation(url: string) {
+  if (!url) {
+    return
+  }
+
+  const nextWindow = window.open(url, '_blank', 'noopener,noreferrer')
+
+  if (!nextWindow) {
+    window.location.assign(url)
+  }
 }
 
 function getDataSourceLabel(source: SearchDataSource) {
@@ -693,6 +787,8 @@ function DataSourceBadge({ source }: { source: SearchDataSource }) {
 function RouteWorkflowStopCard({
   index,
   prospect,
+  travelMode,
+  onNavigate,
   onToggleCompleted,
   onUpdateVisitNote,
   onUpdateOutcome,
@@ -700,6 +796,8 @@ function RouteWorkflowStopCard({
 }: {
   index: number
   prospect: Prospect
+  travelMode: TravelMode
+  onNavigate: (prospect: Prospect) => void
   onToggleCompleted: (prospectId: string) => void
   onUpdateVisitNote: (prospectId: string, note: string) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
@@ -715,7 +813,6 @@ function RouteWorkflowStopCard({
   } = useSortable({ id: prospect.id })
   const callHref = createCallHref(prospect.phone)
   const websiteHref = normalizeWebsiteUrl(prospect.website)
-  const navigateHref = createNavigateHref(prospect)
 
   return (
     <article
@@ -782,10 +879,10 @@ function RouteWorkflowStopCard({
             Open Website
           </a>
         ) : null}
-        <a className="route-action-button" href={navigateHref} target="_blank" rel="noreferrer">
+        <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
           <Navigation size={16} />
-          Navigate
-        </a>
+          Navigate {travelMode === 'walking' ? 'Walk' : 'Drive'}
+        </button>
       </div>
 
       <div className="field-group">
@@ -833,16 +930,19 @@ function LiveSearchResultCard({
   prospect,
   isSaved,
   isInRoute,
+  travelMode,
+  onNavigate,
   onToggleSaved,
   onToggleRoute,
 }: {
   prospect: Prospect
   isSaved: boolean
   isInRoute: boolean
+  travelMode: TravelMode
+  onNavigate: (prospect: Prospect) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
 }) {
-  const navigateHref = createNavigateHref(prospect)
   const websiteHref = normalizeWebsiteUrl(prospect.website)
   const hasPhone = prospect.phone !== 'Phone unavailable'
 
@@ -882,10 +982,10 @@ function LiveSearchResultCard({
         >
           {isInRoute ? 'In Route' : 'Add to Route'}
         </button>
-        <a className="route-action-button" href={navigateHref} target="_blank" rel="noreferrer">
-          <MapIcon size={16} />
-          Open in Google Maps
-        </a>
+        <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
+          <Navigation size={16} />
+          Navigate {travelMode === 'walking' ? 'Walk' : 'Drive'}
+        </button>
       </div>
     </article>
   )
@@ -896,6 +996,8 @@ function ProspectCard({
   isSaved,
   isInRoute,
   isExpanded,
+  travelMode,
+  onNavigate,
   onToggleSaved,
   onToggleRoute,
   onToggleExpanded,
@@ -907,6 +1009,8 @@ function ProspectCard({
   isSaved: boolean
   isInRoute: boolean
   isExpanded: boolean
+  travelMode: TravelMode
+  onNavigate: (prospect: Prospect) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
   onToggleExpanded: (prospectId: string) => void
@@ -971,6 +1075,13 @@ function ProspectCard({
             onClick={() => onToggleExpanded(prospect.id)}
           >
             {isExpanded ? 'Hide' : 'Manage'}
+          </button>
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => onNavigate(prospect)}
+          >
+            Navigate {travelMode === 'walking' ? 'Walk' : 'Drive'}
           </button>
         </div>
       </div>
@@ -1061,6 +1172,7 @@ function App() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchLocation, setSearchLocation] = useState('Austin TX')
   const [priorityFilter, setPriorityFilter] = useState<'All' | Priority>('All')
+  const [travelMode, setTravelMode] = useState<TravelMode>('driving')
   const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
   const [crmExportScope, setCrmExportScope] = useState<CrmExportScope>('all')
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
@@ -1493,6 +1605,18 @@ function App() {
     setRouteIds((current) =>
       current.includes(nextProspect.id) ? current : [...current, nextProspect.id],
     )
+  }
+
+  function handleNavigateProspect(prospect: Prospect) {
+    openExternalNavigation(createNavigateHref(prospect, travelMode))
+  }
+
+  function handleNavigateEntireRoute() {
+    if (routeProspects.length === 0) {
+      return
+    }
+
+    openExternalNavigation(createEntireRouteNavigateHref(routeProspects, travelMode))
   }
 
   function clearRoute() {
@@ -1950,6 +2074,8 @@ function App() {
                   isSaved={savedIds.includes(prospect.id)}
                   isInRoute={routeIds.includes(prospect.id)}
                   isExpanded={expandedProspectId === prospect.id}
+                  travelMode={travelMode}
+                  onNavigate={handleNavigateProspect}
                   onToggleSaved={toggleSaved}
                   onToggleRoute={toggleRoute}
                   onToggleExpanded={toggleExpandedProspect}
@@ -2008,10 +2134,20 @@ function App() {
             <DataSourceBadge source={effectiveSearchStatus.source} />
           </div>
           {routeProspects.length > 0 ? (
-            <button type="button" className="link-button link-button--danger" onClick={clearRoute}>
-              <Trash2 size={16} />
-              Clear route
-            </button>
+            <div className="button-row route-map-actions">
+              <button type="button" className="button" onClick={handleNavigateEntireRoute}>
+                <Navigation size={16} />
+                Navigate Entire Route
+              </button>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={clearRoute}
+              >
+                <Trash2 size={16} />
+                Clear route
+              </button>
+            </div>
           ) : null}
           <p className="section-copy map-panel__copy">
             Search results, saved prospects, and route stops stay visible on the map while you work the day.
@@ -2074,6 +2210,8 @@ function App() {
                   prospect={prospect}
                   isSaved={savedIds.includes(prospect.id)}
                   isInRoute={routeIds.includes(prospect.id)}
+                  travelMode={travelMode}
+                  onNavigate={handleNavigateProspect}
                   onToggleSaved={toggleSaved}
                   onToggleRoute={toggleRoute}
                 />
@@ -2154,6 +2292,8 @@ function App() {
                         key={prospect.id}
                         index={index}
                         prospect={prospect}
+                        travelMode={travelMode}
+                        onNavigate={handleNavigateProspect}
                         onToggleCompleted={toggleRouteCompleted}
                         onUpdateVisitNote={updateVisitNote}
                         onUpdateOutcome={updateVisitOutcome}
@@ -2343,6 +2483,8 @@ function App() {
                 prospect={prospect}
                 isSaved={savedIds.includes(prospect.id)}
                 isInRoute={routeIds.includes(prospect.id)}
+                  travelMode={travelMode}
+                  onNavigate={handleNavigateProspect}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
               />
@@ -2416,6 +2558,8 @@ function App() {
                 isSaved={savedIds.includes(prospect.id)}
                 isInRoute={routeIds.includes(prospect.id)}
                 isExpanded={expandedProspectId === prospect.id}
+                travelMode={travelMode}
+                onNavigate={handleNavigateProspect}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
                 onToggleExpanded={toggleExpandedProspect}
@@ -2963,6 +3107,24 @@ function App() {
           <h2>{displayMeta.title}</h2>
           <p>{displayMeta.subtitle}</p>
         </section>
+
+        {(['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
+          <section className="travel-mode-toolbar">
+            <span className="field-label">Travel mode</span>
+            <div className="chip-row">
+              {(['driving', 'walking'] as TravelMode[]).map((mode) => (
+                <button
+                  type="button"
+                  key={mode}
+                  className={`chip ${travelMode === mode ? 'chip--active' : ''}`}
+                  onClick={() => setTravelMode(mode)}
+                >
+                  {mode === 'driving' ? 'Driving' : 'Walking'}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {accountMenuMessage ? (
           <section className={`status-banner status-banner--${accountMenuMessage.type}`}>
