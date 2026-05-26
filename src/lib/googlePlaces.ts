@@ -12,9 +12,13 @@ const GOOGLE_PLACES_FIELD_MASK = [
 
 export type GooglePlacesSearchParams = {
   apiKey: string
-  keyword: string
-  location: string
+  query: string
   maxResultCount?: number
+  locationBias?: {
+    latitude: number
+    longitude: number
+    radiusMeters: number
+  }
 }
 
 export type GooglePlacesApiPlace = {
@@ -49,12 +53,12 @@ export type GooglePlacesSearchResult =
 
 export async function searchGooglePlaces({
   apiKey,
-  keyword,
-  location,
+  query,
   maxResultCount = 10,
+  locationBias,
 }: GooglePlacesSearchParams): Promise<GooglePlacesSearchResult> {
   const trimmedKey = apiKey.trim()
-  const query = `${keyword.trim()} ${location.trim()}`.trim()
+  const normalizedQuery = query.trim()
 
   console.info('[RepRoute] VITE_GOOGLE_MAPS_API_KEY detected:', trimmedKey.length > 0)
   console.info(
@@ -66,7 +70,7 @@ export async function searchGooglePlaces({
     const details = {
       error: {
         code: 'missing_api_key',
-        message: 'Google Maps API key missing',
+        message: 'Search API key missing',
       },
     }
 
@@ -74,9 +78,9 @@ export async function searchGooglePlaces({
 
     return {
       ok: false,
-      error: 'Google Maps API key missing',
+      error: 'Search API key missing',
       details,
-      query,
+      query: normalizedQuery,
       status: null,
     }
   }
@@ -90,8 +94,21 @@ export async function searchGooglePlaces({
         'X-Goog-FieldMask': GOOGLE_PLACES_FIELD_MASK,
       },
       body: JSON.stringify({
-        textQuery: query,
+        textQuery: normalizedQuery,
         pageSize: maxResultCount,
+        ...(locationBias
+          ? {
+              locationBias: {
+                circle: {
+                  center: {
+                    latitude: locationBias.latitude,
+                    longitude: locationBias.longitude,
+                  },
+                  radius: locationBias.radiusMeters,
+                },
+              },
+            }
+          : {}),
       }),
     })
 
@@ -117,9 +134,9 @@ export async function searchGooglePlaces({
 
       return {
         ok: false,
-        error: data?.error?.message ?? `Google Places request failed (${response.status})`,
+        error: data?.error?.message ?? `Live Search request failed (${response.status})`,
         details,
-        query,
+        query: normalizedQuery,
         status: response.status,
       }
     }
@@ -131,16 +148,16 @@ export async function searchGooglePlaces({
     return {
       ok: true,
       places,
-      query,
+      query: normalizedQuery,
     }
   } catch (error) {
     console.error('[RepRoute] Google Places full API error response:', error)
 
     return {
       ok: false,
-      error: error instanceof Error ? error.message : 'Unknown Google Places error',
+      error: error instanceof Error ? error.message : 'Unknown Live Search error',
       details: error,
-      query,
+      query: normalizedQuery,
       status: null,
     }
   }

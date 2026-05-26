@@ -16,6 +16,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   AlertTriangle,
+  BellRing,
   Bookmark,
   CalendarClock,
   CheckCircle2,
@@ -60,6 +61,18 @@ import {
   type CrmExportFormat,
   type CrmExportScope,
 } from './lib/crmExport'
+import {
+  DEFAULT_NOTIFICATION_LOG,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  getBrowserNotificationPermission,
+  getLocalDateKey,
+  hasReminderTimePassed,
+  requestBrowserNotificationPermission,
+  showBrowserNotification,
+  type BrowserNotificationPermission,
+  type NotificationPreferences,
+  type NotificationReminderLog,
+} from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
 
 type Priority = 'Hot' | 'Warm' | 'Cold'
@@ -155,15 +168,25 @@ type ConnectionTestState = {
   details?: string
 }
 
+type SearchLocationState = 'idle' | 'requesting' | 'granted' | 'denied' | 'unsupported'
+type SearchRadiusMiles = (typeof uiText.search.radiusOptions)[number]
+type SearchIndustry = (typeof uiText.search.industryOptions)[number]
+
+type SettingsSection = 'top' | 'notifications' | 'crm' | 'backup'
+
 const SUGGESTED_SEARCH_KEYWORDS = uiText.search.suggestedKeywords
 
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
+const SEARCH_RADIUS_OPTIONS: SearchRadiusMiles[] = [...uiText.search.radiusOptions]
+const SEARCH_INDUSTRY_OPTIONS: SearchIndustry[] = [...uiText.search.industryOptions]
 
 const STORAGE_KEYS = {
   liveProspects: 'reproute:live-prospects',
   savedProspects: 'reproute:saved-prospects',
   prospectRecords: 'reproute:prospect-records',
   routeList: 'reproute:route-list',
+  notificationPreferences: 'reproute:notification-preferences',
+  notificationReminderLog: 'reproute:notification-reminder-log',
   theme: 'reproute:theme',
 } as const
 
@@ -327,7 +350,12 @@ function createFallbackLiveProspectId(place: GooglePlacesApiPlace, query: string
   return `gplace:${slugify(`${name}-${address}`)}`
 }
 
-function toLiveProspect(place: GooglePlacesApiPlace, keyword: string, location: string) {
+function toLiveProspect(
+  place: GooglePlacesApiPlace,
+  keyword: string,
+  location: string,
+  searchCenter = AUSTIN_FALLBACK,
+) {
   const lat = place.location?.latitude
   const lng = place.location?.longitude
 
@@ -343,7 +371,7 @@ function toLiveProspect(place: GooglePlacesApiPlace, keyword: string, location: 
       ? titleCase(keyword.trim())
       : place.types?.[0]
         ? titleCase(place.types[0].replace(/_/g, ' '))
-        : 'Live Google Place'
+        : 'Business'
 
   return {
     id: place.id ? `gplace:${place.id}` : createFallbackLiveProspectId(place, `${keyword} ${location}`),
@@ -351,10 +379,10 @@ function toLiveProspect(place: GooglePlacesApiPlace, keyword: string, location: 
     businessName,
     contactName: '',
     category,
-    distance: calculateDistanceMiles(AUSTIN_FALLBACK, { lat, lng }),
+    distance: calculateDistanceMiles(searchCenter, { lat, lng }),
     priority: priorityFromRating(rating),
     lastContact: 'Not contacted yet',
-    notes: 'Imported from a live Google Places search.',
+    notes: 'Imported from Live Search.',
     city: extractCity(address, location.trim()),
     nextTouch: 'Review fit, save if promising, and add to route if qualified.',
     address,
@@ -684,6 +712,68 @@ function getFollowUpStatus(date: string) {
   }
 
   return uiText.followUps.statuses.later
+}
+
+function formatProspectNames(prospects: Prospect[], limit = 3) {
+  const names = prospects.slice(0, limit).map((prospect) => prospect.businessName)
+
+  if (prospects.length <= limit) {
+    return names
+  }
+
+  return [...names, `+${prospects.length - limit} more`]
+}
+
+function milesToMeters(miles: number) {
+  return Math.round(miles * 1609.34)
+}
+
+function buildIndustrySearchTerms(keyword: string, industries: string[]) {
+  const trimmedKeyword = keyword.trim()
+
+  if (industries.length === 0) {
+    return trimmedKeyword ? [trimmedKeyword] : []
+  }
+
+  return industries.map((industry) =>
+    trimmedKeyword ? `${trimmedKeyword} ${industry}` : industry,
+  )
+}
+
+function summarizeSearchFilters({
+  keyword,
+  selectedIndustries,
+  radiusMiles,
+  market,
+}: {
+  keyword: string
+  selectedIndustries: string[]
+  radiusMiles: number
+  market: string
+}) {
+  const parts = [
+    uiText.search.filters.radius(radiusMiles),
+    selectedIndustries.length > 0 ? uiText.search.filters.industries(selectedIndustries) : '',
+    keyword.trim() ? uiText.search.filters.keyword(keyword.trim()) : '',
+    market.trim() ? uiText.search.filters.market(market.trim()) : '',
+  ].filter(Boolean)
+
+  return parts.join(' · ')
+}
+
+function dedupePlaces(places: GooglePlacesApiPlace[]) {
+  const unique = new globalThis.Map<string, GooglePlacesApiPlace>()
+
+  for (const place of places) {
+    const fallbackKey = `${place.displayName?.text?.trim() ?? ''}:${place.formattedAddress?.trim() ?? ''}`
+    const key = place.id?.trim() || fallbackKey
+
+    if (!unique.has(key)) {
+      unique.set(key, place)
+    }
+  }
+
+  return Array.from(unique.values())
 }
 
 function StatCard({
@@ -1119,8 +1209,9 @@ function ProspectCard({
 function App() {
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
   const accountMenuRef = useRef<HTMLDivElement | null>(null)
-  const pendingSettingsSectionRef = useRef<'top' | 'crm' | 'backup' | null>(null)
+  const pendingSettingsSectionRef = useRef<SettingsSection | null>(null)
   const settingsTopRef = useRef<HTMLElement | null>(null)
+  const notificationSectionRef = useRef<HTMLElement | null>(null)
   const crmExportSectionRef = useRef<HTMLElement | null>(null)
   const backupSectionRef = useRef<HTMLElement | null>(null)
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
@@ -1129,6 +1220,7 @@ function App() {
   const [backupMessage, setBackupMessage] = useState<BackupMessage | null>(null)
   const [crmExportMessage, setCrmExportMessage] = useState<BackupMessage | null>(null)
   const [accountMenuMessage, setAccountMenuMessage] = useState<BackupMessage | null>(null)
+  const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [theme, setTheme] = usePersistentState<Theme>(STORAGE_KEYS.theme, 'dark')
   const [liveProspects, setLiveProspects] = usePersistentState<BaseProspect[]>(
@@ -1141,8 +1233,28 @@ function App() {
     STORAGE_KEYS.prospectRecords,
     {},
   )
+  const [notificationPreferences, setNotificationPreferences] =
+    usePersistentState<NotificationPreferences>(
+      STORAGE_KEYS.notificationPreferences,
+      DEFAULT_NOTIFICATION_PREFERENCES,
+    )
+  const [notificationReminderLog, setNotificationReminderLog] =
+    usePersistentState<NotificationReminderLog>(
+      STORAGE_KEYS.notificationReminderLog,
+      DEFAULT_NOTIFICATION_LOG,
+    )
   const [searchKeyword, setSearchKeyword] = useState('')
-  const [searchLocation, setSearchLocation] = useState('Austin TX')
+  const [manualMarket, setManualMarket] = useState('')
+  const [searchRadiusMiles, setSearchRadiusMiles] = useState<SearchRadiusMiles>(10)
+  const [selectedIndustries, setSelectedIndustries] = useState<SearchIndustry[]>([])
+  const [searchLocationState, setSearchLocationState] = useState<SearchLocationState>(() => {
+    if (typeof navigator === 'undefined') {
+      return 'idle'
+    }
+
+    return navigator.geolocation ? 'requesting' : 'unsupported'
+  })
+  const [searchCenter, setSearchCenter] = useState<{ lat: number; lng: number } | null>(null)
   const [priorityFilter, setPriorityFilter] = useState<'All' | Priority>('All')
   const [travelMode, setTravelMode] = useState<TravelMode>('driving')
   const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
@@ -1151,6 +1263,9 @@ function App() {
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [notificationPermission, setNotificationPermission] = useState<BrowserNotificationPermission>(
+    () => getBrowserNotificationPermission(),
+  )
   const [connectionTest, setConnectionTest] = useState<ConnectionTestState>({
     status: 'idle',
     message: uiText.settings.googlePlacesDescription,
@@ -1163,9 +1278,11 @@ function App() {
     }),
   )
 
-  function scrollToSettingsSection(section: 'top' | 'crm' | 'backup') {
+  function scrollToSettingsSection(section: SettingsSection) {
     const target =
-      section === 'crm'
+      section === 'notifications'
+        ? notificationSectionRef.current
+        : section === 'crm'
         ? crmExportSectionRef.current
         : section === 'backup'
           ? backupSectionRef.current
@@ -1181,6 +1298,44 @@ function App() {
   useEffect(() => {
     console.info('[RepRoute] VITE_GOOGLE_MAPS_API_KEY detected:', googleMapsApiKey.length > 0)
   }, [googleMapsApiKey])
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setSearchCenter({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
+        setSearchLocationState('granted')
+      },
+      () => {
+        setSearchCenter(null)
+        setSearchLocationState('denied')
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      },
+    )
+  }, [])
+
+  useEffect(() => {
+    const syncPermission = () => {
+      setNotificationPermission(getBrowserNotificationPermission())
+    }
+
+    syncPermission()
+    window.addEventListener('focus', syncPermission)
+
+    return () => {
+      window.removeEventListener('focus', syncPermission)
+    }
+  }, [])
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -1488,6 +1643,24 @@ function App() {
   const dueNowCount = scheduledFollowUps.filter(
     (prospect) => getFollowUpStatus(prospect.followUpDate) === uiText.followUps.statuses.dueNow,
   ).length
+  const searchLocationMessage =
+    searchLocationState === 'requesting'
+      ? uiText.search.location.locating
+      : searchLocationState === 'granted'
+        ? uiText.search.location.ready
+        : searchLocationState === 'denied'
+          ? uiText.search.location.denied
+          : searchLocationState === 'unsupported'
+            ? uiText.search.location.unsupported
+            : uiText.search.marketHelp
+  const notificationPermissionLabel =
+    notificationPermission === 'granted'
+      ? uiText.settings.notifications.permissionStatuses.granted
+      : notificationPermission === 'denied'
+        ? uiText.settings.notifications.permissionStatuses.denied
+        : notificationPermission === 'default'
+          ? uiText.settings.notifications.permissionStatuses.default
+          : uiText.settings.notifications.permissionStatuses.unsupported
 
   const currentBackupPayload = useMemo<BackupPayload>(
     () => ({
@@ -1506,6 +1679,105 @@ function App() {
     () => (importPreview ? summarizeBackupPayload(importPreview.payload) : null),
     [importPreview],
   )
+
+  useEffect(() => {
+    if (!notificationPreferences.enabled || notificationPermission !== 'granted') {
+      return
+    }
+
+    let cancelled = false
+
+    const checkNotifications = async () => {
+      const now = new Date()
+      const todayKey = getLocalDateKey(now)
+      const latestReminderLog = (() => {
+        try {
+          const stored = window.localStorage.getItem(STORAGE_KEYS.notificationReminderLog)
+          return stored ? (JSON.parse(stored) as NotificationReminderLog) : notificationReminderLog
+        } catch {
+          return notificationReminderLog
+        }
+      })()
+      const persistReminder = (type: keyof NotificationReminderLog) => {
+        const nextLog = { ...latestReminderLog, [type]: todayKey }
+        window.localStorage.setItem(STORAGE_KEYS.notificationReminderLog, JSON.stringify(nextLog))
+        setNotificationReminderLog(nextLog)
+      }
+      const dueToday = scheduledFollowUps.filter((prospect) => prospect.followUpDate === todayKey)
+      const overdueProspects = scheduledFollowUps.filter((prospect) => prospect.followUpDate < todayKey)
+
+      if (
+        notificationPreferences.followUpAlerts &&
+        latestReminderLog.followUps !== todayKey &&
+        hasReminderTimePassed(notificationPreferences.followUpTime, now) &&
+        dueToday.length > 0
+      ) {
+        const wasShown = await showBrowserNotification({
+          title: uiText.settings.notifications.reminders.followUpTitle(dueToday.length),
+          body: uiText.settings.notifications.reminders.followUpBody(formatProspectNames(dueToday)),
+          tag: 'reproute-followups',
+        })
+
+        if (wasShown && !cancelled) {
+          persistReminder('followUps')
+        }
+      }
+
+      if (
+        notificationPreferences.dailyRouteReminder &&
+        latestReminderLog.route !== todayKey &&
+        hasReminderTimePassed(notificationPreferences.dailyRouteTime, now) &&
+        routeProspects.length > 0
+      ) {
+        const wasShown = await showBrowserNotification({
+          title: uiText.settings.notifications.reminders.routeTitle(routeProspects.length),
+          body: uiText.settings.notifications.reminders.routeBody(currentRouteStop?.businessName ?? null),
+          tag: 'reproute-route',
+        })
+
+        if (wasShown && !cancelled) {
+          persistReminder('route')
+        }
+      }
+
+      if (
+        notificationPreferences.overdueProspectAlerts &&
+        latestReminderLog.overdue !== todayKey &&
+        hasReminderTimePassed(notificationPreferences.overdueProspectTime, now) &&
+        overdueProspects.length > 0
+      ) {
+        const wasShown = await showBrowserNotification({
+          title: uiText.settings.notifications.reminders.overdueTitle(overdueProspects.length),
+          body: uiText.settings.notifications.reminders.overdueBody(
+            formatProspectNames(overdueProspects),
+          ),
+          tag: 'reproute-overdue',
+        })
+
+        if (wasShown && !cancelled) {
+          persistReminder('overdue')
+        }
+      }
+    }
+
+    void checkNotifications()
+    const intervalId = window.setInterval(() => {
+      void checkNotifications()
+    }, 60000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [
+    currentRouteStop,
+    notificationPermission,
+    notificationPreferences,
+    notificationReminderLog,
+    routeProspects,
+    scheduledFollowUps,
+    setNotificationReminderLog,
+  ])
 
   function updateProspectRecord(
     prospectId: string,
@@ -1607,8 +1879,30 @@ function App() {
     setExpandedProspectId((current) => (current === prospectId ? null : prospectId))
   }
 
-  async function runLiveSearch(keyword: string, location: string) {
-    if (!keyword || !location) {
+  function toggleIndustrySelection(industry: SearchIndustry) {
+    setSelectedIndustries((current) =>
+      current.includes(industry)
+        ? current.filter((entry) => entry !== industry)
+        : [...current, industry],
+    )
+  }
+
+  async function runLiveSearch({
+    keyword,
+    market,
+    industries,
+    radiusMiles,
+  }: {
+    keyword: string
+    market: string
+    industries: SearchIndustry[]
+    radiusMiles: SearchRadiusMiles
+  }) {
+    const trimmedKeyword = keyword.trim()
+    const trimmedMarket = market.trim()
+    const searchTerms = buildIndustrySearchTerms(trimmedKeyword, industries)
+
+    if (searchTerms.length === 0) {
       setLiveSearchIds([])
       setSearchStatus({
         source: 'api-error',
@@ -1618,44 +1912,130 @@ function App() {
       return
     }
 
+    if (!trimmedMarket && searchLocationState !== 'granted') {
+      setLiveSearchIds([])
+      setSearchStatus({
+        source: 'api-error',
+        message: uiText.errors.locationRequired,
+        details: uiText.search.location.denied,
+      })
+      return
+    }
+
     setIsSearchingPlaces(true)
 
-    const result = await searchGooglePlaces({
-      apiKey: googleMapsApiKey,
-      keyword,
-      location,
-      maxResultCount: 12,
+    const filterSummary = summarizeSearchFilters({
+      keyword: trimmedKeyword,
+      selectedIndustries: industries,
+      radiusMiles,
+      market: trimmedMarket,
     })
+    const fallbackLocationLabel = trimmedMarket || 'Current market'
+    const locationBias =
+      !trimmedMarket && searchCenter
+        ? {
+            latitude: searchCenter.lat,
+            longitude: searchCenter.lng,
+            radiusMeters: milesToMeters(radiusMiles),
+          }
+        : undefined
 
-    if (result.ok) {
-      const normalizedProspects = result.places.reduce<BaseProspect[]>((collection, place) => {
-        const prospect = toLiveProspect(place, keyword, location)
+    const results = await Promise.all(
+      searchTerms.map(async (term) => ({
+        term,
+        result: await searchGooglePlaces({
+          apiKey: googleMapsApiKey,
+          query: trimmedMarket ? `${term} ${trimmedMarket}`.trim() : term,
+          maxResultCount: 8,
+          locationBias,
+        }),
+      })),
+    )
 
-        if (prospect) {
-          collection.push(prospect)
-        }
+    const successfulResults: Array<{
+      term: string
+      result: { ok: true; places: GooglePlacesApiPlace[]; query: string }
+    }> = []
+    const failedResults: Array<{
+      term: string
+      result: { ok: false; error: string; details: unknown; query: string; status: number | null }
+    }> = []
 
-        return collection
-      }, [])
+    for (const entry of results) {
+      if (entry.result.ok) {
+        successfulResults.push({
+          term: entry.term,
+          result: entry.result,
+        })
+      } else {
+        failedResults.push({
+          term: entry.term,
+          result: entry.result,
+        })
+      }
+    }
+    const dedupedPlaces = dedupePlaces(
+      successfulResults.flatMap((entry) => entry.result.places),
+    )
+    const normalizedProspects = dedupedPlaces.reduce<BaseProspect[]>((collection, place) => {
+      const matchingEntry = successfulResults.find((entry) =>
+        entry.result.places.some((candidate) =>
+          candidate.id && place.id
+            ? candidate.id === place.id
+            : candidate.displayName?.text === place.displayName?.text &&
+              candidate.formattedAddress === place.formattedAddress,
+        ),
+      )
+      const prospect = toLiveProspect(
+        place,
+        matchingEntry?.term ?? trimmedKeyword,
+        fallbackLocationLabel,
+        searchCenter ?? AUSTIN_FALLBACK,
+      )
 
+      if (prospect) {
+        collection.push(prospect)
+      }
+
+      return collection
+    }, [])
+
+    if (normalizedProspects.length > 0) {
       setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
       setLiveSearchIds(normalizedProspects.map((prospect) => prospect.id))
       setSearchStatus({
         source: 'live',
-        message:
-          normalizedProspects.length > 0
-            ? uiText.search.statusMessages.liveResults(normalizedProspects.length, result.query)
-            : uiText.search.statusMessages.noLiveResults(result.query),
+        message: uiText.search.statusMessages.liveResults(
+          normalizedProspects.length,
+          filterSummary || 'your filters',
+        ),
+        details:
+          failedResults.length > 0
+            ? `${uiText.errors.searchFailedDetail} ${failedResults
+                .map((entry) => `${entry.term}: ${entry.result.error}`)
+                .join(' | ')}`
+            : undefined,
         resultsCount: normalizedProspects.length,
-        query: result.query,
+        query: filterSummary,
       })
-    } else {
-      setLiveSearchIds([])
+      setIsSearchingPlaces(false)
+      return
+    }
+
+    setLiveSearchIds([])
+    if (failedResults.length > 0) {
       setSearchStatus({
         source: 'api-error',
-        message: result.error,
-        details: uiText.errors.searchFailedDetail,
-        query: result.query,
+        message: failedResults[0]?.result.error ?? uiText.errors.searchFailedDetail,
+        details: failedResults.map((entry) => `${entry.term}: ${entry.result.error}`).join(' | '),
+        query: filterSummary,
+      })
+    } else {
+      setSearchStatus({
+        source: 'live',
+        message: uiText.search.statusMessages.noLiveResults(filterSummary || 'your filters'),
+        resultsCount: 0,
+        query: filterSummary,
       })
     }
 
@@ -1664,12 +2044,22 @@ function App() {
 
   async function handleLiveSearch(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault()
-    await runLiveSearch(searchKeyword.trim(), searchLocation.trim())
+    await runLiveSearch({
+      keyword: searchKeyword,
+      market: manualMarket,
+      industries: selectedIndustries,
+      radiusMiles: searchRadiusMiles,
+    })
   }
 
   async function handleSuggestedSearch(keyword: string) {
     setSearchKeyword(keyword)
-    await runLiveSearch(keyword, searchLocation.trim())
+    await runLiveSearch({
+      keyword,
+      market: manualMarket,
+      industries: selectedIndustries,
+      radiusMiles: searchRadiusMiles,
+    })
   }
 
   async function handleTestGooglePlacesConnection() {
@@ -1680,8 +2070,7 @@ function App() {
 
     const result = await searchGooglePlaces({
       apiKey: googleMapsApiKey,
-      keyword: 'equipment rental',
-      location: 'Austin TX',
+      query: 'equipment rental Austin TX',
       maxResultCount: 8,
     })
 
@@ -1702,11 +2091,82 @@ function App() {
     })
   }
 
+  async function handleNotificationPermissionRequest() {
+    const permission = await requestBrowserNotificationPermission()
+    setNotificationPermission(permission)
+
+    if (permission === 'granted') {
+      setNotificationPreferences((current) => ({ ...current, enabled: true }))
+      setNotificationMessage({
+        type: 'success',
+        text: uiText.settings.notifications.messages.permissionGranted,
+      })
+      return
+    }
+
+    if (permission === 'denied') {
+      setNotificationPreferences((current) => ({ ...current, enabled: false }))
+      setNotificationMessage({
+        type: 'error',
+        text: uiText.settings.notifications.messages.permissionDenied,
+      })
+      return
+    }
+
+    setNotificationPreferences((current) => ({ ...current, enabled: false }))
+    setNotificationMessage({
+      type: permission === 'unsupported' ? 'error' : 'info',
+      text:
+        permission === 'unsupported'
+          ? uiText.settings.notifications.messages.permissionUnsupported
+          : uiText.settings.notifications.permissionPromptDescription,
+    })
+  }
+
+  async function handleToggleNotificationsEnabled() {
+    if (notificationPermission === 'unsupported') {
+      setNotificationMessage({
+        type: 'error',
+        text: uiText.settings.notifications.messages.permissionUnsupported,
+      })
+      return
+    }
+
+    if (!notificationPreferences.enabled) {
+      if (notificationPermission !== 'granted') {
+        await handleNotificationPermissionRequest()
+        return
+      }
+
+      setNotificationPreferences((current) => ({ ...current, enabled: true }))
+      setNotificationMessage({
+        type: 'success',
+        text: uiText.settings.notifications.messages.reminderDelivered,
+      })
+      return
+    }
+
+    setNotificationPreferences((current) => ({ ...current, enabled: false }))
+    setNotificationMessage({
+      type: 'info',
+      text: uiText.settings.notifications.messages.notificationsDisabled,
+    })
+  }
+
+  function updateNotificationPreferences(
+    updates: Partial<NotificationPreferences> | ((current: NotificationPreferences) => NotificationPreferences),
+  ) {
+    setNotificationPreferences((current) =>
+      typeof updates === 'function' ? updates(current) : { ...current, ...updates },
+    )
+    setNotificationMessage(null)
+  }
+
   function openImportPicker() {
     importFileInputRef.current?.click()
   }
 
-  function openSettingsPanel(section: 'top' | 'crm' | 'backup') {
+  function openSettingsPanel(section: SettingsSection) {
     pendingSettingsSectionRef.current = section
     setActiveView('settings')
     setAccountMenuOpen(false)
@@ -2365,6 +2825,16 @@ function App() {
             <p>{uiText.search.prominentDescription}</p>
           </div>
 
+          <div
+            className={`status-banner ${
+              searchLocationState === 'denied' || searchLocationState === 'unsupported'
+                ? 'status-banner--error'
+                : 'status-banner--info'
+            }`}
+          >
+            <p>{searchLocationMessage}</p>
+          </div>
+
           <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">
               <span className="field-label">{uiText.search.keywordLabel}</span>
@@ -2381,17 +2851,55 @@ function App() {
             </label>
 
             <label className="field-group">
-              <span className="field-label">{uiText.search.locationLabel}</span>
+              <span className="field-label">{uiText.search.radiusLabel}</span>
+              <select
+                className="text-input filter-select"
+                value={searchRadiusMiles}
+                onChange={(event) => setSearchRadiusMiles(Number(event.target.value) as SearchRadiusMiles)}
+              >
+                {SEARCH_RADIUS_OPTIONS.map((radius) => (
+                  <option key={radius} value={radius}>
+                    {uiText.search.filters.radius(radius)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="field-group">
+              <span className="field-label">{uiText.search.industriesLabel}</span>
+              <details className="filter-dropdown">
+                <summary className="filter-dropdown__trigger">
+                  <span>{uiText.search.industriesSelected(selectedIndustries.length)}</span>
+                  <ChevronDown size={16} />
+                </summary>
+                <div className="filter-dropdown__panel">
+                  {SEARCH_INDUSTRY_OPTIONS.map((industry) => (
+                    <label key={industry} className="filter-dropdown__option">
+                      <input
+                        type="checkbox"
+                        checked={selectedIndustries.includes(industry)}
+                        onChange={() => toggleIndustrySelection(industry)}
+                      />
+                      <span>{industry}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            </div>
+
+            <label className="field-group">
+              <span className="field-label">{uiText.search.marketLabel}</span>
               <div className="search-field">
                 <MapIcon size={18} />
                 <input
                   type="search"
-                  value={searchLocation}
-                  onChange={(event) => setSearchLocation(event.target.value)}
-                  placeholder={uiText.search.locationPlaceholder}
-                  aria-label={uiText.search.locationLabel}
+                  value={manualMarket}
+                  onChange={(event) => setManualMarket(event.target.value)}
+                  placeholder={uiText.search.marketPlaceholder}
+                  aria-label={uiText.search.marketLabel}
                 />
               </div>
+              <p className="editor-hint">{uiText.search.marketHelp}</p>
             </label>
 
             <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
@@ -2410,6 +2918,28 @@ function App() {
                 {keyword}
               </button>
             ))}
+          </div>
+
+          <div className="field-group">
+            <p className="field-label">{uiText.search.selectedFiltersLabel}</p>
+            <div className="chip-row">
+              <span className="chip chip--static">{uiText.search.filters.radius(searchRadiusMiles)}</span>
+              {selectedIndustries.length > 0 ? (
+                <span className="chip chip--static">
+                  {uiText.search.filters.industries(selectedIndustries)}
+                </span>
+              ) : null}
+              {searchKeyword.trim() ? (
+                <span className="chip chip--static">
+                  {uiText.search.filters.keyword(searchKeyword.trim())}
+                </span>
+              ) : null}
+              {manualMarket.trim() ? (
+                <span className="chip chip--static">
+                  {uiText.search.filters.market(manualMarket.trim())}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div
@@ -2732,6 +3262,188 @@ function App() {
               <p>{uiText.settings.resultsReturned(connectionTest.resultsCount)}</p>
             ) : null}
             {connectionTest.details ? <p>{uiText.settings.errorDetails(connectionTest.details)}</p> : null}
+          </div>
+        </section>
+
+        <section ref={notificationSectionRef} className="panel section-panel">
+          <div className="section-heading">
+            <div>
+              <div className="eyebrow eyebrow--tight">{uiText.settings.notifications.eyebrow}</div>
+              <h2>{uiText.settings.notifications.heading}</h2>
+            </div>
+            <span className="meta-pill">{notificationPermissionLabel}</span>
+          </div>
+
+          <p className="section-copy">{uiText.settings.notifications.description}</p>
+
+          {notificationPermission === 'unsupported' ? (
+            <div className="status-banner status-banner--error">
+              <p>{uiText.settings.notifications.messages.permissionUnsupported}</p>
+            </div>
+          ) : null}
+
+          {notificationPermission !== 'granted' && notificationPermission !== 'unsupported' ? (
+            <div className="notification-permission-card">
+              <div className="notification-permission-card__copy">
+                <BellRing size={18} />
+                <div>
+                  <strong>{uiText.settings.notifications.permissionPromptTitle}</strong>
+                  <p>{uiText.settings.notifications.permissionPromptDescription}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button"
+                onClick={() => void handleNotificationPermissionRequest()}
+              >
+                {uiText.settings.notifications.requestPermission}
+              </button>
+            </div>
+          ) : null}
+
+          {notificationMessage ? (
+            <div className={`status-banner status-banner--${notificationMessage.type}`}>
+              <p>{notificationMessage.text}</p>
+            </div>
+          ) : null}
+
+          <div className="settings-stack notification-settings">
+            <button
+              type="button"
+              className="setting-row notification-setting"
+              onClick={() => void handleToggleNotificationsEnabled()}
+            >
+              <div>
+                <strong>{uiText.settings.notifications.toggles.enable}</strong>
+                <p>{uiText.settings.notifications.toggles.enableDescription}</p>
+              </div>
+              <span className="meta-pill">
+                {notificationPreferences.enabled
+                  ? uiText.settings.notifications.states.on
+                  : uiText.settings.notifications.states.off}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`setting-row notification-setting ${
+                !notificationPreferences.enabled ? 'notification-setting--disabled' : ''
+              }`}
+              onClick={() =>
+                notificationPreferences.enabled &&
+                updateNotificationPreferences((current) => ({
+                  ...current,
+                  followUpAlerts: !current.followUpAlerts,
+                }))
+              }
+              disabled={!notificationPreferences.enabled}
+            >
+              <div>
+                <strong>{uiText.settings.notifications.toggles.followUps}</strong>
+                <p>{uiText.settings.notifications.toggles.followUpsDescription}</p>
+              </div>
+              <span className="meta-pill">
+                {notificationPreferences.followUpAlerts
+                  ? uiText.settings.notifications.states.on
+                  : uiText.settings.notifications.states.off}
+              </span>
+            </button>
+
+            {notificationPreferences.enabled && notificationPreferences.followUpAlerts ? (
+              <label className="field-group">
+                <span className="field-label">{uiText.settings.notifications.followUpTimeLabel}</span>
+                <input
+                  className="text-input notification-time-input"
+                  type="time"
+                  value={notificationPreferences.followUpTime}
+                  onChange={(event) =>
+                    updateNotificationPreferences({ followUpTime: event.target.value })
+                  }
+                />
+              </label>
+            ) : null}
+
+            <button
+              type="button"
+              className={`setting-row notification-setting ${
+                !notificationPreferences.enabled ? 'notification-setting--disabled' : ''
+              }`}
+              onClick={() =>
+                notificationPreferences.enabled &&
+                updateNotificationPreferences((current) => ({
+                  ...current,
+                  dailyRouteReminder: !current.dailyRouteReminder,
+                }))
+              }
+              disabled={!notificationPreferences.enabled}
+            >
+              <div>
+                <strong>{uiText.settings.notifications.toggles.route}</strong>
+                <p>{uiText.settings.notifications.toggles.routeDescription}</p>
+              </div>
+              <span className="meta-pill">
+                {notificationPreferences.dailyRouteReminder
+                  ? uiText.settings.notifications.states.on
+                  : uiText.settings.notifications.states.off}
+              </span>
+            </button>
+
+            {notificationPreferences.enabled && notificationPreferences.dailyRouteReminder ? (
+              <label className="field-group">
+                <span className="field-label">{uiText.settings.notifications.routeTimeLabel}</span>
+                <input
+                  className="text-input notification-time-input"
+                  type="time"
+                  value={notificationPreferences.dailyRouteTime}
+                  onChange={(event) =>
+                    updateNotificationPreferences({ dailyRouteTime: event.target.value })
+                  }
+                />
+              </label>
+            ) : null}
+
+            <button
+              type="button"
+              className={`setting-row notification-setting ${
+                !notificationPreferences.enabled ? 'notification-setting--disabled' : ''
+              }`}
+              onClick={() =>
+                notificationPreferences.enabled &&
+                updateNotificationPreferences((current) => ({
+                  ...current,
+                  overdueProspectAlerts: !current.overdueProspectAlerts,
+                }))
+              }
+              disabled={!notificationPreferences.enabled}
+            >
+              <div>
+                <strong>{uiText.settings.notifications.toggles.overdue}</strong>
+                <p>{uiText.settings.notifications.toggles.overdueDescription}</p>
+              </div>
+              <span className="meta-pill">
+                {notificationPreferences.overdueProspectAlerts
+                  ? uiText.settings.notifications.states.on
+                  : uiText.settings.notifications.states.off}
+              </span>
+            </button>
+
+            {notificationPreferences.enabled && notificationPreferences.overdueProspectAlerts ? (
+              <label className="field-group">
+                <span className="field-label">{uiText.settings.notifications.overdueTimeLabel}</span>
+                <input
+                  className="text-input notification-time-input"
+                  type="time"
+                  value={notificationPreferences.overdueProspectTime}
+                  onChange={(event) =>
+                    updateNotificationPreferences({ overdueProspectTime: event.target.value })
+                  }
+                />
+              </label>
+            ) : null}
+          </div>
+
+          <div className="inline-summary">
+            <span>{uiText.settings.notifications.localOnlyNote}</span>
           </div>
         </section>
 

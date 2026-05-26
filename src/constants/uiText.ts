@@ -3,11 +3,11 @@ export const uiText = {
     title: 'Get Started',
     description: 'Set up your workspace and start building a Prospect pipeline.',
     heroBadge: 'Live Route Planning',
-    heroHeading: 'Build a sharper field day with real businesses, Routes, and Follow-Ups that stick.',
+    heroHeading: 'Build a sharper field day with businesses, Routes, and Follow-Ups that stick.',
     heroDescription:
-      'RepRoute remembers your real Prospects, Saved Prospects, Route stops, notes, priorities, and Follow-Up dates between visits.',
+      'RepRoute remembers your Prospects, Saved Prospects, Route stops, notes, priorities, and Follow-Up dates between visits.',
     metrics: {
-      realProspectsLoaded: 'Real Prospects Loaded',
+      realProspectsLoaded: 'Prospects Loaded',
       savedProspects: 'Saved Prospects',
       routeStops: 'Route Stops',
       followUpsDue: 'Follow-Ups Due',
@@ -18,11 +18,11 @@ export const uiText = {
     },
     startHereEyebrow: 'Start Here',
     searchStatusEyebrow: 'Live Search Status',
-    realProspectsDetail: 'Live Google Places businesses currently stored on this device.',
+    realProspectsDetail: 'Live Search businesses currently stored on this device.',
     catalogSummary:
-      'Saved Prospects, Route stops, and Follow-Ups all come from live Google Places searches.',
+      'Saved Prospects, Route stops, and Follow-Ups all come from Live Search activity.',
     upcomingFollowUpsDetail: (count: number) => `${count} scheduled in the next seven days`,
-    storedProspectsSummary: (count: number) => `${count} real businesses stored locally`,
+    storedProspectsSummary: (count: number) => `${count} businesses stored locally`,
     hotTargetsEyebrow: 'Best Nearby Opportunities',
     hotTargetsHeading: 'Hot Targets',
     nextFollowUp: 'Next Follow-Up',
@@ -31,7 +31,7 @@ export const uiText = {
   navigation: {
     appName: 'RepRoute',
     tagline: 'Field Sales Route Planner',
-    liveBadge: 'Live Google Places',
+    liveBadge: 'Live Search',
     primaryNavAriaLabel: 'Primary',
     themeToggleAriaLabel: 'Toggle color theme',
     items: {
@@ -46,7 +46,7 @@ export const uiText = {
       dashboard: {
         title: 'Territory Command',
         subtitle:
-          'Search real businesses with Google Places and keep your Route activity saved locally.',
+          'Search businesses with Prospect Search and keep your Route activity saved locally.',
       },
       map: {
         title: 'Today’s Route',
@@ -56,7 +56,7 @@ export const uiText = {
       search: {
         title: 'Prospect Search',
         subtitle:
-          'Search live Google Places by keyword and market, then save the best Prospects or add them to a Route.',
+          'Run a live Market Search by keyword and market, then save the best Prospects or add them to a Route.',
       },
       saved: {
         title: 'Saved Prospects',
@@ -69,7 +69,8 @@ export const uiText = {
       },
       settings: {
         title: 'Settings',
-        subtitle: 'Manage Google Places, CRM Export, backups, and workspace preferences.',
+        subtitle:
+          'Manage notifications, Live Search, CRM Export, backups, and workspace preferences.',
       },
     },
     accountMenu: {
@@ -91,17 +92,46 @@ export const uiText = {
     },
   },
   search: {
-    eyebrow: 'Google Places First',
-    heading: 'Find Real Prospects',
-    prominentTitle: 'Find real prospects',
+    eyebrow: 'Territory Search',
+    heading: 'Find Prospects',
+    prominentTitle: 'Find prospects',
     prominentDescription:
-      'Search live Google Places by keyword and city, then save qualified Prospects or add them to a Route.',
-    keywordLabel: 'Keyword',
+      'Run a Live Search by industry, keyword, and radius, then save qualified Prospects or add them to a Route.',
+    keywordLabel: 'Keyword (Optional)',
     keywordPlaceholder: 'equipment rental',
-    locationLabel: 'City or market',
-    locationPlaceholder: 'Austin, TX',
-    searchButton: 'Search Google Places',
-    searchingButton: 'Searching Google Places...',
+    marketLabel: 'Market (Optional)',
+    marketPlaceholder: 'Houston, TX',
+    marketHelp: 'Use your current location by default, or enter a market manually.',
+    radiusLabel: 'Search Radius',
+    radiusOptions: [5, 10, 15, 25, 50] as const,
+    industriesLabel: 'Industries',
+    industriesPlaceholder: 'Select industries',
+    industriesSelected: (count: number) =>
+      count === 0 ? 'Select industries' : `${count} industry${count === 1 ? '' : 'ies'} selected`,
+    industryOptions: [
+      'Construction',
+      'Oil & Gas',
+      'Equipment Rental',
+      'HVAC',
+      'Plumbing',
+      'Electrical Contractors',
+      'Manufacturing',
+      'Warehousing & Logistics',
+      'Automotive',
+      'Agriculture',
+      'Restaurants & Food Service',
+      'Medical & Clinics',
+      'Real Estate & Property Management',
+      'Retail',
+      'Industrial Supply',
+      'Municipal & Government',
+      'Data Centers',
+      'Landscaping',
+      'Roofing',
+      'Fabrication & Welding',
+    ] as const,
+    searchButton: 'Search Businesses',
+    searchingButton: 'Searching Businesses...',
     suggestedSearchesLabel: 'Suggested Searches',
     suggestedKeywords: [
       'equipment rental',
@@ -117,23 +147,36 @@ export const uiText = {
     priorityFilterLabel: 'Priority Filter',
     priorityOptions: ['All', 'Hot', 'Warm', 'Cold'] as const,
     statusHeading: 'Live Search Status',
-    catalogHeading: 'Google Places Catalog',
+    catalogHeading: 'Business Catalog',
     resultsEyebrow: 'Live Results',
     resultsHeading: 'Search Results',
     testButton: 'Test',
     openSettings: 'Open settings',
+    selectedFiltersLabel: 'Selected Filters',
+    filters: {
+      radius: (miles: number) => `${miles} miles`,
+      industries: (industries: string[]) => industries.join(', '),
+      keyword: (keyword: string) => `Keyword: ${keyword}`,
+      market: (market: string) => `Market: ${market}`,
+    },
+    location: {
+      locating: 'Finding your current location...',
+      ready: 'Using your current location as the default search center.',
+      denied: 'Enable location access or enter a market manually.',
+      unsupported: 'Location is unavailable in this browser. Enter a market manually.',
+    },
     statusMessages: {
-      liveResults: (count: number, query: string) =>
-        `Live Google Places returned ${count} result${count === 1 ? '' : 's'} for “${query}”.`,
-      noLiveResults: (query: string) => `Google Places returned no live results for “${query}”.`,
+      liveResults: (count: number, summary: string) =>
+        `Live Search returned ${count} business result${count === 1 ? '' : 's'} for ${summary}.`,
+      noLiveResults: (summary: string) => `No business results found for ${summary}.`,
     },
     summary: {
-      results: (count: number) => `${count} live Google Places result${count === 1 ? '' : 's'}`,
-      error: 'Google Places error',
+      results: (count: number) => `${count} live result${count === 1 ? '' : 's'}`,
+      error: 'Search error',
       resultsReturned: (count: number) => `${count} result${count === 1 ? '' : 's'} returned.`,
     },
     card: {
-      badge: 'Live Google Places',
+      badge: 'Live Search',
       searchResult: 'Search Result',
       save: 'Save Prospect',
       saved: 'Saved Prospect',
@@ -141,7 +184,7 @@ export const uiText = {
       addToRoute: 'Add to Route',
       inRoute: 'In Route',
       removeRoute: 'Remove from Route',
-      openInMaps: 'Open in Google Maps',
+      openInMaps: 'Open in Maps',
       navigateDrive: 'Navigate Drive',
       navigateWalk: 'Navigate Walk',
     },
@@ -174,7 +217,7 @@ export const uiText = {
     emptyAction: 'Browse Prospects',
   },
   routes: {
-    suggestedKeywordCta: 'Find real prospects',
+    suggestedKeywordCta: 'Find prospects',
     routeSnapshotEyebrow: 'Today’s Route',
     routeSnapshotHeading: 'Route Snapshot',
     openRoute: 'Open Route',
@@ -267,23 +310,88 @@ export const uiText = {
     appearanceDescription: 'Switch between dark and light workspace themes.',
     darkMode: 'Dark mode',
     lightMode: 'Light mode',
-    googlePlacesEyebrow: 'Google Places',
-    googlePlacesHeading: 'Connection Test',
+    googlePlacesEyebrow: 'Live Search',
+    googlePlacesHeading: 'Search Connection',
     apiKeyDetected: 'API key detected',
     apiKeyMissing: 'API key missing',
     googlePlacesDescription:
-      'Run a live test search for “equipment rental Austin TX” to confirm results are loading.',
-    testConnectionButton: 'Test Google Places Connection',
+      'Run a sample market search for “equipment rental Austin TX” to confirm live business results are loading.',
+    testConnectionButton: 'Test Live Search',
     resultsReturned: (count: number) => `Results returned: ${count}`,
     errorDetails: (details: string) => `Error details: ${details}`,
+    notifications: {
+      eyebrow: 'Notifications',
+      heading: 'Reminder Notifications',
+      description:
+        'Enable local browser reminders for Follow-Ups, today’s Route, and overdue Prospects. These alerts run on this device with no backend required.',
+      localOnlyNote:
+        'Notifications are local only. Keep RepRoute open in the browser or installed as a PWA for reminders to trigger without a server.',
+      permissionPromptTitle: 'Allow Browser Notifications',
+      permissionPromptDescription:
+        'RepRoute needs notification permission before it can send local reminder alerts on mobile or desktop.',
+      requestPermission: 'Enable Notifications',
+      permissionStatusLabel: 'Permission Status',
+      permissionStatuses: {
+        granted: 'Allowed',
+        denied: 'Blocked',
+        default: 'Ask First',
+        unsupported: 'Unsupported',
+      },
+      toggles: {
+        enable: 'Enable Notifications',
+        enableDescription: 'Allow RepRoute to send local reminder notifications on this device.',
+        followUps: 'Follow-Up Alerts',
+        followUpsDescription: 'Send a reminder when Prospects are due for a Follow-Up today.',
+        route: 'Daily Route Reminder',
+        routeDescription: 'Send a reminder for today’s Route so the day starts with the next stop in view.',
+        overdue: 'Overdue Prospect Alerts',
+        overdueDescription: 'Send a reminder when Follow-Ups have slipped past their scheduled date.',
+      },
+      timeLabel: 'Reminder Time',
+      routeTimeLabel: 'Daily Route Reminder Time',
+      followUpTimeLabel: 'Follow-Up Reminder Time',
+      overdueTimeLabel: 'Overdue Prospect Alert Time',
+      states: {
+        on: 'On',
+        off: 'Off',
+      },
+      messages: {
+        permissionGranted: 'Browser notifications are enabled for this device.',
+        permissionDenied:
+          'Notification permission is blocked. Update your browser settings to re-enable alerts.',
+        permissionUnsupported:
+          'This browser does not support notifications, so local reminder alerts are unavailable.',
+        notificationsDisabled: 'Local reminder notifications are turned off.',
+        reminderDelivered: 'Reminder notifications are active and will fire at the times you selected.',
+      },
+      reminders: {
+        followUpTitle: (count: number) =>
+          `${count} Follow-Up${count === 1 ? '' : 's'} Due Today`,
+        followUpBody: (names: string[]) =>
+          names.length > 0
+            ? `${names.join(', ')} ${names.length === 1 ? 'needs' : 'need'} attention today.`
+            : 'You have Follow-Ups due today in RepRoute.',
+        routeTitle: (count: number) => `Today’s Route Has ${count} Stop${count === 1 ? '' : 's'}`,
+        routeBody: (nextStop: string | null) =>
+          nextStop
+            ? `Next stop: ${nextStop}. Open RepRoute to review the Route.`
+            : 'Open RepRoute to review your Route for today.',
+        overdueTitle: (count: number) =>
+          `${count} Overdue Prospect${count === 1 ? '' : 's'} Need Attention`,
+        overdueBody: (names: string[]) =>
+          names.length > 0
+            ? `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} overdue for Follow-Up.`
+            : 'You have overdue Prospects waiting for Follow-Up.',
+      },
+    },
     storageEyebrow: 'Storage Status',
     storageHeading: 'Local-First Data',
     storageLocalTitle: 'Saved locally',
     storageLocalDescription:
-      'Real Prospects, Saved Prospects, Route stops, notes, priorities, and dates stay on this device.',
+      'Prospects, Saved Prospects, Route stops, notes, priorities, and dates stay on this device.',
     storageLiveTitle: 'Live search only',
     storageLiveDescription:
-      'RepRoute relies on Google Places for real business discovery and does not use fallback business data.',
+      'RepRoute relies on Live Search for business discovery and does not use fallback business data.',
     backupEyebrow: 'Data Backup',
     backupHeading: 'Data Backup',
     backupDescription:
@@ -296,7 +404,7 @@ export const uiText = {
     replaceLocalData: 'Replace Local Data',
     cancel: 'Cancel',
     backupSummaryLabels: {
-      realProspects: 'Real Prospects',
+      realProspects: 'Prospects',
       savedProspects: 'Saved Prospects',
       routeStops: 'Route Stops',
       notes: 'Notes',
@@ -345,19 +453,21 @@ export const uiText = {
   },
   errors: {
     apiErrorLabel: 'API Error',
-    searchMissingFields: 'Enter both a keyword and city before running a live Google Places search.',
-    searchMissingFieldsDetail: 'Google Places needs both fields to return real business results.',
-    searchFailedDetail: 'Google Places search failed. Review the API response and try again.',
-    connectGooglePlaces: 'Connect Google Places to search real businesses.',
-    connectGooglePlacesDetail: 'Add a valid `VITE_GOOGLE_MAPS_API_KEY` to load live Places results.',
-    mapApiKeyMissing: 'Google Maps API key missing',
+    searchMissingFields: 'Select at least one industry or enter a keyword before running a Live Search.',
+    searchMissingFieldsDetail:
+      'Live Search needs a keyword, an industry, or both to return targeted business results.',
+    searchFailedDetail: 'Live Search failed. Review the response and try again.',
+    connectGooglePlaces: 'Enable Live Search to find businesses.',
+    connectGooglePlacesDetail: 'Add a valid search API key to load live business results.',
+    locationRequired: 'Enable location access or enter a market manually.',
+    mapApiKeyMissing: 'Map key missing',
     mapFailedToLoad: 'Map failed to load',
     loadingMap: 'Loading map...',
     noRatingYet: 'No rating yet',
     websiteUnavailable: 'Website unavailable',
-    googlePlacesConnectionRunning: 'Testing Google Places with “equipment rental Austin TX”...',
-    googlePlacesConnectionSucceeded: 'Google Places connection succeeded.',
-    googlePlacesConnectionFailed: 'Google Places connection failed.',
+    googlePlacesConnectionRunning: 'Testing Live Search with “equipment rental Austin TX”...',
+    googlePlacesConnectionSucceeded: 'Live Search connection succeeded.',
+    googlePlacesConnectionFailed: 'Live Search connection failed.',
     noCrmDataForScope: 'No Prospects are available for that CRM Export scope yet.',
     crmExportFailed: 'RepRoute could not generate that CRM Export CSV.',
     backupExportFailed: 'RepRoute could not export a backup file.',
@@ -368,28 +478,28 @@ export const uiText = {
       `Imported ${fileName}. Existing local RepRoute data was replaced.`,
   },
   emptyStates: {
-    noRealProspectsTitle: 'No Real Prospects Loaded Yet',
-    noRealProspectsCopy: 'Connect Google Places to search real businesses.',
+    noRealProspectsTitle: 'No Prospects Loaded Yet',
+    noRealProspectsCopy: 'Enable Live Search to find businesses.',
     noRouteTitle: 'Your Route is empty',
     noRouteCopy: 'Add Prospects from Search or Saved Prospects to build today’s Route.',
     noNearbyTitle: 'No Nearby Prospects Yet',
     noNearbyCopy:
-      'Search more real businesses to surface nearby suggestions within 5 miles of your Route.',
+      'Search more businesses to surface nearby suggestions within 5 miles of your Route.',
     noSavedTitle: 'No Saved Prospects Yet',
     noSavedCopy: 'Save a Prospect to keep it ready for a future Route or Follow-Up.',
     noHotProspectsTitle: 'No Hot Prospects Yet',
     noHotProspectsCopy:
-      'Use Search to qualify real businesses and mark the best opportunities as Hot.',
+      'Use Search to qualify businesses and mark the best opportunities as Hot.',
     noFollowUpsTitle: 'No Follow-Ups Scheduled',
     noFollowUpsCopy:
       'Use the Manage panel on any Prospect to schedule a Follow-Up and it will appear here.',
     noCrmDataTitle: 'No CRM Export Data For This Scope',
     noCrmDataCopy:
-      'Search and save real Prospects, add them to a Route, or schedule Follow-Ups before exporting.',
-    noSearchResultsTitle: 'No Real Businesses Found',
-    noSearchResultsCopy: 'No real businesses found. Try a different keyword or location.',
-    googlePlacesSearchFailedTitle: 'Google Places Search Failed',
-    connectGooglePlacesTitle: 'Connect Google Places',
+      'Search and save Prospects, add them to a Route, or schedule Follow-Ups before exporting.',
+    noSearchResultsTitle: 'No Businesses Found',
+    noSearchResultsCopy: 'No businesses found. Try a different keyword or location.',
+    googlePlacesSearchFailedTitle: 'Live Search Failed',
+    connectGooglePlacesTitle: 'Enable Live Search',
     noRouteLoadedTitle: 'No Route Loaded Yet',
     noRouteLoadedCopy:
       'Add Prospects from Search or Saved Prospects to build today’s Route.',

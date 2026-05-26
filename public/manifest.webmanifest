@@ -1,0 +1,22 @@
+{
+  "name": "RepRoute",
+  "short_name": "RepRoute",
+  "description": "Field sales route planning with live prospect search, route reminders, and follow-up tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09111d",
+  "theme_color": "#0b1423",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
