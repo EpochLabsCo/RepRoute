@@ -86,12 +86,16 @@ type OutcomeTag =
   | 'Follow-Up Needed'
   | 'Quote Opportunity'
   | 'Not Interested'
+  | 'Bad Address'
+  | 'Existing Customer'
 
 type BaseProspect = {
   id: string
   googlePlaceId: string
   businessName: string
   contactName: string
+  contactTitle: string
+  contactEmail: string
   category: string
   distance: number
   priority: Priority
@@ -111,6 +115,10 @@ type BaseProspect = {
 
 type ProspectRecord = {
   contactName?: string
+  contactTitle?: string
+  contactEmail?: string
+  contactPhone?: string
+  contactWebsite?: string
   lastContactDate?: string
   notes?: string
   priority?: Priority
@@ -118,6 +126,8 @@ type ProspectRecord = {
   visitNote?: string
   visitOutcome?: OutcomeTag | ''
   routeCompleted?: boolean
+  visitCompletedAt?: string
+  editedByRepRouteUser?: boolean
 }
 
 type Prospect = BaseProspect & {
@@ -126,6 +136,8 @@ type Prospect = BaseProspect & {
   routeCompleted: boolean
   visitNote: string
   visitOutcome: OutcomeTag | ''
+  visitCompletedAt: string
+  editedByRepRouteUser: boolean
 }
 
 type BackupPayload = {
@@ -170,15 +182,18 @@ type ConnectionTestState = {
 
 type SearchLocationState = 'idle' | 'requesting' | 'granted' | 'denied' | 'unsupported'
 type SearchRadiusMiles = (typeof uiText.search.radiusOptions)[number]
+type SearchRadiusChoice = 'current-location' | SearchRadiusMiles | 'custom'
 type SearchIndustry = (typeof uiText.search.industryOptions)[number]
+type ArrivalDetectionRadiusFeet = 150 | 300 | 500 | 1320
+type RouteTrackingState = 'idle' | 'tracking' | 'denied' | 'unsupported' | 'error'
 
 type SettingsSection = 'top' | 'notifications' | 'crm' | 'backup'
-
-const SUGGESTED_SEARCH_KEYWORDS = uiText.search.suggestedKeywords
 
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
 const SEARCH_RADIUS_OPTIONS: SearchRadiusMiles[] = [...uiText.search.radiusOptions]
 const SEARCH_INDUSTRY_OPTIONS: SearchIndustry[] = [...uiText.search.industryOptions]
+const SUGGESTED_SEARCH_INDUSTRIES = SEARCH_INDUSTRY_OPTIONS.slice(0, 6)
+const ARRIVAL_RADIUS_OPTIONS: ArrivalDetectionRadiusFeet[] = [150, 300, 500, 1320]
 
 const STORAGE_KEYS = {
   liveProspects: 'reproute:live-prospects',
@@ -187,6 +202,7 @@ const STORAGE_KEYS = {
   routeList: 'reproute:route-list',
   notificationPreferences: 'reproute:notification-preferences',
   notificationReminderLog: 'reproute:notification-reminder-log',
+  arrivalDetectionRadiusFeet: 'reproute:arrival-detection-radius-feet',
   theme: 'reproute:theme',
 } as const
 
@@ -274,6 +290,10 @@ function isIsoDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
+function isIsoDateTime(value: unknown): value is string {
+  return typeof value === 'string' && (value === '' || !Number.isNaN(Date.parse(value)))
+}
+
 function uniqueStrings(values: string[]) {
   return [...new Set(values)]
 }
@@ -310,7 +330,7 @@ function extractCity(address: string, fallbackLocation: string) {
   return fallbackLocation || 'Unknown area'
 }
 
-function calculateDistanceMiles(
+function calculateDistanceMilesPrecise(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
 ) {
@@ -325,7 +345,50 @@ function calculateDistanceMiles(
     Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(startLat) * Math.cos(endLat)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 
-  return Number((earthRadiusMiles * c).toFixed(1))
+  return earthRadiusMiles * c
+}
+
+function calculateDistanceMiles(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+) {
+  return Number(calculateDistanceMilesPrecise(from, to).toFixed(1))
+}
+
+function feetToMiles(feet: number) {
+  return feet / 5280
+}
+
+function milesToFeet(miles: number) {
+  return Math.round(miles * 5280)
+}
+
+function formatDistanceFeet(feet: number) {
+  if (feet >= 1320) {
+    const miles = feetToMiles(feet)
+    return `${miles < 1 ? miles.toFixed(2) : miles.toFixed(1)} mi`
+  }
+
+  return `${Math.round(feet)} ft`
+}
+
+function formatDateTime(value: string) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
 }
 
 function priorityFromRating(rating: number | null): Priority {
@@ -378,6 +441,8 @@ function toLiveProspect(
     googlePlaceId: place.id?.trim() ?? '',
     businessName,
     contactName: '',
+    contactTitle: '',
+    contactEmail: '',
     category,
     distance: calculateDistanceMiles(searchCenter, { lat, lng }),
     priority: priorityFromRating(rating),
@@ -565,6 +630,8 @@ function sanitizeBaseProspect(value: unknown): BaseProspect | null {
           : '',
     businessName: value.businessName,
     contactName: typeof value.contactName === 'string' ? value.contactName : '',
+    contactTitle: typeof value.contactTitle === 'string' ? value.contactTitle : '',
+    contactEmail: typeof value.contactEmail === 'string' ? value.contactEmail : '',
     category: value.category,
     distance: value.distance,
     priority: value.priority,
@@ -630,6 +697,22 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
         nextRecord.contactName = record.contactName
       }
 
+      if (typeof record.contactTitle === 'string') {
+        nextRecord.contactTitle = record.contactTitle
+      }
+
+      if (typeof record.contactEmail === 'string') {
+        nextRecord.contactEmail = record.contactEmail
+      }
+
+      if (typeof record.contactPhone === 'string') {
+        nextRecord.contactPhone = record.contactPhone
+      }
+
+      if (typeof record.contactWebsite === 'string') {
+        nextRecord.contactWebsite = record.contactWebsite
+      }
+
       if (record.lastContactDate === '' || isIsoDate(record.lastContactDate)) {
         nextRecord.lastContactDate = record.lastContactDate
       }
@@ -656,6 +739,14 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
 
       if (typeof record.routeCompleted === 'boolean') {
         nextRecord.routeCompleted = record.routeCompleted
+      }
+
+      if (isIsoDateTime(record.visitCompletedAt)) {
+        nextRecord.visitCompletedAt = record.visitCompletedAt
+      }
+
+      if (typeof record.editedByRepRouteUser === 'boolean') {
+        nextRecord.editedByRepRouteUser = record.editedByRepRouteUser
       }
 
       if (Object.keys(nextRecord).length > 0) {
@@ -728,34 +819,35 @@ function milesToMeters(miles: number) {
   return Math.round(miles * 1609.34)
 }
 
-function buildIndustrySearchTerms(keyword: string, industries: string[]) {
-  const trimmedKeyword = keyword.trim()
-
-  if (industries.length === 0) {
-    return trimmedKeyword ? [trimmedKeyword] : []
+function getEffectiveRadiusMiles(radiusChoice: SearchRadiusChoice, customRadiusMiles: string) {
+  if (radiusChoice === 'custom') {
+    const parsedRadius = Number(customRadiusMiles)
+    return Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : null
   }
 
-  return industries.map((industry) =>
-    trimmedKeyword ? `${trimmedKeyword} ${industry}` : industry,
-  )
+  if (radiusChoice === 'current-location') {
+    return 10
+  }
+
+  return radiusChoice
 }
 
 function summarizeSearchFilters({
-  keyword,
   selectedIndustries,
-  radiusMiles,
+  radiusLabel,
   market,
+  usesCurrentLocation,
 }: {
-  keyword: string
   selectedIndustries: string[]
-  radiusMiles: number
+  radiusLabel: string
   market: string
+  usesCurrentLocation: boolean
 }) {
   const parts = [
-    uiText.search.filters.radius(radiusMiles),
+    radiusLabel,
     selectedIndustries.length > 0 ? uiText.search.filters.industries(selectedIndustries) : '',
-    keyword.trim() ? uiText.search.filters.keyword(keyword.trim()) : '',
     market.trim() ? uiText.search.filters.market(market.trim()) : '',
+    !market.trim() || usesCurrentLocation ? uiText.search.filters.currentLocation : '',
   ].filter(Boolean)
 
   return parts.join(' · ')
@@ -834,9 +926,319 @@ function DataSourceBadge({ source }: { source: SearchDataSource }) {
   return <span className={`source-badge source-badge--${source}`}>{getDataSourceLabel(source)}</span>
 }
 
+function CurrentStopCard({
+  prospect,
+  isOnLocation,
+  distanceFeet,
+  trackingMessage,
+  travelMode,
+  onNavigate,
+  onToggleCompleted,
+  onUpdateContactDetails,
+  onUpdateNotes,
+  onUpdateVisitNote,
+  onUpdateFollowUp,
+  onUpdatePriority,
+  onUpdateOutcome,
+}: {
+  prospect: Prospect
+  isOnLocation: boolean
+  distanceFeet: number | null
+  trackingMessage: string
+  travelMode: TravelMode
+  onNavigate: (prospect: Prospect) => void
+  onToggleCompleted: (prospectId: string) => void
+  onUpdateContactDetails: (
+    prospectId: string,
+    fields: Partial<
+      Pick<ProspectRecord, 'contactName' | 'contactTitle' | 'contactEmail' | 'contactPhone' | 'contactWebsite'>
+    >,
+  ) => void
+  onUpdateNotes: (prospectId: string, notes: string) => void
+  onUpdateVisitNote: (prospectId: string, note: string) => void
+  onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
+  onUpdatePriority: (prospectId: string, priority: Priority) => void
+  onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
+}) {
+  const [openPanels, setOpenPanels] = useState({
+    contact: true,
+    visit: true,
+    followUp: true,
+    priority: false,
+    outcome: true,
+  })
+  const websiteHref = normalizeWebsiteUrl(prospect.website)
+  const callHref = createCallHref(prospect.phone)
+
+  function togglePanel(panel: keyof typeof openPanels) {
+    setOpenPanels((current) => ({
+      ...current,
+      [panel]: !current[panel],
+    }))
+  }
+
+  return (
+    <section
+      className={`panel section-panel current-stop-card ${
+        isOnLocation ? 'current-stop-card--on-location' : ''
+      }`}
+    >
+      <div className="section-heading">
+        <div>
+          <div className="eyebrow eyebrow--tight">{uiText.routes.currentStop.eyebrow}</div>
+          <h2>{uiText.routes.currentStop.heading}</h2>
+        </div>
+        <span className="meta-pill meta-pill--accent">
+          {isOnLocation ? uiText.routes.currentStop.onLocation : uiText.routes.currentStop.enRoute}
+        </span>
+      </div>
+
+      <div
+        className={`status-banner ${
+          isOnLocation ? 'status-banner--success' : 'status-banner--info'
+        }`}
+      >
+        <p>{trackingMessage}</p>
+        {distanceFeet !== null ? (
+          <p>{uiText.routes.currentStop.distanceAway(formatDistanceFeet(distanceFeet))}</p>
+        ) : null}
+      </div>
+
+      <div className="current-stop-card__summary">
+        <div>
+          <h3>{prospect.businessName}</h3>
+          <p>
+            {prospect.category} · {prospect.address}
+          </p>
+        </div>
+        <div className="route-stop-card__meta">
+          <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
+            {prospect.priority}
+          </span>
+          {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
+          {prospect.visitCompletedAt ? (
+            <span className="meta-pill">{formatDateTime(prospect.visitCompletedAt)}</span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="route-action-row">
+        {callHref ? (
+          <a className="route-action-button" href={callHref}>
+            <Phone size={16} />
+            {uiText.routes.actions.callBusiness}
+          </a>
+        ) : null}
+        {websiteHref ? (
+          <a className="route-action-button" href={websiteHref} target="_blank" rel="noreferrer">
+            <ExternalLink size={16} />
+            {uiText.routes.actions.openWebsite}
+          </a>
+        ) : null}
+        <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
+          <Navigation size={16} />
+          {travelMode === 'walking'
+            ? uiText.routes.actions.navigateWalk
+            : uiText.routes.actions.navigateDrive}
+        </button>
+      </div>
+
+      <div className="current-stop-card__quick-actions">
+        <button type="button" className="button" onClick={() => onToggleCompleted(prospect.id)}>
+          {prospect.routeCompleted
+            ? uiText.routes.currentStop.quickActions.markIncomplete
+            : uiText.routes.currentStop.quickActions.markCompleted}
+        </button>
+        <button
+          type="button"
+          className={`button button--ghost ${openPanels.contact ? 'button--secondary' : ''}`}
+          onClick={() => togglePanel('contact')}
+        >
+          {uiText.routes.currentStop.quickActions.editContactInfo}
+        </button>
+        <button
+          type="button"
+          className={`button button--ghost ${openPanels.visit ? 'button--secondary' : ''}`}
+          onClick={() => togglePanel('visit')}
+        >
+          {uiText.routes.currentStop.quickActions.addVisitNotes}
+        </button>
+        <button
+          type="button"
+          className={`button button--ghost ${openPanels.followUp ? 'button--secondary' : ''}`}
+          onClick={() => togglePanel('followUp')}
+        >
+          {uiText.routes.currentStop.quickActions.setFollowUp}
+        </button>
+        <button
+          type="button"
+          className={`button button--ghost ${openPanels.priority ? 'button--secondary' : ''}`}
+          onClick={() => togglePanel('priority')}
+        >
+          {uiText.routes.currentStop.quickActions.changePriority}
+        </button>
+        <button
+          type="button"
+          className={`button button--ghost ${openPanels.outcome ? 'button--secondary' : ''}`}
+          onClick={() => togglePanel('outcome')}
+        >
+          {uiText.routes.currentStop.quickActions.addOutcomeTag}
+        </button>
+      </div>
+
+      {openPanels.contact ? (
+        <div className="current-stop-card__panel">
+          <div className="field-group">
+            <span className="field-label">{uiText.routes.currentStop.contactFields.contactName}</span>
+            <input
+              className="text-input"
+              type="text"
+              value={prospect.contactName}
+              onChange={(event) =>
+                onUpdateContactDetails(prospect.id, { contactName: event.target.value })
+              }
+            />
+          </div>
+          <div className="field-group">
+            <span className="field-label">{uiText.routes.currentStop.contactFields.contactTitle}</span>
+            <input
+              className="text-input"
+              type="text"
+              value={prospect.contactTitle}
+              onChange={(event) =>
+                onUpdateContactDetails(prospect.id, { contactTitle: event.target.value })
+              }
+            />
+          </div>
+          <div className="field-group">
+            <span className="field-label">{uiText.routes.currentStop.contactFields.phone}</span>
+            <input
+              className="text-input"
+              type="tel"
+              value={prospect.phone}
+              onChange={(event) =>
+                onUpdateContactDetails(prospect.id, { contactPhone: event.target.value })
+              }
+            />
+          </div>
+          <div className="field-group">
+            <span className="field-label">{uiText.routes.currentStop.contactFields.email}</span>
+            <input
+              className="text-input"
+              type="email"
+              value={prospect.contactEmail}
+              onChange={(event) =>
+                onUpdateContactDetails(prospect.id, { contactEmail: event.target.value })
+              }
+            />
+          </div>
+          <div className="field-group">
+            <span className="field-label">{uiText.routes.currentStop.contactFields.website}</span>
+            <input
+              className="text-input"
+              type="url"
+              value={prospect.website}
+              onChange={(event) =>
+                onUpdateContactDetails(prospect.id, { contactWebsite: event.target.value })
+              }
+            />
+          </div>
+          <label className="field-group">
+            <span className="field-label">{uiText.routes.currentStop.contactFields.notes}</span>
+            <textarea
+              className="text-area text-area--compact"
+              rows={3}
+              value={prospect.notes}
+              onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {openPanels.visit ? (
+        <label className="field-group current-stop-card__panel">
+          <span className="field-label">{uiText.routes.quickNoteLabel}</span>
+          <textarea
+            className="text-area text-area--compact"
+            rows={4}
+            value={prospect.visitNote}
+            onChange={(event) => onUpdateVisitNote(prospect.id, event.target.value)}
+            placeholder={uiText.routes.quickNotePlaceholder}
+          />
+        </label>
+      ) : null}
+
+      {openPanels.followUp ? (
+        <div className="field-group current-stop-card__panel">
+          <div className="field-header">
+            <span className="field-label">{uiText.search.prospectCard.followUpDate}</span>
+            {prospect.followUpDate ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => onUpdateFollowUp(prospect.id, '')}
+              >
+                {uiText.search.prospectCard.clear}
+              </button>
+            ) : null}
+          </div>
+          <input
+            className="text-input"
+            type="date"
+            value={prospect.followUpDate}
+            onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value)}
+          />
+        </div>
+      ) : null}
+
+      {openPanels.priority ? (
+        <div className="field-group current-stop-card__panel">
+          <span className="field-label">{uiText.search.prospectCard.priority}</span>
+          <div className="segment-row">
+            {(['Hot', 'Warm', 'Cold'] as Priority[]).map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                onClick={() => onUpdatePriority(prospect.id, option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {openPanels.outcome ? (
+        <div className="field-group current-stop-card__panel">
+          <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
+          <div className="route-outcome-grid">
+            {ROUTE_OUTCOME_OPTIONS.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`route-outcome-chip ${
+                  prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
+                }`}
+                onClick={() =>
+                  onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
+                }
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 function RouteWorkflowStopCard({
   index,
   prospect,
+  isCurrentStop,
+  isOnLocation,
   travelMode,
   onNavigate,
   onToggleCompleted,
@@ -846,6 +1248,8 @@ function RouteWorkflowStopCard({
 }: {
   index: number
   prospect: Prospect
+  isCurrentStop: boolean
+  isOnLocation: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onToggleCompleted: (prospectId: string) => void
@@ -869,6 +1273,8 @@ function RouteWorkflowStopCard({
       ref={setNodeRef}
       className={`route-stop-card ${prospect.routeCompleted ? 'route-stop-card--completed' : ''} ${
         isDragging ? 'route-stop-card--dragging' : ''
+      } ${isCurrentStop ? 'route-stop-card--current' : ''} ${
+        isOnLocation ? 'route-stop-card--on-location' : ''
       }`}
       style={{
         transform: CSS.Transform.toString(transform),
@@ -911,6 +1317,12 @@ function RouteWorkflowStopCard({
       </div>
 
       <div className="route-stop-card__meta">
+        {isOnLocation ? (
+          <span className="meta-pill meta-pill--accent">{uiText.routes.currentStop.onLocation}</span>
+        ) : null}
+        {!isOnLocation && isCurrentStop ? (
+          <span className="meta-pill">{uiText.routes.currentStop.label}</span>
+        ) : null}
         <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
           {prospect.priority}
         </span>
@@ -1243,9 +1655,11 @@ function App() {
       STORAGE_KEYS.notificationReminderLog,
       DEFAULT_NOTIFICATION_LOG,
     )
-  const [searchKeyword, setSearchKeyword] = useState('')
+  const [arrivalDetectionRadiusFeet, setArrivalDetectionRadiusFeet] =
+    usePersistentState<ArrivalDetectionRadiusFeet>(STORAGE_KEYS.arrivalDetectionRadiusFeet, 300)
   const [manualMarket, setManualMarket] = useState('')
-  const [searchRadiusMiles, setSearchRadiusMiles] = useState<SearchRadiusMiles>(10)
+  const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>('current-location')
+  const [customRadiusMiles, setCustomRadiusMiles] = useState('35')
   const [selectedIndustries, setSelectedIndustries] = useState<SearchIndustry[]>([])
   const [searchLocationState, setSearchLocationState] = useState<SearchLocationState>(() => {
     if (typeof navigator === 'undefined') {
@@ -1255,6 +1669,16 @@ function App() {
     return navigator.geolocation ? 'requesting' : 'unsupported'
   })
   const [searchCenter, setSearchCenter] = useState<{ lat: number; lng: number } | null>(null)
+  const [routeTrackerState, setRouteTrackerState] = useState<RouteTrackingState>(() => {
+    if (typeof navigator === 'undefined') {
+      return 'idle'
+    }
+
+    return navigator.geolocation ? 'idle' : 'unsupported'
+  })
+  const [routeTrackerLocation, setRouteTrackerLocation] = useState<{ lat: number; lng: number } | null>(
+    null,
+  )
   const [priorityFilter, setPriorityFilter] = useState<'All' | Priority>('All')
   const [travelMode, setTravelMode] = useState<TravelMode>('driving')
   const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
@@ -1323,6 +1747,39 @@ function App() {
       },
     )
   }, [])
+
+  useEffect(() => {
+    if (activeView !== 'map' || routeIds.length === 0) {
+      return
+    }
+
+    if (!navigator.geolocation) {
+      return
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setRouteTrackerLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
+        setRouteTrackerState('tracking')
+      },
+      (error) => {
+        setRouteTrackerState(error.code === error.PERMISSION_DENIED ? 'denied' : 'error')
+        setRouteTrackerLocation(null)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 30000,
+      },
+    )
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId)
+    }
+  }, [activeView, routeIds.length])
 
   useEffect(() => {
     const syncPermission = () => {
@@ -1427,16 +1884,22 @@ function App() {
         return {
           ...prospect,
           contactName: record?.contactName ?? prospect.contactName,
+          contactTitle: record?.contactTitle ?? prospect.contactTitle,
+          contactEmail: record?.contactEmail ?? prospect.contactEmail,
           notes: record?.notes ?? prospect.notes,
           priority: record?.priority ?? prospect.priority,
           lastContact: record?.lastContactDate
             ? formatFollowUpDate(record.lastContactDate)
             : prospect.lastContact,
+          phone: record?.contactPhone ?? prospect.phone,
+          website: record?.contactWebsite ?? prospect.website,
           lastContactDate: record?.lastContactDate ?? '',
           followUpDate: record?.followUpDate ?? '',
           routeCompleted: record?.routeCompleted ?? false,
           visitNote: record?.visitNote ?? '',
           visitOutcome: record?.visitOutcome ?? '',
+          visitCompletedAt: record?.visitCompletedAt ?? '',
+          editedByRepRouteUser: record?.editedByRepRouteUser ?? false,
         }
       }),
     [liveProspects, prospectRecords],
@@ -1562,6 +2025,9 @@ function App() {
         businessName: prospect.businessName,
         category: prospect.category,
         contactName: prospect.contactName,
+        contactEmail: prospect.contactEmail,
+        contactTitle: prospect.contactTitle,
+        editedByRepRouteUser: prospect.editedByRepRouteUser,
         followUpDate: prospect.followUpDate,
         googlePlaceId: prospect.googlePlaceId,
         lastContactedDate:
@@ -1571,6 +2037,9 @@ function App() {
         phone: prospect.phone,
         priority: prospect.priority,
         routeOutcomeTag: prospect.visitOutcome,
+        visitCompleted: prospect.routeCompleted,
+        visitCompletedDateTime: prospect.visitCompletedAt,
+        visitNotes: prospect.visitNote,
         website: prospect.website,
       }),
     )
@@ -1609,6 +2078,57 @@ function App() {
     () => routeProspects.find((prospect) => !prospect.routeCompleted) ?? routeProspects[0] ?? null,
     [routeProspects],
   )
+  const arrivalDetectionRadiusMiles = feetToMiles(arrivalDetectionRadiusFeet)
+  const routeStopDistances = useMemo(() => {
+    if (!routeTrackerLocation) {
+      return []
+    }
+
+    const arrivalCandidates =
+      routeProspects.filter((prospect) => !prospect.routeCompleted).length > 0
+        ? routeProspects.filter((prospect) => !prospect.routeCompleted)
+        : routeProspects
+
+    return arrivalCandidates
+      .map((prospect) => {
+        const distanceMiles = calculateDistanceMilesPrecise(routeTrackerLocation, prospect.location)
+        return {
+          prospect,
+          distanceMiles,
+          distanceFeet: milesToFeet(distanceMiles),
+        }
+      })
+      .sort((left, right) => left.distanceMiles - right.distanceMiles)
+  }, [routeProspects, routeTrackerLocation])
+  const onLocationRouteStop = useMemo(
+    () =>
+      routeStopDistances.find((entry) => entry.distanceMiles <= arrivalDetectionRadiusMiles) ?? null,
+    [arrivalDetectionRadiusMiles, routeStopDistances],
+  )
+  const closestTrackedRouteStop = routeStopDistances[0] ?? null
+  const currentStopProspect =
+    onLocationRouteStop?.prospect ?? closestTrackedRouteStop?.prospect ?? currentRouteStop
+  const currentStopDistanceFeet = onLocationRouteStop?.distanceFeet ?? closestTrackedRouteStop?.distanceFeet ?? null
+  const routeTrackerMessage =
+    routeTrackerState === 'tracking'
+      ? onLocationRouteStop
+        ? uiText.routes.currentStop.onLocationMessage(
+            onLocationRouteStop.prospect.businessName,
+            formatDistanceFeet(onLocationRouteStop.distanceFeet),
+          )
+        : routeStopDistances[0]
+          ? uiText.routes.currentStop.nearestMessage(
+              routeStopDistances[0].prospect.businessName,
+              formatDistanceFeet(routeStopDistances[0].distanceFeet),
+            )
+          : uiText.routes.currentStop.tracking
+      : routeTrackerState === 'denied'
+        ? uiText.routes.currentStop.locationDenied
+        : routeTrackerState === 'unsupported'
+          ? uiText.routes.currentStop.locationUnsupported
+          : routeTrackerState === 'error'
+            ? uiText.routes.currentStop.locationError
+            : uiText.routes.currentStop.waiting
   const nearbyRouteProspects = useMemo(() => {
     if (routeProspects.length === 0) {
       return []
@@ -1643,8 +2163,16 @@ function App() {
   const dueNowCount = scheduledFollowUps.filter(
     (prospect) => getFollowUpStatus(prospect.followUpDate) === uiText.followUps.statuses.dueNow,
   ).length
+  const manualMarketLabel = manualMarket.trim()
+  const effectiveRadiusMiles = getEffectiveRadiusMiles(searchRadiusChoice, customRadiusMiles)
+  const usesCurrentLocation = searchRadiusChoice === 'current-location' || !manualMarketLabel
+  const effectiveRadiusLabel = effectiveRadiusMiles
+    ? uiText.search.filters.radius(effectiveRadiusMiles)
+    : uiText.search.radiusOptionLabels.custom
   const searchLocationMessage =
-    searchLocationState === 'requesting'
+    manualMarketLabel && !usesCurrentLocation
+      ? uiText.search.location.marketOverride(manualMarketLabel)
+      : searchLocationState === 'requesting'
       ? uiText.search.location.locating
       : searchLocationState === 'granted'
         ? uiText.search.location.ready
@@ -1785,7 +2313,10 @@ function App() {
   ) {
     setProspectRecords((current) => ({
       ...current,
-      [prospectId]: updater(current[prospectId]),
+      [prospectId]: {
+        ...updater(current[prospectId]),
+        editedByRepRouteUser: true,
+      },
     }))
   }
 
@@ -1810,7 +2341,11 @@ function App() {
       ...current,
       routeCompleted: !(current?.routeCompleted ?? false),
       lastContactDate:
-        current?.lastContactDate || new Date().toISOString().slice(0, 10),
+        !(current?.routeCompleted ?? false)
+          ? new Date().toISOString().slice(0, 10)
+          : current?.lastContactDate || '',
+      visitCompletedAt:
+        !(current?.routeCompleted ?? false) ? new Date().toISOString() : '',
     }))
   }
 
@@ -1825,6 +2360,39 @@ function App() {
     updateProspectRecord(prospectId, (current) => ({
       ...current,
       visitOutcome,
+    }))
+  }
+
+  function updateProspectPriority(prospectId: string, priority: Priority) {
+    updateProspectRecord(prospectId, (current) => ({
+      ...current,
+      priority,
+    }))
+  }
+
+  function updateProspectFollowUp(prospectId: string, followUpDate: string) {
+    updateProspectRecord(prospectId, (current) => ({
+      ...current,
+      followUpDate,
+    }))
+  }
+
+  function updateProspectNotes(prospectId: string, notes: string) {
+    updateProspectRecord(prospectId, (current) => ({
+      ...current,
+      notes,
+    }))
+  }
+
+  function updateContactDetails(
+    prospectId: string,
+    fields: Partial<
+      Pick<ProspectRecord, 'contactName' | 'contactTitle' | 'contactEmail' | 'contactPhone' | 'contactWebsite'>
+    >,
+  ) {
+    updateProspectRecord(prospectId, (current) => ({
+      ...current,
+      ...fields,
     }))
   }
 
@@ -1887,20 +2455,52 @@ function App() {
     )
   }
 
+  async function resolveMarketSearchCenter(market: string) {
+    const result = await searchGooglePlaces({
+      apiKey: googleMapsApiKey,
+      query: market,
+      maxResultCount: 1,
+    })
+
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        error: result.error,
+        details: result.details,
+      }
+    }
+
+    const placeWithLocation = result.places.find(
+      (place) =>
+        typeof place.location?.latitude === 'number' && typeof place.location?.longitude === 'number',
+    )
+
+    if (!placeWithLocation?.location) {
+      return {
+        ok: false as const,
+        error: `No searchable location was found for ${market}.`,
+        details: result.places,
+      }
+    }
+
+    return {
+      ok: true as const,
+      center: {
+        lat: placeWithLocation.location.latitude ?? AUSTIN_FALLBACK.lat,
+        lng: placeWithLocation.location.longitude ?? AUSTIN_FALLBACK.lng,
+      },
+    }
+  }
+
   async function runLiveSearch({
-    keyword,
     market,
     industries,
-    radiusMiles,
   }: {
-    keyword: string
     market: string
     industries: SearchIndustry[]
-    radiusMiles: SearchRadiusMiles
   }) {
-    const trimmedKeyword = keyword.trim()
     const trimmedMarket = market.trim()
-    const searchTerms = buildIndustrySearchTerms(trimmedKeyword, industries)
+    const searchTerms = industries
 
     if (searchTerms.length === 0) {
       setLiveSearchIds([])
@@ -1912,153 +2512,175 @@ function App() {
       return
     }
 
-    if (!trimmedMarket && searchLocationState !== 'granted') {
+    if (!effectiveRadiusMiles) {
       setLiveSearchIds([])
       setSearchStatus({
         source: 'api-error',
-        message: uiText.errors.locationRequired,
-        details: uiText.search.location.denied,
+        message: `${uiText.search.customRadiusLabel} is required.`,
+        details: `${uiText.search.customRadiusLabel} must be greater than 0.`,
       })
       return
+    }
+
+    const shouldUseCurrentLocation = searchRadiusChoice === 'current-location' || !trimmedMarket
+    let activeSearchCenter: { lat: number; lng: number } | null = null
+    let fallbackLocationLabel = trimmedMarket || uiText.routes.currentLocation
+
+    if (shouldUseCurrentLocation) {
+      if (searchLocationState !== 'granted' || !searchCenter) {
+        setLiveSearchIds([])
+        setSearchStatus({
+          source: 'api-error',
+          message: uiText.errors.locationRequired,
+          details: uiText.search.location.denied,
+        })
+        return
+      }
+
+      activeSearchCenter = searchCenter
+      fallbackLocationLabel = uiText.routes.currentLocation
+    } else {
+      const marketCenterResult = await resolveMarketSearchCenter(trimmedMarket)
+
+      if (!marketCenterResult.ok) {
+        setLiveSearchIds([])
+        setSearchStatus({
+          source: 'api-error',
+          message: marketCenterResult.error,
+          details:
+            typeof marketCenterResult.details === 'string'
+              ? marketCenterResult.details
+              : undefined,
+        })
+        return
+      }
+
+      activeSearchCenter = marketCenterResult.center
     }
 
     setIsSearchingPlaces(true)
 
-    const filterSummary = summarizeSearchFilters({
-      keyword: trimmedKeyword,
-      selectedIndustries: industries,
-      radiusMiles,
-      market: trimmedMarket,
-    })
-    const fallbackLocationLabel = trimmedMarket || 'Current market'
-    const locationBias =
-      !trimmedMarket && searchCenter
-        ? {
-            latitude: searchCenter.lat,
-            longitude: searchCenter.lng,
-            radiusMeters: milesToMeters(radiusMiles),
-          }
-        : undefined
+    try {
+      const filterSummary = summarizeSearchFilters({
+        selectedIndustries: industries,
+        radiusLabel: uiText.search.filters.radius(effectiveRadiusMiles),
+        market: shouldUseCurrentLocation ? '' : trimmedMarket,
+        usesCurrentLocation: shouldUseCurrentLocation,
+      })
+      const locationBias = {
+        latitude: activeSearchCenter.lat,
+        longitude: activeSearchCenter.lng,
+        radiusMeters: milesToMeters(effectiveRadiusMiles),
+      }
 
-    const results = await Promise.all(
-      searchTerms.map(async (term) => ({
-        term,
-        result: await searchGooglePlaces({
-          apiKey: googleMapsApiKey,
-          query: trimmedMarket ? `${term} ${trimmedMarket}`.trim() : term,
-          maxResultCount: 8,
-          locationBias,
-        }),
-      })),
-    )
+      const results = await Promise.all(
+        searchTerms.map(async (term) => ({
+          term,
+          result: await searchGooglePlaces({
+            apiKey: googleMapsApiKey,
+            query: trimmedMarket && !shouldUseCurrentLocation ? `${term} ${trimmedMarket}`.trim() : term,
+            maxResultCount: 8,
+            locationBias,
+          }),
+        })),
+      )
 
-    const successfulResults: Array<{
-      term: string
-      result: { ok: true; places: GooglePlacesApiPlace[]; query: string }
-    }> = []
-    const failedResults: Array<{
-      term: string
-      result: { ok: false; error: string; details: unknown; query: string; status: number | null }
-    }> = []
+      const successfulResults: Array<{
+        term: string
+        result: { ok: true; places: GooglePlacesApiPlace[]; query: string }
+      }> = []
+      const failedResults: Array<{
+        term: string
+        result: { ok: false; error: string; details: unknown; query: string; status: number | null }
+      }> = []
 
-    for (const entry of results) {
-      if (entry.result.ok) {
-        successfulResults.push({
-          term: entry.term,
-          result: entry.result,
+      for (const entry of results) {
+        if (entry.result.ok) {
+          successfulResults.push({
+            term: entry.term,
+            result: entry.result,
+          })
+        } else {
+          failedResults.push({
+            term: entry.term,
+            result: entry.result,
+          })
+        }
+      }
+
+      const dedupedPlaces = dedupePlaces(
+        successfulResults.flatMap((entry) => entry.result.places),
+      )
+      const normalizedProspects = dedupedPlaces.reduce<BaseProspect[]>((collection, place) => {
+        const matchingEntry = successfulResults.find((entry) =>
+          entry.result.places.some((candidate) =>
+            candidate.id && place.id
+              ? candidate.id === place.id
+              : candidate.displayName?.text === place.displayName?.text &&
+                candidate.formattedAddress === place.formattedAddress,
+          ),
+        )
+        const prospect = toLiveProspect(
+          place,
+          matchingEntry?.term ?? industries[0],
+          fallbackLocationLabel,
+          activeSearchCenter,
+        )
+
+        if (prospect) {
+          collection.push(prospect)
+        }
+
+        return collection
+      }, [])
+
+      if (normalizedProspects.length > 0) {
+        setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
+        setLiveSearchIds(normalizedProspects.map((prospect) => prospect.id))
+        setSearchStatus({
+          source: 'live',
+          message: uiText.search.statusMessages.liveResults(
+            normalizedProspects.length,
+            filterSummary || 'your filters',
+          ),
+          details:
+            failedResults.length > 0
+              ? `${uiText.errors.searchFailedDetail} ${failedResults
+                  .map((entry) => `${entry.term}: ${entry.result.error}`)
+                  .join(' | ')}`
+              : undefined,
+          resultsCount: normalizedProspects.length,
+          query: filterSummary,
+        })
+        return
+      }
+
+      setLiveSearchIds([])
+      if (failedResults.length > 0) {
+        setSearchStatus({
+          source: 'api-error',
+          message: failedResults[0]?.result.error ?? uiText.errors.searchFailedDetail,
+          details: failedResults.map((entry) => `${entry.term}: ${entry.result.error}`).join(' | '),
+          query: filterSummary,
         })
       } else {
-        failedResults.push({
-          term: entry.term,
-          result: entry.result,
+        setSearchStatus({
+          source: 'live',
+          message: uiText.search.statusMessages.noLiveResults(filterSummary || 'your filters'),
+          resultsCount: 0,
+          query: filterSummary,
         })
       }
-    }
-    const dedupedPlaces = dedupePlaces(
-      successfulResults.flatMap((entry) => entry.result.places),
-    )
-    const normalizedProspects = dedupedPlaces.reduce<BaseProspect[]>((collection, place) => {
-      const matchingEntry = successfulResults.find((entry) =>
-        entry.result.places.some((candidate) =>
-          candidate.id && place.id
-            ? candidate.id === place.id
-            : candidate.displayName?.text === place.displayName?.text &&
-              candidate.formattedAddress === place.formattedAddress,
-        ),
-      )
-      const prospect = toLiveProspect(
-        place,
-        matchingEntry?.term ?? trimmedKeyword,
-        fallbackLocationLabel,
-        searchCenter ?? AUSTIN_FALLBACK,
-      )
-
-      if (prospect) {
-        collection.push(prospect)
-      }
-
-      return collection
-    }, [])
-
-    if (normalizedProspects.length > 0) {
-      setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
-      setLiveSearchIds(normalizedProspects.map((prospect) => prospect.id))
-      setSearchStatus({
-        source: 'live',
-        message: uiText.search.statusMessages.liveResults(
-          normalizedProspects.length,
-          filterSummary || 'your filters',
-        ),
-        details:
-          failedResults.length > 0
-            ? `${uiText.errors.searchFailedDetail} ${failedResults
-                .map((entry) => `${entry.term}: ${entry.result.error}`)
-                .join(' | ')}`
-            : undefined,
-        resultsCount: normalizedProspects.length,
-        query: filterSummary,
-      })
+    } finally {
       setIsSearchingPlaces(false)
-      return
     }
-
-    setLiveSearchIds([])
-    if (failedResults.length > 0) {
-      setSearchStatus({
-        source: 'api-error',
-        message: failedResults[0]?.result.error ?? uiText.errors.searchFailedDetail,
-        details: failedResults.map((entry) => `${entry.term}: ${entry.result.error}`).join(' | '),
-        query: filterSummary,
-      })
-    } else {
-      setSearchStatus({
-        source: 'live',
-        message: uiText.search.statusMessages.noLiveResults(filterSummary || 'your filters'),
-        resultsCount: 0,
-        query: filterSummary,
-      })
-    }
-
-    setIsSearchingPlaces(false)
   }
 
   async function handleLiveSearch(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault()
     await runLiveSearch({
-      keyword: searchKeyword,
       market: manualMarket,
       industries: selectedIndustries,
-      radiusMiles: searchRadiusMiles,
-    })
-  }
-
-  async function handleSuggestedSearch(keyword: string) {
-    setSearchKeyword(keyword)
-    await runLiveSearch({
-      keyword,
-      market: manualMarket,
-      industries: selectedIndustries,
-      radiusMiles: searchRadiusMiles,
     })
   }
 
@@ -2316,7 +2938,6 @@ function App() {
     setRouteIds(importPreview.payload.routeList)
     setProspectRecords(importPreview.payload.prospectRecords)
     setExpandedProspectId(null)
-    setSearchKeyword('')
     setPriorityFilter('All')
     setLiveSearchIds([])
     setSearchStatus(null)
@@ -2417,17 +3038,17 @@ function App() {
           <p className="section-copy">{uiText.search.prominentDescription}</p>
 
           <div className="chip-row">
-            {SUGGESTED_SEARCH_KEYWORDS.slice(0, 4).map((keyword) => (
+            {SUGGESTED_SEARCH_INDUSTRIES.slice(0, 4).map((industry) => (
               <button
                 type="button"
-                key={keyword}
-                className="chip"
+                key={industry}
+                className={`chip ${selectedIndustries.includes(industry) ? 'chip--active' : ''}`}
                 onClick={() => {
-                  setSearchKeyword(keyword)
+                  toggleIndustrySelection(industry)
                   setActiveView('search')
                 }}
               >
-                {keyword}
+                {industry}
               </button>
             ))}
           </div>
@@ -2514,18 +3135,9 @@ function App() {
                   onToggleSaved={toggleSaved}
                   onToggleRoute={toggleRoute}
                   onToggleExpanded={toggleExpandedProspect}
-                  onUpdateNotes={(prospectId, notes) =>
-                    updateProspectRecord(prospectId, (current) => ({ ...current, notes }))
-                  }
-                  onUpdatePriority={(prospectId, priority) =>
-                    updateProspectRecord(prospectId, (current) => ({ ...current, priority }))
-                  }
-                  onUpdateFollowUp={(prospectId, followUpDate) =>
-                    updateProspectRecord(prospectId, (current) => ({
-                      ...current,
-                      followUpDate,
-                    }))
-                  }
+                  onUpdateNotes={updateProspectNotes}
+                  onUpdatePriority={updateProspectPriority}
+                  onUpdateFollowUp={updateProspectFollowUp}
                 />
               ))}
             </div>
@@ -2657,6 +3269,25 @@ function App() {
 
         {routeProspects.length > 0 ? (
           <>
+            {currentStopProspect ? (
+              <CurrentStopCard
+                key={currentStopProspect.id}
+                prospect={currentStopProspect}
+                isOnLocation={Boolean(onLocationRouteStop)}
+                distanceFeet={currentStopDistanceFeet}
+                trackingMessage={routeTrackerMessage}
+                travelMode={travelMode}
+                onNavigate={handleNavigateProspect}
+                onToggleCompleted={toggleRouteCompleted}
+                onUpdateContactDetails={updateContactDetails}
+                onUpdateNotes={updateProspectNotes}
+                onUpdateVisitNote={updateVisitNote}
+                onUpdateFollowUp={updateProspectFollowUp}
+                onUpdatePriority={updateProspectPriority}
+                onUpdateOutcome={updateVisitOutcome}
+              />
+            ) : null}
+
             <section className="stat-grid">
               <StatCard
                 label={uiText.routes.stats.completedStops}
@@ -2731,6 +3362,8 @@ function App() {
                         key={prospect.id}
                         index={index}
                         prospect={prospect}
+                        isCurrentStop={currentStopProspect?.id === prospect.id}
+                        isOnLocation={onLocationRouteStop?.prospect.id === prospect.id}
                         travelMode={travelMode}
                         onNavigate={handleNavigateProspect}
                         onToggleCompleted={toggleRouteCompleted}
@@ -2827,7 +3460,8 @@ function App() {
 
           <div
             className={`status-banner ${
-              searchLocationState === 'denied' || searchLocationState === 'unsupported'
+              !manualMarketLabel &&
+              (searchLocationState === 'denied' || searchLocationState === 'unsupported')
                 ? 'status-banner--error'
                 : 'status-banner--info'
             }`}
@@ -2837,33 +3471,64 @@ function App() {
 
           <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">
-              <span className="field-label">{uiText.search.keywordLabel}</span>
+              <span className="field-label">{uiText.search.marketLabel}</span>
               <div className="search-field">
-                <Search size={18} />
+                <MapIcon size={18} />
                 <input
                   type="search"
-                  value={searchKeyword}
-                  onChange={(event) => setSearchKeyword(event.target.value)}
-                  placeholder={uiText.search.keywordPlaceholder}
-                  aria-label={uiText.search.keywordLabel}
+                  value={manualMarket}
+                  onChange={(event) => setManualMarket(event.target.value)}
+                  placeholder={uiText.search.marketPlaceholder}
+                  aria-label={uiText.search.marketLabel}
                 />
               </div>
+              <p className="editor-hint">{uiText.search.marketHelp}</p>
             </label>
 
             <label className="field-group">
               <span className="field-label">{uiText.search.radiusLabel}</span>
               <select
                 className="text-input filter-select"
-                value={searchRadiusMiles}
-                onChange={(event) => setSearchRadiusMiles(Number(event.target.value) as SearchRadiusMiles)}
+                value={String(searchRadiusChoice)}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+
+                  if (nextValue === 'current-location' || nextValue === 'custom') {
+                    setSearchRadiusChoice(nextValue)
+                    return
+                  }
+
+                  setSearchRadiusChoice(Number(nextValue) as SearchRadiusMiles)
+                }}
               >
+                <option value="current-location">{uiText.search.radiusOptionLabels.currentLocation}</option>
                 {SEARCH_RADIUS_OPTIONS.map((radius) => (
                   <option key={radius} value={radius}>
                     {uiText.search.filters.radius(radius)}
                   </option>
                 ))}
+                <option value="custom">{uiText.search.radiusOptionLabels.custom}</option>
               </select>
             </label>
+
+            {searchRadiusChoice === 'custom' ? (
+              <label className="field-group">
+                <span className="field-label">{uiText.search.customRadiusLabel}</span>
+                <div className="search-field">
+                  <Route size={18} />
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    value={customRadiusMiles}
+                    onChange={(event) => setCustomRadiusMiles(event.target.value)}
+                    placeholder="35"
+                    aria-label={uiText.search.customRadiusLabel}
+                  />
+                </div>
+              </label>
+            ) : null}
 
             <div className="field-group">
               <span className="field-label">{uiText.search.industriesLabel}</span>
@@ -2887,35 +3552,20 @@ function App() {
               </details>
             </div>
 
-            <label className="field-group">
-              <span className="field-label">{uiText.search.marketLabel}</span>
-              <div className="search-field">
-                <MapIcon size={18} />
-                <input
-                  type="search"
-                  value={manualMarket}
-                  onChange={(event) => setManualMarket(event.target.value)}
-                  placeholder={uiText.search.marketPlaceholder}
-                  aria-label={uiText.search.marketLabel}
-                />
-              </div>
-              <p className="editor-hint">{uiText.search.marketHelp}</p>
-            </label>
-
             <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
               {isSearchingPlaces ? uiText.search.searchingButton : uiText.search.searchButton}
             </button>
           </form>
 
           <div className="chip-row">
-            {SUGGESTED_SEARCH_KEYWORDS.map((keyword) => (
+            {SUGGESTED_SEARCH_INDUSTRIES.map((industry) => (
               <button
                 type="button"
-                key={keyword}
-                className={`chip ${searchKeyword === keyword ? 'chip--active' : ''}`}
-                onClick={() => void handleSuggestedSearch(keyword)}
+                key={industry}
+                className={`chip ${selectedIndustries.includes(industry) ? 'chip--active' : ''}`}
+                onClick={() => toggleIndustrySelection(industry)}
               >
-                {keyword}
+                {industry}
               </button>
             ))}
           </div>
@@ -2923,18 +3573,16 @@ function App() {
           <div className="field-group">
             <p className="field-label">{uiText.search.selectedFiltersLabel}</p>
             <div className="chip-row">
-              <span className="chip chip--static">{uiText.search.filters.radius(searchRadiusMiles)}</span>
+              <span className="chip chip--static">{effectiveRadiusLabel}</span>
+              {usesCurrentLocation ? (
+                <span className="chip chip--static">{uiText.search.filters.currentLocation}</span>
+              ) : null}
               {selectedIndustries.length > 0 ? (
                 <span className="chip chip--static">
                   {uiText.search.filters.industries(selectedIndustries)}
                 </span>
               ) : null}
-              {searchKeyword.trim() ? (
-                <span className="chip chip--static">
-                  {uiText.search.filters.keyword(searchKeyword.trim())}
-                </span>
-              ) : null}
-              {manualMarket.trim() ? (
+              {manualMarket.trim() && !usesCurrentLocation ? (
                 <span className="chip chip--static">
                   {uiText.search.filters.market(manualMarket.trim())}
                 </span>
@@ -3074,18 +3722,9 @@ function App() {
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
                 onToggleExpanded={toggleExpandedProspect}
-                onUpdateNotes={(prospectId, notes) =>
-                  updateProspectRecord(prospectId, (current) => ({ ...current, notes }))
-                }
-                onUpdatePriority={(prospectId, priority) =>
-                  updateProspectRecord(prospectId, (current) => ({ ...current, priority }))
-                }
-                onUpdateFollowUp={(prospectId, followUpDate) =>
-                  updateProspectRecord(prospectId, (current) => ({
-                    ...current,
-                    followUpDate,
-                  }))
-                }
+                onUpdateNotes={updateProspectNotes}
+                onUpdatePriority={updateProspectPriority}
+                onUpdateFollowUp={updateProspectFollowUp}
               />
             ))}
           </div>
@@ -3223,6 +3862,28 @@ function App() {
                 {theme === 'dark' ? uiText.settings.darkMode : uiText.settings.lightMode}
               </span>
             </button>
+          </div>
+        </section>
+
+        <section className="panel section-panel">
+          <div className="settings-stack">
+            <label className="field-group">
+              <span className="field-label">{uiText.settings.arrivalDetectionLabel}</span>
+              <span className="section-copy">{uiText.settings.arrivalDetectionDescription}</span>
+              <select
+                className="text-input filter-select"
+                value={arrivalDetectionRadiusFeet}
+                onChange={(event) =>
+                  setArrivalDetectionRadiusFeet(Number(event.target.value) as ArrivalDetectionRadiusFeet)
+                }
+              >
+                {ARRIVAL_RADIUS_OPTIONS.map((radius) => (
+                  <option key={radius} value={radius}>
+                    {uiText.settings.arrivalDetectionOption(radius)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </section>
 
@@ -3739,9 +4400,9 @@ function App() {
         <header className="app-header">
           <div className="brand-lockup">
             <div className="brand-lockup__logo">
-              <Route size={18} />
+              <Route size={22} />
             </div>
-            <div>
+            <div className="brand-lockup__text">
               <p className="brand-lockup__name">{uiText.navigation.appName}</p>
               <p className="brand-lockup__copy">{uiText.navigation.tagline}</p>
             </div>

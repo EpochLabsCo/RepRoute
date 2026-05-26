@@ -117,13 +117,14 @@
 }
 
 .app-header {
-  gap: 12px;
+  gap: 14px;
   flex-wrap: nowrap;
+  padding: 4px 0 6px;
 }
 
 .brand-lockup {
   flex: 1;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -136,30 +137,61 @@
 }
 
 .brand-lockup__logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 16px;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 18px;
   background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
   color: white;
-  box-shadow: 0 20px 30px -20px rgba(74, 123, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 18px 36px -22px rgba(74, 123, 255, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+.brand-lockup__logo svg {
+  width: 24px;
+  height: 24px;
+}
+
+.brand-lockup__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .brand-lockup__name {
   margin: 0;
-  font-size: 0.98rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: clamp(1.28rem, 0.92rem + 1.55vw, 1.68rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(214, 232, 255, 0.96) 45%,
+    rgba(126, 240, 216, 0.92) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 18px rgba(126, 240, 216, 0.08);
 }
 
 .brand-lockup__copy {
-  margin: 2px 0 0;
-  font-size: 0.82rem;
+  margin: 0;
+  max-width: 28ch;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
   color: var(--text-secondary);
 }
 
 .app-header__actions {
   flex: 0 0 auto;
-  gap: 10px;
+  gap: 8px;
+  align-items: center;
 }
 
 .account-menu {
@@ -715,6 +747,18 @@
     var(--surface-soft);
 }
 
+.route-stop-card--current {
+  border-color: rgba(74, 123, 255, 0.28);
+}
+
+.route-stop-card--on-location,
+.current-stop-card--on-location {
+  border-color: rgba(49, 196, 190, 0.3);
+  background:
+    linear-gradient(160deg, rgba(49, 196, 190, 0.1), transparent),
+    var(--surface-soft);
+}
+
 .route-stop-card__top,
 .route-stop-card__heading,
 .route-action-row,
@@ -769,6 +813,39 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.current-stop-card {
+  display: grid;
+  gap: 14px;
+}
+
+.current-stop-card__summary {
+  display: grid;
+  gap: 10px;
+}
+
+.current-stop-card__summary h3,
+.current-stop-card__summary p {
+  margin: 0;
+}
+
+.current-stop-card__summary p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.current-stop-card__quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.current-stop-card__panel {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
 }
 
 .route-stop-check {
@@ -1754,18 +1831,46 @@
   .route-stop-card__footer,
   .nearby-prospect-card,
   .live-result-card__header,
-  .app-header,
   .section-heading {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .app-header {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
   .brand-lockup {
     width: 100%;
+    gap: 12px;
+  }
+
+  .brand-lockup__logo {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+  }
+
+  .brand-lockup__logo svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .brand-lockup__name {
+    font-size: clamp(1.18rem, 0.98rem + 1.35vw, 1.4rem);
+  }
+
+  .brand-lockup__copy {
+    max-width: 22ch;
+    font-size: 0.74rem;
+    letter-spacing: 0.03em;
   }
 
   .app-header__actions {
     justify-content: flex-end;
+    flex-shrink: 0;
   }
 
   .live-result-card__actions .button,

@@ -12,7 +12,9 @@ export type CrmExportScope = 'saved' | 'route' | 'followups' | 'all'
 export type CrmExportRecord = {
   businessName: string
   contactName: string
+  contactTitle: string
   phone: string
+  contactEmail: string
   website: string
   address: string
   city: string
@@ -21,10 +23,14 @@ export type CrmExportRecord = {
   industry: string
   priority: string
   notes: string
+  visitNotes: string
+  visitCompleted: string
+  visitCompletedDateTime: string
   followUpDate: string
   lastContactedDate: string
   routeOutcomeTag: string
   googlePlaceId: string
+  editedByRepRouteUser: string
   source: string
 }
 
@@ -47,7 +53,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     columnMap: {
       businessName: 'Business Name',
       contactName: 'Contact Name',
+      contactTitle: 'Contact Title',
       phone: 'Phone',
+      contactEmail: 'Contact Email',
       website: 'Website',
       address: 'Address',
       city: 'City',
@@ -56,10 +64,14 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       industry: 'Industry/Category',
       priority: 'Priority',
       notes: 'Notes',
+      visitNotes: 'Visit Notes',
+      visitCompleted: 'Visit Completed',
+      visitCompletedDateTime: 'Visit Completed Date/Time',
       followUpDate: 'Follow-Up Date',
       lastContactedDate: 'Last Contacted Date',
       routeOutcomeTag: 'Route Outcome Tag',
       googlePlaceId: 'Place ID',
+      editedByRepRouteUser: 'Edited By RepRoute User',
       source: 'Source',
     },
   },
@@ -71,7 +83,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     columnMap: {
       businessName: 'Company name',
       contactName: 'Contact name',
+      contactTitle: 'Job title',
       phone: 'Phone number',
+      contactEmail: 'Email',
       website: 'Website URL',
       address: 'Street address',
       city: 'City',
@@ -80,10 +94,14 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       industry: 'Industry',
       priority: 'Lead status',
       notes: 'Notes',
+      visitNotes: 'RepRoute visit notes',
+      visitCompleted: 'RepRoute visit completed',
+      visitCompletedDateTime: 'RepRoute visit completed at',
       followUpDate: 'Next activity date',
       lastContactedDate: 'Last contacted',
       routeOutcomeTag: 'RepRoute route outcome',
       googlePlaceId: 'RepRoute Place ID',
+      editedByRepRouteUser: 'RepRoute edited by',
       source: 'Lead source',
     },
   },
@@ -95,7 +113,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     columnMap: {
       businessName: 'Account Name',
       contactName: 'Contact Name',
+      contactTitle: 'Title',
       phone: 'Phone',
+      contactEmail: 'Email',
       website: 'Website',
       address: 'Billing Street',
       city: 'Billing City',
@@ -104,10 +124,14 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       industry: 'Industry',
       priority: 'Rating',
       notes: 'Description',
+      visitNotes: 'Visit_Notes__c',
+      visitCompleted: 'Visit_Completed__c',
+      visitCompletedDateTime: 'Visit_Completed_At__c',
       followUpDate: 'Follow_Up_Date__c',
       lastContactedDate: 'Last_Contacted_Date__c',
       routeOutcomeTag: 'Route_Outcome__c',
       googlePlaceId: 'Place_ID__c',
+      editedByRepRouteUser: 'Edited_By_RepRoute_User__c',
       source: 'LeadSource',
     },
   },
@@ -119,7 +143,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     columnMap: {
       businessName: 'Account Name',
       contactName: 'Contact Name',
+      contactTitle: 'Title',
       phone: 'Phone',
+      contactEmail: 'Email',
       website: 'Website',
       address: 'Billing Street',
       city: 'Billing City',
@@ -128,10 +154,14 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       industry: 'Industry',
       priority: 'Rating',
       notes: 'Description',
+      visitNotes: 'Visit Notes',
+      visitCompleted: 'Visit Completed',
+      visitCompletedDateTime: 'Visit Completed Date/Time',
       followUpDate: 'Follow Up Date',
       lastContactedDate: 'Last Contacted Date',
       routeOutcomeTag: 'Route Outcome',
       googlePlaceId: 'Place ID',
+      editedByRepRouteUser: 'Edited By RepRoute User',
       source: 'Lead Source',
     },
   },
@@ -143,7 +173,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     columnMap: {
       businessName: 'Organization name',
       contactName: 'Person name',
+      contactTitle: 'Title',
       phone: 'Phone',
+      contactEmail: 'Email',
       website: 'Website',
       address: 'Address',
       city: 'City',
@@ -152,10 +184,14 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       industry: 'Category',
       priority: 'Label',
       notes: 'Notes',
+      visitNotes: 'Visit notes',
+      visitCompleted: 'Visit completed',
+      visitCompletedDateTime: 'Visit completed at',
       followUpDate: 'Follow-up date',
       lastContactedDate: 'Last contacted date',
       routeOutcomeTag: 'Route outcome',
       googlePlaceId: 'Place ID',
+      editedByRepRouteUser: 'Edited by RepRoute user',
       source: 'Source',
     },
   },
@@ -173,7 +209,9 @@ const FUTURE_CRM_API_TARGETS = [
 const CRM_EXPORT_FIELD_ORDER: CrmExportColumnKey[] = [
   'businessName',
   'contactName',
+  'contactTitle',
   'phone',
+  'contactEmail',
   'website',
   'address',
   'city',
@@ -182,10 +220,14 @@ const CRM_EXPORT_FIELD_ORDER: CrmExportColumnKey[] = [
   'industry',
   'priority',
   'notes',
+  'visitNotes',
+  'visitCompleted',
+  'visitCompletedDateTime',
   'followUpDate',
   'lastContactedDate',
   'routeOutcomeTag',
   'googlePlaceId',
+  'editedByRepRouteUser',
   'source',
 ]
 
@@ -286,6 +328,9 @@ export function buildCrmExportRecord(input: {
   businessName: string
   category: string
   contactName?: string
+  contactTitle?: string
+  contactEmail?: string
+  editedByRepRouteUser?: boolean
   followUpDate?: string
   googlePlaceId?: string
   lastContactedDate?: string
@@ -293,6 +338,9 @@ export function buildCrmExportRecord(input: {
   phone: string
   priority: string
   routeOutcomeTag?: string
+  visitCompleted?: boolean
+  visitCompletedDateTime?: string
+  visitNotes?: string
   website: string
 }) {
   const parts = parseAddressParts(input.address)
@@ -302,7 +350,9 @@ export function buildCrmExportRecord(input: {
   return {
     businessName: input.businessName,
     contactName: input.contactName?.trim() ?? '',
+    contactTitle: input.contactTitle?.trim() ?? '',
     phone,
+    contactEmail: input.contactEmail?.trim() ?? '',
     website,
     address: parts.address,
     city: parts.city,
@@ -311,10 +361,14 @@ export function buildCrmExportRecord(input: {
     industry: input.category,
     priority: input.priority,
     notes: input.notes,
+    visitNotes: input.visitNotes?.trim() ?? '',
+    visitCompleted: input.visitCompleted ? 'Yes' : '',
+    visitCompletedDateTime: input.visitCompletedDateTime ?? '',
     followUpDate: input.followUpDate ?? '',
     lastContactedDate: input.lastContactedDate ?? '',
     routeOutcomeTag: input.routeOutcomeTag ?? '',
     googlePlaceId: input.googlePlaceId ?? '',
+    editedByRepRouteUser: input.editedByRepRouteUser ? 'RepRoute user' : '',
     source: 'RepRoute',
   } satisfies CrmExportRecord
 }

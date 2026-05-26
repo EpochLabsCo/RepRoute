@@ -96,15 +96,18 @@ export const uiText = {
     heading: 'Find Prospects',
     prominentTitle: 'Find prospects',
     prominentDescription:
-      'Run a Live Search by industry, keyword, and radius, then save qualified Prospects or add them to a Route.',
-    keywordLabel: 'Keyword (Optional)',
-    keywordPlaceholder: 'equipment rental',
-    marketLabel: 'Market (Optional)',
+      'Run a Live Search by target industry and radius, then save qualified Prospects or add them to a Route.',
+    marketLabel: 'City or market',
     marketPlaceholder: 'Houston, TX',
     marketHelp: 'Use your current location by default, or enter a market manually.',
-    radiusLabel: 'Search Radius',
+    radiusLabel: 'Mileage radius',
     radiusOptions: [5, 10, 15, 25, 50] as const,
-    industriesLabel: 'Industries',
+    radiusOptionLabels: {
+      currentLocation: 'Use my current location',
+      custom: 'Custom radius',
+    },
+    customRadiusLabel: 'Custom mileage radius',
+    industriesLabel: 'Target industries',
     industriesPlaceholder: 'Select industries',
     industriesSelected: (count: number) =>
       count === 0 ? 'Select industries' : `${count} industry${count === 1 ? '' : 'ies'} selected`,
@@ -156,14 +159,15 @@ export const uiText = {
     filters: {
       radius: (miles: number) => `${miles} miles`,
       industries: (industries: string[]) => industries.join(', '),
-      keyword: (keyword: string) => `Keyword: ${keyword}`,
       market: (market: string) => `Market: ${market}`,
+      currentLocation: 'Current location',
     },
     location: {
       locating: 'Finding your current location...',
       ready: 'Using your current location as the default search center.',
       denied: 'Enable location access or enter a market manually.',
       unsupported: 'Location is unavailable in this browser. Enter a market manually.',
+      marketOverride: (market: string) => `Using ${market} as the search center.`,
     },
     statusMessages: {
       liveResults: (count: number, summary: string) =>
@@ -253,6 +257,40 @@ export const uiText = {
     fieldWorkflowHeading: 'Today’s Route',
     routeReady: 'Route ready',
     nextStop: (businessName: string) => `Next: ${businessName}`,
+    currentStop: {
+      eyebrow: 'Current Stop',
+      heading: 'Current Stop',
+      label: 'Current Stop',
+      onLocation: 'You’re on location',
+      enRoute: 'En route',
+      tracking: 'Tracking your current location for arrival check-ins.',
+      waiting: 'Waiting for a route location fix to start arrival detection.',
+      locationDenied: 'Allow location access to trigger on-location prospect check-ins.',
+      locationUnsupported: 'Arrival detection is unavailable in this browser.',
+      locationError: 'RepRoute could not update your route location right now.',
+      onLocationMessage: (businessName: string, distance: string) =>
+        `You’re on location at ${businessName}. RepRoute detected you ${distance} from this stop.`,
+      nearestMessage: (businessName: string, distance: string) =>
+        `${businessName} is the closest stop at ${distance}.`,
+      distanceAway: (distance: string) => `Distance away: ${distance}`,
+      quickActions: {
+        markCompleted: 'Mark Completed',
+        markIncomplete: 'Mark Incomplete',
+        editContactInfo: 'Edit Contact Info',
+        addVisitNotes: 'Add Visit Notes',
+        setFollowUp: 'Set Follow-Up',
+        changePriority: 'Change Priority',
+        addOutcomeTag: 'Add Outcome Tag',
+      },
+      contactFields: {
+        contactName: 'Contact Name',
+        contactTitle: 'Contact Title',
+        phone: 'Phone',
+        email: 'Email',
+        website: 'Website',
+        notes: 'Notes',
+      },
+    },
     currentFocusTitle: 'Current Focus',
     routeStopInfo: (order?: number) => `Route stop ${order ?? ''}`.trim(),
     stopLabel: (index: number) => `Stop ${index + 1}`,
@@ -282,6 +320,8 @@ export const uiText = {
       'Follow-Up Needed',
       'Quote Opportunity',
       'Not Interested',
+      'Bad Address',
+      'Existing Customer',
     ] as const,
   },
   followUps: {
@@ -310,6 +350,12 @@ export const uiText = {
     appearanceDescription: 'Switch between dark and light workspace themes.',
     darkMode: 'Dark mode',
     lightMode: 'Light mode',
+    arrivalDetectionTitle: 'Arrival Detection Radius',
+    arrivalDetectionDescription:
+      'Choose how close you need to be before RepRoute marks a Route stop as on location.',
+    arrivalDetectionLabel: 'Arrival Detection Radius',
+    arrivalDetectionOption: (feet: number) =>
+      feet >= 1320 ? '0.25 miles' : `${feet.toLocaleString()} feet`,
     googlePlacesEyebrow: 'Live Search',
     googlePlacesHeading: 'Search Connection',
     apiKeyDetected: 'API key detected',
@@ -453,9 +499,9 @@ export const uiText = {
   },
   errors: {
     apiErrorLabel: 'API Error',
-    searchMissingFields: 'Select at least one industry or enter a keyword before running a Live Search.',
+    searchMissingFields: 'Select at least one target industry before running a Live Search.',
     searchMissingFieldsDetail:
-      'Live Search needs a keyword, an industry, or both to return targeted business results.',
+      'Live Search needs at least one target industry to return targeted business results.',
     searchFailedDetail: 'Live Search failed. Review the response and try again.',
     connectGooglePlaces: 'Enable Live Search to find businesses.',
     connectGooglePlacesDetail: 'Add a valid search API key to load live business results.',
