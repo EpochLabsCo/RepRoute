@@ -103,7 +103,12 @@ function RouteNavigationView({
     <div className="route-navigation-view">
       <section className="panel section-panel route-navigation-view__header">
         <div className="route-navigation-view__toolbar">
-          <button type="button" className="button button--ghost route-navigation-view__back" onClick={onClose}>
+          <button
+            type="button"
+            className="button button--ghost route-navigation-view__back"
+            onClick={onClose}
+            aria-label={uiText.routes.inAppNavigation.back}
+          >
             <ArrowLeft size={18} />
             {uiText.routes.inAppNavigation.back}
           </button>

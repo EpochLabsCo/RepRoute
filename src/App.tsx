@@ -694,15 +694,14 @@ function createEntireRouteNavigateHref(
 
 function openExternalNavigation(url: string) {
   if (!url) {
-    return
+    return false
   }
 
   const nextWindow = window.open(url, '_blank', 'noopener,noreferrer')
-
-  if (!nextWindow) {
-    window.location.assign(url)
-  }
+  return Boolean(nextWindow)
 }
+
+const ROUTE_GUIDANCE_HISTORY_STATE = { reprouteRouteMode: 'guidance' } as const
 
 function buildStopLegMap(
   routeProspects: Prospect[],
@@ -1403,7 +1402,7 @@ function RouteCalculationCard({
       <button
         type="button"
         className="button button--wide route-build-card__button"
-        onClick={onCalculate}
+        onClick={() => void onCalculate()}
         disabled={disabled}
       >
         {uiText.routes.calculation.button}
@@ -2313,6 +2312,8 @@ function App() {
   const backupSectionRef = useRef<HTMLElement | null>(null)
   const routeCalculationSummaryRef = useRef<HTMLElement | null>(null)
   const routeMapSectionRef = useRef<HTMLElement | null>(null)
+  const routeNavHistoryPushedRef = useRef(false)
+  const routeNavSuppressPopStateRef = useRef(false)
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
   const [activeView, setActiveView] = useState<View>('search')
   const [expandedProspectId, setExpandedProspectId] = useState<string | null>(null)
@@ -2951,6 +2952,20 @@ function App() {
     () => routeProspects.find((prospect) => !prospect.routeCompleted) ?? routeProspects[0] ?? null,
     [routeProspects],
   )
+  const nextRouteStopAfterCurrent = useMemo(() => {
+    if (!currentRouteStop) {
+      return null
+    }
+
+    const currentIndex = routeProspects.findIndex((prospect) => prospect.id === currentRouteStop.id)
+    return (
+      routeProspects.slice(currentIndex + 1).find((prospect) => !prospect.routeCompleted) ??
+      routeProspects.find(
+        (prospect) => !prospect.routeCompleted && prospect.id !== currentRouteStop.id,
+      ) ??
+      null
+    )
+  }, [currentRouteStop, routeProspects])
   const arrivalDetectionRadiusMiles = feetToMiles(arrivalDetectionRadiusFeet)
   const routeStopDistances = useMemo(() => {
     if (!routeTrackerLocation) {
@@ -3603,7 +3618,16 @@ function App() {
   }
 
   function handleNavigateProspect(prospect: Prospect) {
-    openExternalNavigation(createNavigateHref(prospect, travelMode))
+    if (routeIds.includes(prospect.id)) {
+      void startRouteNavigationForStop(prospect.id)
+      return
+    }
+
+    setActiveView('map')
+    setActionToast({
+      type: 'info',
+      text: uiText.routes.inAppNavigation.addToRouteToNavigate,
+    })
   }
 
   async function loadRouteNavigationDirections() {
@@ -3650,7 +3674,7 @@ function App() {
     setRouteNavigationError(null)
   }
 
-  async function startRouteNavigation() {
+  async function startRouteNavigationForStop(prospectId: string) {
     if (routeProspects.length === 0) {
       setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops })
       return
@@ -3665,20 +3689,42 @@ function App() {
       return
     }
 
-    setNavigationActiveStopId(
-      routeProspects.find((prospect) => !prospect.routeCompleted)?.id ?? routeProspects[0]?.id ?? null,
-    )
-    setNavigationArrivedStopIds({})
-    setRouteNavigationOpen(true)
     setActiveView('map')
+    setNavigationActiveStopId(prospectId)
+
+    if (!routeNavigationOpen) {
+      setNavigationArrivedStopIds({})
+      setRouteNavigationOpen(true)
+
+      if (typeof window !== 'undefined' && !routeNavHistoryPushedRef.current) {
+        window.history.pushState(ROUTE_GUIDANCE_HISTORY_STATE, '')
+        routeNavHistoryPushedRef.current = true
+      }
+    }
+
     await loadRouteNavigationDirections()
+  }
+
+  async function startRouteNavigation() {
+    const firstIncomplete =
+      routeProspects.find((prospect) => !prospect.routeCompleted)?.id ?? routeProspects[0]?.id
+
+    if (!firstIncomplete) {
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops })
+      return
+    }
+
+    await startRouteNavigationForStop(firstIncomplete)
   }
 
   function closeRouteNavigation() {
     setRouteNavigationOpen(false)
-    setRouteNavigationDirections(null)
-    setRouteNavigationLoading(false)
-    setRouteNavigationError(null)
+
+    if (routeNavHistoryPushedRef.current && typeof window !== 'undefined') {
+      routeNavSuppressPopStateRef.current = true
+      routeNavHistoryPushedRef.current = false
+      window.history.back()
+    }
   }
 
   function handleNavigationMarkArrived(prospectId: string) {
@@ -3714,27 +3760,6 @@ function App() {
   }
 
   function handleOpenRouteInMaps() {
-    handleNavigateEntireRoute()
-  }
-
-  useEffect(() => {
-    if (!routeNavigationOpen) {
-      return
-    }
-
-    void loadRouteNavigationDirections()
-  }, [routeNavigationOpen, routeIds.join('|'), travelMode, routeStartLocation, manualMarketLabel])
-
-  useEffect(() => {
-    if (routeIds.length === 0 && routeNavigationOpen) {
-      setRouteNavigationOpen(false)
-      setRouteNavigationDirections(null)
-      setRouteNavigationLoading(false)
-      setRouteNavigationError(null)
-    }
-  }, [routeIds.length, routeNavigationOpen])
-
-  function handleNavigateEntireRoute() {
     if (routeProspects.length === 0) {
       setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops })
       return
@@ -3759,8 +3784,56 @@ function App() {
       return
     }
 
-    openExternalNavigation(createEntireRouteNavigateHref(startOrigin, stopsForNavigation, travelMode))
+    const opened = openExternalNavigation(
+      createEntireRouteNavigateHref(startOrigin, stopsForNavigation, travelMode),
+    )
+
+    if (!opened) {
+      setActionToast({
+        type: 'info',
+        text: uiText.routes.inAppNavigation.mapsPopupBlocked,
+      })
+    }
   }
+
+  useEffect(() => {
+    if (activeView !== 'map' || routeIds.length === 0) {
+      return
+    }
+
+    void loadRouteNavigationDirections()
+  }, [activeView, routeIds.join('|'), travelMode, routeStartLocation, manualMarketLabel])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const handlePopState = () => {
+      if (routeNavSuppressPopStateRef.current) {
+        routeNavSuppressPopStateRef.current = false
+        return
+      }
+
+      if (routeNavigationOpen) {
+        routeNavHistoryPushedRef.current = false
+        setRouteNavigationOpen(false)
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [routeNavigationOpen])
+
+  useEffect(() => {
+    if (routeIds.length === 0 && routeNavigationOpen) {
+      routeNavHistoryPushedRef.current = false
+      setRouteNavigationOpen(false)
+      setRouteNavigationDirections(null)
+      setRouteNavigationLoading(false)
+      setRouteNavigationError(null)
+    }
+  }, [routeIds.length, routeNavigationOpen])
 
   async function optimizeRoute(originOverride?: string) {
     const attemptedAt = new Date().toISOString()
@@ -4035,7 +4108,7 @@ function App() {
     setRouteIds([])
   }
 
-  function handleCalculateRoute() {
+  async function handleCalculateRoute() {
     if (routeProspects.length === 0) {
       return
     }
@@ -4045,6 +4118,13 @@ function App() {
     })
     pendingRouteScrollTargetRef.current = 'summary'
     setActiveView('map')
+    setRouteNavigationOpen(false)
+
+    if (routeProspects.length > 1) {
+      await optimizeRoute()
+    }
+
+    await loadRouteNavigationDirections()
   }
 
   function toggleExpandedProspect(prospectId: string) {
@@ -4906,6 +4986,90 @@ function App() {
           </section>
         ) : null}
 
+        {routeProspects.length > 0 ? (
+          <section className="panel section-panel route-overview-guidance">
+            <div className="section-heading">
+              <div>
+                <div className="eyebrow eyebrow--tight">{uiText.routes.inAppNavigation.overviewEyebrow}</div>
+                <h2>{uiText.routes.inAppNavigation.overviewHeading}</h2>
+              </div>
+            </div>
+
+            <div className="route-overview-guidance__summary">
+              {currentRouteStop ? (
+                <div className="route-overview-guidance__block">
+                  <span className="field-label">{uiText.routes.inAppNavigation.currentStopLabel}</span>
+                  <strong>{currentRouteStop.businessName}</strong>
+                  <p>{currentRouteStop.address}</p>
+                </div>
+              ) : null}
+              {nextRouteStopAfterCurrent ? (
+                <div className="route-overview-guidance__block">
+                  <span className="field-label">{uiText.routes.inAppNavigation.nextStopLabel}</span>
+                  <strong>{nextRouteStopAfterCurrent.businessName}</strong>
+                  <p>{nextRouteStopAfterCurrent.address}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="inline-summary">
+              {currentRouteStop ? (
+                <span className="meta-pill meta-pill--accent">
+                  {uiText.routes.inAppNavigation.stopOrder(
+                    routeProspects.findIndex((prospect) => prospect.id === currentRouteStop.id) + 1,
+                    routeProspects.length,
+                  )}
+                </span>
+              ) : null}
+              <span className="meta-pill">
+                {uiText.routes.inAppNavigation.distanceLabel}: {routeMiles.toFixed(1)} mi
+              </span>
+              <span className="meta-pill">
+                {uiText.routes.inAppNavigation.etaLabel}: {formatDriveTime(estimatedDriveMinutes)}
+              </span>
+              <span className="meta-pill">
+                {uiText.routes.inAppNavigation.completedCount(completedRouteStops)}
+              </span>
+              <span className="meta-pill">
+                {uiText.routes.inAppNavigation.remainingCount(remainingRouteStops)}
+              </span>
+              <span className="meta-pill">
+                {uiText.routes.inAppNavigation.percentComplete(completionPercentage)}
+              </span>
+            </div>
+
+            <div className="route-progress-track" aria-hidden="true">
+              <span
+                className="route-progress-track__fill"
+                style={{ width: `${completionPercentage}%` }}
+              />
+            </div>
+
+            {routeNavigationLoading ? (
+              <div className="status-banner status-banner--info">
+                <p>{uiText.routes.inAppNavigation.loadingRoute}</p>
+              </div>
+            ) : null}
+
+            {routeNavigationError ? (
+              <div className="status-banner status-banner--error">
+                <p>{routeNavigationError}</p>
+              </div>
+            ) : null}
+
+            <div className="button-row">
+              <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
+                <Navigation size={16} />
+                {uiText.routes.inAppNavigation.startRoute}
+              </button>
+              <button type="button" className="button button--ghost" onClick={handleOpenRouteInMaps}>
+                <ExternalLink size={16} />
+                {uiText.routes.inAppNavigation.openInMaps}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         <section ref={routeMapSectionRef} className="panel section-panel">
           <div className="section-heading">
             <div>
@@ -4931,9 +5095,9 @@ function App() {
                   ? uiText.routes.optimization.optimizing
                   : uiText.routes.optimization.button}
               </button>
-              <button type="button" className="button button--ghost" onClick={handleNavigateEntireRoute}>
+              <button type="button" className="button button--ghost" onClick={handleOpenRouteInMaps}>
                 <ExternalLink size={16} />
-                {uiText.routes.navigateEntireRoute}
+                {uiText.routes.inAppNavigation.openInMaps}
               </button>
               <button
                 type="button"
@@ -4977,6 +5141,9 @@ function App() {
 
           <RepRouteMap
             markers={mapMarkers}
+            directions={routeNavigationDirections}
+            userLocation={routeTrackerLocation}
+            activeRouteStopId={currentRouteStop?.id ?? null}
             onToggleSaved={toggleSaved}
             onToggleRoute={toggleRoute}
           />

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  DirectionsRenderer,
   GoogleMap,
   InfoWindowF,
   MarkerF,
@@ -33,6 +34,9 @@ export type RepRouteMapMarker = {
 
 type RepRouteMapProps = {
   markers: RepRouteMapMarker[]
+  directions?: google.maps.DirectionsResult | null
+  userLocation?: { lat: number; lng: number } | null
+  activeRouteStopId?: string | null
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
 }
@@ -53,9 +57,11 @@ function getPrimaryMarkerCategory(marker: RepRouteMapMarker) {
   return 'search'
 }
 
-function createMarkerIcon(fill: string) {
+function createMarkerIcon(fill: string, scale = 1) {
+  const width = Math.round(36 * scale)
+  const height = Math.round(48 * scale)
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="48" viewBox="0 0 36 48" fill="none">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 36 48" fill="none">
       <path
         d="M18 2C9.163 2 2 9.163 2 18c0 11.708 14.017 26.211 15.496 27.712a.72.72 0 0 0 1.008 0C19.983 44.211 34 29.708 34 18 34 9.163 26.837 2 18 2Z"
         fill="${fill}"
@@ -87,10 +93,22 @@ function normalizeWebsite(website: string) {
     : `https://${website}`
 }
 
-function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps) {
+function RepRouteMap({
+  markers,
+  directions = null,
+  userLocation: userLocationProp = null,
+  activeRouteStopId = null,
+  onToggleSaved,
+  onToggleRoute,
+}: RepRouteMapProps) {
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
   const [center, setCenter] = useState(AUSTIN_CENTER)
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [internalUserLocation, setInternalUserLocation] = useState<{ lat: number; lng: number } | null>(
+    null,
+  )
+  const [map, setMap] = useState<google.maps.Map | null>(null)
+
+  const userLocation = userLocationProp ?? internalUserLocation
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
   const hasApiKey = apiKey.length > 0
@@ -102,6 +120,10 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
   })
 
   useEffect(() => {
+    if (userLocationProp) {
+      return
+    }
+
     if (!navigator.geolocation) {
       return
     }
@@ -114,7 +136,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
         }
 
         setCenter(nextCenter)
-        setUserLocation(nextCenter)
+        setInternalUserLocation(nextCenter)
       },
       () => {
         setCenter(AUSTIN_CENTER)
@@ -125,7 +147,42 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
         maximumAge: 300000,
       },
     )
-  }, [])
+  }, [userLocationProp])
+
+  useEffect(() => {
+    if (userLocationProp) {
+      setCenter(userLocationProp)
+    }
+  }, [userLocationProp])
+
+  const fitRouteBounds = useCallback(() => {
+    if (!map) {
+      return
+    }
+
+    const bounds = new google.maps.LatLngBounds()
+
+    if (userLocation) {
+      bounds.extend(userLocation)
+    }
+
+    for (const marker of markers) {
+      bounds.extend(marker.position)
+    }
+
+    const route = directions?.routes?.[0]
+    if (route?.bounds) {
+      bounds.union(route.bounds)
+    }
+
+    if (!bounds.isEmpty()) {
+      map.fitBounds(bounds, { top: 48, right: 40, bottom: 48, left: 40 })
+    }
+  }, [directions, map, markers, userLocation])
+
+  useEffect(() => {
+    fitRouteBounds()
+  }, [fitRouteBounds])
 
   const selectedMarker = useMemo(
     () => markers.find((marker) => marker.id === selectedMarkerId) ?? null,
@@ -163,6 +220,7 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
         mapContainerStyle={MAP_CONTAINER_STYLE}
         center={center}
         zoom={10}
+        onLoad={setMap}
         options={{
           clickableIcons: false,
           disableDefaultUI: true,
@@ -173,39 +231,59 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
         }}
         onClick={() => setSelectedMarkerId(null)}
       >
+        {directions ? (
+          <DirectionsRenderer
+            options={{
+              directions,
+              suppressMarkers: true,
+              preserveViewport: true,
+              polylineOptions: {
+                strokeColor: '#4a7bff',
+                strokeOpacity: 0.92,
+                strokeWeight: 6,
+              },
+            }}
+          />
+        ) : null}
+
         {userLocation ? (
           <MarkerF
             position={userLocation}
             title={uiText.routes.currentLocation}
-            icon={createMarkerIcon('#4a7bff')}
+            zIndex={1000}
+            icon={createMarkerIcon('#44d1c8', 1.05)}
           />
         ) : null}
 
         {markers.map((marker) => {
           const primaryCategory = getPrimaryMarkerCategory(marker)
-          const fill =
-            primaryCategory === 'route'
+          const isActiveRouteStop = activeRouteStopId === marker.id && marker.categories.includes('route')
+          const fill = isActiveRouteStop
+            ? '#31c4be'
+            : primaryCategory === 'route'
               ? '#4a7bff'
               : primaryCategory === 'food'
                 ? '#c77dff'
-              : primaryCategory === 'saved'
-                ? '#f7b955'
-                : '#44d1c8'
+                : primaryCategory === 'saved'
+                  ? '#f7b955'
+                  : '#44d1c8'
+          const scale = isActiveRouteStop ? 1.12 : 1
           const label =
             primaryCategory === 'route'
               ? `${marker.routeOrder ?? ''}`
               : primaryCategory === 'food'
                 ? 'F'
-              : primaryCategory === 'saved'
-                ? 'S'
-                : undefined
+                : primaryCategory === 'saved'
+                  ? 'S'
+                  : undefined
 
           return (
             <MarkerF
               key={marker.id}
               position={marker.position}
               title={marker.businessName}
-              icon={createMarkerIcon(fill)}
+              zIndex={isActiveRouteStop ? 900 : primaryCategory === 'route' ? 500 : 400}
+              icon={createMarkerIcon(fill, scale)}
               label={label}
               onClick={() => setSelectedMarkerId(marker.id)}
             />

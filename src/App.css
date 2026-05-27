@@ -1359,6 +1359,41 @@
   gap: 12px;
 }
 
+.route-overview-guidance {
+  display: grid;
+  gap: 12px;
+}
+
+.route-overview-guidance__summary {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .route-overview-guidance__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.route-overview-guidance__block {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.route-overview-guidance__block strong {
+  color: var(--text-primary);
+}
+
+.route-overview-guidance__block p {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .modal-sheet--food {
   max-height: min(86dvh, 860px);
 }
