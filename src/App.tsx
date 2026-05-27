@@ -79,7 +79,21 @@ import {
   type NotificationReminderLog,
 } from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
+import BusinessCardAttachStopSheet from './components/BusinessCardAttachStopSheet'
+import BusinessCardPreviewStrip from './components/BusinessCardPreviewStrip'
+import BusinessCardScanButton from './components/BusinessCardScanButton'
 import BusinessCardSection from './components/BusinessCardSection'
+import FollowUpCard from './components/FollowUpCard'
+import {
+  buildFollowUpSnapshot,
+  DEFAULT_FOLLOW_UP_TIME,
+  groupFollowUpsBySection,
+  isValidFollowUpDate,
+  migrateFollowUpsFromProspectRecords,
+  resolveFollowUpRouteStatus,
+  sanitizeFollowUpStore,
+  type FollowUpEntry,
+} from './lib/followUps'
 import {
   getBusinessCardDataUrl,
   getBusinessCardObjectUrl,
@@ -151,6 +165,9 @@ type ProspectRecord = {
   notes?: string
   priority?: AssignedPriority
   followUpDate?: string
+  followUpTime?: string
+  followUpCompleted?: boolean
+  followUpCompletedAt?: string
   visitNote?: string
   visitOutcome?: OutcomeTag | ''
   routeCompleted?: boolean
@@ -164,6 +181,7 @@ type ProspectRecord = {
 
 type Prospect = BaseProspect & {
   followUpDate: string
+  followUpTime: string
   lastContactDate: string
   routeCompleted: boolean
   visitNote: string
@@ -179,6 +197,7 @@ type BackupPayload = {
   savedProspects: string[]
   routeList: string[]
   prospectRecords: Record<string, ProspectRecord>
+  followUpEntries: Record<string, import('./lib/followUps').FollowUpEntry>
 }
 
 type BackupFile = {
@@ -292,6 +311,7 @@ const STORAGE_KEYS = {
   savedProspects: 'reproute:saved-prospects',
   prospectRecords: 'reproute:prospect-records',
   routeList: 'reproute:route-list',
+  followUpEntries: 'reproute:follow-up-entries',
   notificationPreferences: 'reproute:notification-preferences',
   notificationReminderLog: 'reproute:notification-reminder-log',
   arrivalDetectionRadiusFeet: 'reproute:arrival-detection-radius-feet',
@@ -948,6 +968,18 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
         nextRecord.followUpDate = record.followUpDate
       }
 
+      if (typeof record.followUpTime === 'string') {
+        nextRecord.followUpTime = record.followUpTime
+      }
+
+      if (typeof record.followUpCompleted === 'boolean') {
+        nextRecord.followUpCompleted = record.followUpCompleted
+      }
+
+      if (isIsoDateTime(record.followUpCompletedAt)) {
+        nextRecord.followUpCompletedAt = record.followUpCompletedAt
+      }
+
       if (typeof record.visitNote === 'string') {
         nextRecord.visitNote = record.visitNote
       }
@@ -990,11 +1022,16 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
     }
   }
 
+  const followUpEntries = sanitizeFollowUpStore(
+    isRecord(data.followUpEntries) ? data.followUpEntries : {},
+  )
+
   return {
     liveProspects,
     savedProspects,
     routeList,
     prospectRecords,
+    followUpEntries,
   }
 }
 
@@ -1007,9 +1044,7 @@ function summarizeBackupPayload(payload: BackupPayload) {
     route: payload.routeList.length,
     notes: records.filter((record) => typeof record.notes === 'string').length,
     priorities: records.filter((record) => typeof record.priority === 'string').length,
-    followUps: records.filter(
-      (record) => typeof record.followUpDate === 'string' && record.followUpDate !== '',
-    ).length,
+    followUps: Object.keys(payload.followUpEntries ?? {}).length,
     businessCards: records.filter((record) => typeof record.businessCardCapturedAt === 'string').length,
   }
 }
@@ -1645,8 +1680,8 @@ function CurrentStopCard({
   onUpdatePriority,
   onUpdateOutcome,
   cardPreviewUrl,
-  onCaptureBusinessCard,
   onRemoveBusinessCard,
+  onRouteBusinessCardCapture,
 }: {
   prospect: Prospect
   isOnLocation: boolean
@@ -1670,12 +1705,12 @@ function CurrentStopCard({
   ) => void
   onUpdateNotes: (prospectId: string, notes: string) => void
   onUpdateVisitNote: (prospectId: string, note: string) => void
-  onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
+  onUpdateFollowUp: (prospectId: string, followUpDate: string, followUpTime?: string, confirmSave?: boolean) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
   cardPreviewUrl: string | null
-  onCaptureBusinessCard: (prospectId: string, file: File) => void
   onRemoveBusinessCard: (prospectId: string) => void
+  onRouteBusinessCardCapture: (file: File) => void
 }) {
   const [openPanels, setOpenPanels] = useState({
     contact: true,
@@ -1777,7 +1812,15 @@ function CurrentStopCard({
           <UtensilsCrossed size={16} />
           {uiText.foodNearby.findFoodNearby}
         </button>
+        <BusinessCardScanButton onFileSelected={onRouteBusinessCardCapture} />
       </div>
+
+      <BusinessCardPreviewStrip
+        prospectId={prospect.id}
+        previewUrl={cardPreviewUrl}
+        onCapture={onRouteBusinessCardCapture}
+        onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
+      />
 
       <div className="current-stop-card__quick-actions">
         <button type="button" className="button" onClick={() => onToggleCompleted(prospect.id)}>
@@ -1849,9 +1892,10 @@ function CurrentStopCard({
               contactPhone: prospect.phone,
               contactEmail: prospect.contactEmail,
             }}
-            onCapture={(file) => onCaptureBusinessCard(prospect.id, file)}
+            onCapture={onRouteBusinessCardCapture}
             onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
             onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
+            showScanButton={false}
           />
           <div className="field-group">
             <span className="field-label">{uiText.routes.currentStop.contactFields.website}</span>
@@ -1907,8 +1951,30 @@ function CurrentStopCard({
             className="text-input"
             type="date"
             value={prospect.followUpDate}
-            onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value)}
+            onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value, prospect.followUpTime)}
           />
+          <div className="field-group">
+            <span className="field-label">{uiText.followUps.timeLabel}</span>
+            <input
+              className="text-input"
+              type="time"
+              value={prospect.followUpTime}
+              disabled={!prospect.followUpDate}
+              onChange={(event) =>
+                onUpdateFollowUp(prospect.id, prospect.followUpDate, event.target.value)
+              }
+            />
+          </div>
+          <button
+            type="button"
+            className="button button--ghost"
+            disabled={!prospect.followUpDate}
+            onClick={() =>
+              onUpdateFollowUp(prospect.id, prospect.followUpDate, prospect.followUpTime, true)
+            }
+          >
+            {uiText.followUps.saveFollowUp}
+          </button>
         </div>
       ) : null}
 
@@ -1973,8 +2039,8 @@ function RouteWorkflowStopCard({
   onUpdateOutcome,
   onRemove,
   cardPreviewUrl,
-  onCaptureBusinessCard,
   onRemoveBusinessCard,
+  onRouteBusinessCardCapture,
   onUpdateContactDetails,
 }: {
   index: number
@@ -1994,8 +2060,8 @@ function RouteWorkflowStopCard({
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
   onRemove: (prospectId: string) => void
   cardPreviewUrl: string | null
-  onCaptureBusinessCard: (prospectId: string, file: File) => void
   onRemoveBusinessCard: (prospectId: string) => void
+  onRouteBusinessCardCapture: (file: File) => void
   onUpdateContactDetails: (
     prospectId: string,
     fields: Partial<
@@ -2155,7 +2221,15 @@ function RouteWorkflowStopCard({
           <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
           {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
         </button>
+        <BusinessCardScanButton onFileSelected={onRouteBusinessCardCapture} />
       </div>
+
+      <BusinessCardPreviewStrip
+        prospectId={prospect.id}
+        previewUrl={cardPreviewUrl}
+        onCapture={onRouteBusinessCardCapture}
+        onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
+      />
 
       <BusinessCardSection
         prospectId={prospect.id}
@@ -2166,9 +2240,10 @@ function RouteWorkflowStopCard({
           contactPhone: prospect.phone,
           contactEmail: prospect.contactEmail,
         }}
-        onCapture={(file) => onCaptureBusinessCard(prospect.id, file)}
+        onCapture={onRouteBusinessCardCapture}
         onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
         onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
+        showScanButton={false}
       />
 
       <div className="field-group">
@@ -2370,7 +2445,7 @@ function ProspectCard({
   onToggleExpanded: (prospectId: string) => void
   onUpdateNotes: (prospectId: string, notes: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
-  onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
+  onUpdateFollowUp: (prospectId: string, followUpDate: string, followUpTime?: string, confirmSave?: boolean) => void
 }) {
   const notesPreview = prospect.notes.trim() || prospect.visitNote.trim() || uiText.saved.notesPreviewEmpty
   const followUpStatus = prospect.followUpDate
@@ -2492,9 +2567,33 @@ function ProspectCard({
               className="text-input"
               type="date"
               value={prospect.followUpDate}
-              onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value)}
+              onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value, prospect.followUpTime)}
             />
           </div>
+
+          <div className="field-group">
+            <span className="field-label">{uiText.followUps.timeLabel}</span>
+            <input
+              className="text-input"
+              type="time"
+              value={prospect.followUpTime}
+              disabled={!prospect.followUpDate}
+              onChange={(event) =>
+                onUpdateFollowUp(prospect.id, prospect.followUpDate, event.target.value)
+              }
+            />
+          </div>
+
+          <button
+            type="button"
+            className="button button--ghost"
+            disabled={!prospect.followUpDate}
+            onClick={() =>
+              onUpdateFollowUp(prospect.id, prospect.followUpDate, prospect.followUpTime, true)
+            }
+          >
+            {uiText.followUps.saveFollowUp}
+          </button>
 
           <label className="field-group">
             <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
@@ -2549,6 +2648,7 @@ function App() {
   const [navigationArrivedStopIds, setNavigationArrivedStopIds] = useState<Record<string, boolean>>({})
   const [foodNearbySession, setFoodNearbySession] = useState<FoodNearbySession | null>(null)
   const [businessCardPreviewUrls, setBusinessCardPreviewUrls] = useState<Record<string, string>>({})
+  const [businessCardPendingAttach, setBusinessCardPendingAttach] = useState<{ file: File } | null>(null)
   const [foodNearbyRadiusMiles, setFoodNearbyRadiusMiles] = useState<FoodRadiusMiles>(1)
   const [foodNearbyActiveChip, setFoodNearbyActiveChip] = useState<FoodQuickChip | null>(null)
   const [foodNearbyLoading, setFoodNearbyLoading] = useState(false)
@@ -2573,6 +2673,17 @@ function App() {
     STORAGE_KEYS.prospectRecords,
     {},
   )
+  const [followUpEntries, setFollowUpEntries] = usePersistentState<Record<string, FollowUpEntry>>(
+    STORAGE_KEYS.followUpEntries,
+    {},
+  )
+  const [editingFollowUpId, setEditingFollowUpId] = useState<string | null>(null)
+  const [followUpEditDraft, setFollowUpEditDraft] = useState({
+    date: '',
+    time: DEFAULT_FOLLOW_UP_TIME,
+    notes: '',
+  })
+  const lastFollowUpSaveRef = useRef<Record<string, { date: string; time: string; at: number }>>({})
   const [notificationPreferences, setNotificationPreferences] =
     usePersistentState<NotificationPreferences>(
       STORAGE_KEYS.notificationPreferences,
@@ -2955,7 +3066,11 @@ function App() {
           address: record?.addressOverride ?? prospect.address,
           location: record?.locationOverride ?? prospect.location,
           lastContactDate: record?.lastContactDate ?? '',
-          followUpDate: record?.followUpDate ?? '',
+          followUpDate: followUpEntries[prospect.id]?.followUpDate ?? record?.followUpDate ?? '',
+          followUpTime:
+            followUpEntries[prospect.id]?.followUpTime ??
+            record?.followUpTime ??
+            DEFAULT_FOLLOW_UP_TIME,
           routeCompleted: record?.routeCompleted ?? false,
           visitNote: record?.visitNote ?? '',
           visitOutcome: record?.visitOutcome ?? '',
@@ -2965,7 +3080,7 @@ function App() {
           businessCardCapturedAt: record?.businessCardCapturedAt ?? '',
         }
       }),
-    [liveProspects, prospectRecords],
+    [followUpEntries, liveProspects, prospectRecords],
   )
 
   const prospects = useMemo(() => liveCatalogProspects, [liveCatalogProspects])
@@ -2974,6 +3089,80 @@ function App() {
     () => new globalThis.Map(prospects.map((prospect) => [prospect.id, prospect])),
     [prospects],
   )
+
+  useEffect(() => {
+    setFollowUpEntries((current) => {
+      const migrated = migrateFollowUpsFromProspectRecords(
+        prospectRecords,
+        current,
+        routeIds,
+        savedIds,
+        (prospectId) => {
+          const prospect = prospectMap.get(prospectId)
+          if (prospect) {
+            return {
+              businessName: prospect.businessName,
+              address: prospect.address,
+              category: prospect.category,
+              city: prospect.city,
+              phone: prospect.phone,
+              contactName: prospect.contactName,
+              contactTitle: prospect.contactTitle,
+              contactEmail: prospect.contactEmail,
+              notes: prospect.notes,
+              priority: prospect.priority,
+            }
+          }
+
+          const base = liveProspects.find((item) => item.id === prospectId)
+          const record = prospectRecords[prospectId]
+
+          if (!base) {
+            return null
+          }
+
+          return {
+            businessName: base.businessName,
+            address: record?.addressOverride ?? base.address,
+            category: base.category,
+            city: base.city,
+            phone: record?.contactPhone ?? base.phone,
+            contactName: record?.contactName ?? base.contactName,
+            contactTitle: record?.contactTitle ?? base.contactTitle,
+            contactEmail: record?.contactEmail ?? base.contactEmail,
+            notes: record?.notes ?? base.notes,
+            priority: record?.priority ?? base.priority,
+          }
+        },
+      )
+
+      const hasNewEntry = Object.keys(migrated).some((key) => !current[key])
+      return hasNewEntry ? migrated : current
+    })
+  }, [liveProspects, prospectMap, prospectRecords, routeIds, savedIds, setFollowUpEntries])
+
+  useEffect(() => {
+    setFollowUpEntries((current) => {
+      let changed = false
+      const next: Record<string, FollowUpEntry> = { ...current }
+
+      for (const [prospectId, entry] of Object.entries(current)) {
+        const routeStatus = resolveFollowUpRouteStatus(prospectId, routeIds, savedIds)
+
+        if (entry.routeStatus !== routeStatus) {
+          next[prospectId] = {
+            ...entry,
+            routeStatus,
+            updatedAt: new Date().toISOString(),
+          }
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+  }, [routeIds, savedIds, setFollowUpEntries])
+
   const promptedProspect = useMemo(
     () => (removeProspectPrompt ? prospectMap.get(removeProspectPrompt.prospectId) ?? null : null),
     [prospectMap, removeProspectPrompt],
@@ -3093,19 +3282,79 @@ function App() {
       })
   }, [prospects, routeIds, savedIds, searchResultProspects])
 
-  const scheduledFollowUps = useMemo(
-    () =>
-      prospects
-        .filter((prospect) => prospect.followUpDate)
-        .sort((left, right) => {
-          if (left.followUpDate !== right.followUpDate) {
-            return left.followUpDate.localeCompare(right.followUpDate)
-          }
+  const scheduledFollowUps = useMemo(() => {
+    return Object.values(followUpEntries)
+      .filter((entry) => !entry.completed && entry.followUpDate)
+      .map((entry) => {
+        const prospect = prospectMap.get(entry.prospectId)
 
-          return left.businessName.localeCompare(right.businessName)
-        }),
-    [prospects],
+        if (prospect) {
+          return {
+            ...prospect,
+            followUpDate: entry.followUpDate,
+            followUpTime: entry.followUpTime,
+            notes: entry.notes || prospect.notes,
+          }
+        }
+
+        return {
+          id: entry.prospectId,
+          businessName: entry.businessName,
+          category: entry.category,
+          city: entry.city,
+          address: entry.address,
+          phone: entry.phone,
+          website: 'Website unavailable',
+          contactName: entry.contactName,
+          contactTitle: entry.contactTitle,
+          contactEmail: entry.contactEmail,
+          notes: entry.notes,
+          priority: entry.priority as Prospect['priority'],
+          distance: 0,
+          rating: null,
+          location: { lat: 0, lng: 0 },
+          googlePlaceId: '',
+          lastContact: 'Not contacted yet',
+          nextTouch: '',
+          followUpDate: entry.followUpDate,
+          followUpTime: entry.followUpTime,
+          lastContactDate: '',
+          routeCompleted: false,
+          visitNote: '',
+          visitOutcome: '',
+          visitCompletedAt: '',
+          isFoodStop: false,
+          editedByRepRouteUser: false,
+          businessCardCapturedAt: '',
+        } satisfies Prospect
+      })
+      .sort((left, right) => {
+        if (left.followUpDate !== right.followUpDate) {
+          return left.followUpDate.localeCompare(right.followUpDate)
+        }
+
+        return left.businessName.localeCompare(right.businessName)
+      })
+  }, [followUpEntries, prospectMap])
+
+  const followUpGroups = useMemo(
+    () => groupFollowUpsBySection(Object.values(followUpEntries), getLocalDateKey()),
+    [followUpEntries],
   )
+
+  const followUpStats = useMemo(() => {
+    const todayKey = getLocalDateKey()
+    const pending = Object.values(followUpEntries).filter((entry) => !entry.completed)
+
+    return {
+      scheduled: pending.length,
+      dueNow: pending.filter((entry) => entry.followUpDate && entry.followUpDate <= todayKey).length,
+      thisWeek: pending.filter((entry) => {
+        const daysUntil = getDaysUntil(entry.followUpDate)
+        return daysUntil >= 0 && daysUntil <= 7
+      }).length,
+    }
+  }, [followUpEntries])
 
   const crmScopedProspects = useMemo(() => {
     const dedupe = (items: Prospect[]) =>
@@ -3117,16 +3366,32 @@ function App() {
       case 'route':
         return dedupe(routeProspects)
       case 'followups':
-        return dedupe(scheduledFollowUps)
+        return dedupe(
+          Object.values(followUpEntries).map((entry) => {
+            const prospect = prospectMap.get(entry.prospectId)
+            if (prospect) {
+              return {
+                ...prospect,
+                followUpDate: entry.followUpDate,
+                followUpTime: entry.followUpTime,
+                notes: entry.notes || prospect.notes,
+              }
+            }
+
+            return scheduledFollowUps.find((item) => item.id === entry.prospectId)
+          }).filter((prospect): prospect is Prospect => Boolean(prospect)),
+        )
       case 'all':
       default:
         return dedupe(prospects)
     }
-  }, [crmExportScope, prospects, routeProspects, savedProspects, scheduledFollowUps])
+  }, [crmExportScope, followUpEntries, prospectMap, prospects, routeProspects, savedProspects, scheduledFollowUps])
 
   const crmExportPreview = useMemo(() => {
-    const records = crmScopedProspects.map((prospect) =>
-      buildCrmExportRecord({
+    const records = crmScopedProspects.map((prospect) => {
+      const followUpEntry = followUpEntries[prospect.id]
+
+      return buildCrmExportRecord({
         address: prospect.address,
         businessName: prospect.businessName,
         category: prospect.category,
@@ -3134,7 +3399,10 @@ function App() {
         contactEmail: prospect.contactEmail,
         contactTitle: prospect.contactTitle,
         editedByRepRouteUser: prospect.editedByRepRouteUser,
-        followUpDate: prospect.followUpDate,
+        followUpDate: followUpEntry?.followUpDate ?? prospect.followUpDate,
+        followUpTime: followUpEntry?.followUpTime ?? prospect.followUpTime,
+        followUpCompleted: followUpEntry?.completed,
+        followUpRouteStatus: followUpEntry?.routeStatus,
         googlePlaceId: prospect.googlePlaceId,
         lastContactedDate:
           prospect.lastContactDate ||
@@ -3148,14 +3416,14 @@ function App() {
         visitNotes: prospect.visitNote,
         website: prospect.website,
         businessCardCapturedAt: prospect.businessCardCapturedAt,
-      }),
-    )
+      })
+    })
 
     return {
       records,
       ...buildCrmExportRows(records, crmExportFormat),
     }
-  }, [crmExportFormat, crmScopedProspects])
+  }, [crmExportFormat, crmScopedProspects, followUpEntries])
 
   const hotTerritoryProspects = useMemo(
     () =>
@@ -3290,14 +3558,9 @@ function App() {
       .slice(0, 5)
   }, [prospects, routeIds, routeProspects])
 
-  const upcomingThisWeek = scheduledFollowUps.filter((prospect) => {
-    const daysUntil = getDaysUntil(prospect.followUpDate)
-    return daysUntil >= 0 && daysUntil <= 7
-  }).length
+  const upcomingThisWeek = followUpStats.thisWeek
 
-  const dueNowCount = scheduledFollowUps.filter(
-    (prospect) => getFollowUpStatus(prospect.followUpDate) === uiText.followUps.statuses.dueNow,
-  ).length
+  const dueNowCount = followUpStats.dueNow
   const manualMarketLabel = manualMarket.trim()
   const routeOrigin = useMemo(() => {
     if (isFiniteLatLng(routeTrackerLocation)) {
@@ -3369,8 +3632,9 @@ function App() {
       savedProspects: savedIds,
       routeList: routeIds,
       prospectRecords,
+      followUpEntries,
     }),
-    [liveProspects, prospectRecords, routeIds, savedIds],
+    [followUpEntries, liveProspects, prospectRecords, routeIds, savedIds],
   )
   const currentBackupSummary = useMemo(
     () => summarizeBackupPayload(currentBackupPayload),
@@ -3888,11 +4152,210 @@ function App() {
     }))
   }
 
-  function updateProspectFollowUp(prospectId: string, followUpDate: string) {
+  function removeFollowUp(prospectId: string) {
+    setFollowUpEntries((current) => {
+      if (!current[prospectId]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[prospectId]
+      return next
+    })
+
+    updateProspectRecord(prospectId, (current) => {
+      const next = { ...current }
+      delete next.followUpDate
+      delete next.followUpTime
+      delete next.followUpCompleted
+      delete next.followUpCompletedAt
+      return next
+    })
+  }
+
+  function persistFollowUp(
+    prospectId: string,
+    followUpDate: string,
+    options?: {
+      followUpTime?: string
+      notes?: string
+      completed?: boolean
+      completedAt?: string
+      showToast?: boolean
+      silent?: boolean
+      confirmSave?: boolean
+    },
+  ) {
+    if (!followUpDate) {
+      removeFollowUp(prospectId)
+      return
+    }
+
+    if (!isValidFollowUpDate(followUpDate)) {
+      return
+    }
+
+    const prospect = prospectMap.get(prospectId)
+    const base = liveProspects.find((item) => item.id === prospectId)
+    const record = prospectRecords[prospectId]
+
+    if (!prospect && !base) {
+      return
+    }
+
+    const existing = followUpEntries[prospectId]
+    const followUpTime =
+      options?.followUpTime?.trim() ||
+      existing?.followUpTime ||
+      record?.followUpTime ||
+      DEFAULT_FOLLOW_UP_TIME
+    const notes =
+      options?.notes ??
+      existing?.notes ??
+      prospect?.notes ??
+      record?.notes ??
+      base?.notes ??
+      ''
+    const completed = options?.completed ?? existing?.completed ?? false
+    const completedAt = options?.completedAt ?? existing?.completedAt ?? ''
+
+    const lastSave = lastFollowUpSaveRef.current[prospectId]
+    if (
+      !options?.silent &&
+      existing &&
+      existing.followUpDate === followUpDate &&
+      existing.followUpTime === followUpTime &&
+      existing.notes === notes &&
+      existing.completed === completed &&
+      lastSave &&
+      lastSave.date === followUpDate &&
+      lastSave.time === followUpTime &&
+      Date.now() - lastSave.at < 2000
+    ) {
+      if (options?.confirmSave && options?.showToast !== false) {
+        setActionToast({ type: 'success', text: uiText.followUps.savedToast })
+      }
+
+      return
+    }
+
+    const entry = buildFollowUpSnapshot({
+      prospectId,
+      businessName: prospect?.businessName ?? base?.businessName ?? existing?.businessName ?? prospectId,
+      address: prospect?.address ?? record?.addressOverride ?? base?.address ?? existing?.address ?? '',
+      category: prospect?.category ?? base?.category ?? existing?.category ?? 'Business',
+      city: prospect?.city ?? base?.city ?? existing?.city ?? '',
+      phone: prospect?.phone ?? record?.contactPhone ?? base?.phone ?? existing?.phone ?? '',
+      contactName: prospect?.contactName ?? record?.contactName ?? base?.contactName ?? existing?.contactName ?? '',
+      contactTitle:
+        prospect?.contactTitle ?? record?.contactTitle ?? base?.contactTitle ?? existing?.contactTitle ?? '',
+      contactEmail:
+        prospect?.contactEmail ?? record?.contactEmail ?? base?.contactEmail ?? existing?.contactEmail ?? '',
+      notes,
+      priority: prospect?.priority ?? record?.priority ?? base?.priority ?? existing?.priority ?? 'Unassigned',
+      routeIds,
+      savedIds,
+      followUpDate,
+      followUpTime,
+      completed,
+      completedAt,
+      existing,
+    })
+
+    setFollowUpEntries((current) => ({
+      ...current,
+      [prospectId]: entry,
+    }))
+
     updateProspectRecord(prospectId, (current) => ({
       ...current,
       followUpDate,
+      followUpTime,
+      notes,
+      followUpCompleted: completed,
+      followUpCompletedAt: completedAt,
     }))
+
+    lastFollowUpSaveRef.current[prospectId] = {
+      date: followUpDate,
+      time: followUpTime,
+      at: Date.now(),
+    }
+
+    if (options?.showToast !== false) {
+      setActionToast({ type: 'success', text: uiText.followUps.savedToast })
+    }
+  }
+
+  function updateProspectFollowUp(
+    prospectId: string,
+    followUpDate: string,
+    followUpTime?: string,
+    confirmSave = false,
+  ) {
+    persistFollowUp(prospectId, followUpDate, { followUpTime, confirmSave })
+  }
+
+  function markFollowUpComplete(prospectId: string) {
+    const existing = followUpEntries[prospectId]
+    if (!existing || existing.completed) {
+      return
+    }
+
+    persistFollowUp(prospectId, existing.followUpDate, {
+      followUpTime: existing.followUpTime,
+      notes: existing.notes,
+      completed: true,
+      completedAt: new Date().toISOString(),
+      showToast: false,
+    })
+  }
+
+  function rescheduleFollowUp(prospectId: string, followUpDate: string) {
+    const existing = followUpEntries[prospectId]
+    if (!existing) {
+      return
+    }
+
+    persistFollowUp(prospectId, followUpDate, {
+      followUpTime: existing.followUpTime,
+      notes: existing.notes,
+      completed: false,
+      completedAt: '',
+    })
+  }
+
+  function saveFollowUpEdit(prospectId: string) {
+    persistFollowUp(prospectId, followUpEditDraft.date, {
+      followUpTime: followUpEditDraft.time,
+      notes: followUpEditDraft.notes,
+    })
+    setEditingFollowUpId(null)
+  }
+
+  function navigateFollowUp(entry: FollowUpEntry) {
+    const prospect = prospectMap.get(entry.prospectId)
+
+    if (prospect && isFiniteLatLng(prospect.location)) {
+      openExternalNavigation(createNavigateHref(prospect, travelMode))
+      return
+    }
+
+    if (entry.address.trim()) {
+      const url = new URL('https://www.google.com/maps/search/')
+      url.searchParams.set('api', '1')
+      url.searchParams.set('query', entry.address)
+      openExternalNavigation(url.toString())
+    }
+  }
+
+  function startFollowUpEdit(entry: FollowUpEntry) {
+    setEditingFollowUpId(entry.prospectId)
+    setFollowUpEditDraft({
+      date: entry.followUpDate,
+      time: entry.followUpTime,
+      notes: entry.notes,
+    })
   }
 
   function updateProspectNotes(prospectId: string, notes: string) {
@@ -3913,6 +4376,38 @@ function App() {
       ...fields,
       editedByRepRouteUser: true,
     }))
+  }
+
+  function handleRouteBusinessCardCapture(explicitProspectId: string | undefined, file: File) {
+    if (explicitProspectId) {
+      void captureBusinessCard(explicitProspectId, file)
+      return
+    }
+
+    if (routeProspects.length === 1) {
+      const onlyStop = routeProspects[0]
+      if (onlyStop) {
+        void captureBusinessCard(onlyStop.id, file)
+      }
+      return
+    }
+
+    setBusinessCardPendingAttach({ file })
+  }
+
+  function cancelBusinessCardAttach() {
+    setBusinessCardPendingAttach(null)
+  }
+
+  function confirmBusinessCardAttach(prospectId: string) {
+    const pendingFile = businessCardPendingAttach?.file
+
+    if (!pendingFile) {
+      return
+    }
+
+    setBusinessCardPendingAttach(null)
+    void captureBusinessCard(prospectId, pendingFile)
   }
 
   async function captureBusinessCard(prospectId: string, file: File) {
@@ -5296,6 +5791,7 @@ function App() {
     setSavedIds(importPreview.payload.savedProspects)
     setRouteIds(importPreview.payload.routeList)
     setProspectRecords(restoredRecords)
+    setFollowUpEntries(sanitizeFollowUpStore(importPreview.payload.followUpEntries ?? {}))
     setExpandedProspectId(null)
     setLiveSearchIds([])
     setSearchStatus(null)
@@ -5673,7 +6169,7 @@ function App() {
               </div>
             ) : null}
 
-            <div className="button-row">
+            <div className="button-row route-workflow-action-bar">
               <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
                 <Navigation size={16} />
                 {uiText.routes.inAppNavigation.startRoute}
@@ -5682,6 +6178,10 @@ function App() {
                 <ExternalLink size={16} />
                 {uiText.routes.inAppNavigation.openInMaps}
               </button>
+              <BusinessCardScanButton
+                className="button button--ghost"
+                onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
+              />
             </div>
           </section>
         ) : null}
@@ -5710,6 +6210,10 @@ function App() {
                 <Navigation size={16} />
                 {uiText.routes.inAppNavigation.startRoute}
               </button>
+              <BusinessCardScanButton
+                className="button button--ghost"
+                onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
+              />
               <button
                 type="button"
                 className="button button--ghost"
@@ -5903,6 +6407,20 @@ function App() {
 
         {routeProspects.length > 0 ? (
           <>
+            <section className="panel section-panel route-workflow-action-bar">
+              <div className="section-heading">
+                <div>
+                  <div className="eyebrow eyebrow--tight">{uiText.routes.businessCard.routeActionBarLabel}</div>
+                  <h2>{uiText.routes.fieldWorkflowHeading}</h2>
+                </div>
+              </div>
+              <div className="route-action-row">
+                <BusinessCardScanButton
+                  onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
+                />
+              </div>
+            </section>
+
             {currentStopProspect ? (
               <CurrentStopCard
                 key={currentStopProspect.id}
@@ -5927,8 +6445,10 @@ function App() {
                 onUpdatePriority={updateProspectPriority}
                 onUpdateOutcome={updateVisitOutcome}
                 cardPreviewUrl={businessCardPreviewUrls[currentStopProspect.id] ?? null}
-                onCaptureBusinessCard={captureBusinessCard}
                 onRemoveBusinessCard={removeBusinessCard}
+                onRouteBusinessCardCapture={(file) =>
+                  handleRouteBusinessCardCapture(currentStopProspect.id, file)
+                }
               />
             ) : null}
 
@@ -6066,8 +6586,10 @@ function App() {
                         onUpdateOutcome={updateVisitOutcome}
                         onRemove={openRemoveProspectPrompt}
                         cardPreviewUrl={businessCardPreviewUrls[prospect.id] ?? null}
-                        onCaptureBusinessCard={captureBusinessCard}
                         onRemoveBusinessCard={removeBusinessCard}
+                        onRouteBusinessCardCapture={(file) =>
+                          handleRouteBusinessCardCapture(prospect.id, file)
+                        }
                         onUpdateContactDetails={updateContactDetails}
                       />
                     ))}
@@ -6540,13 +7062,51 @@ function App() {
     )
   }
 
+  function renderFollowUpSection(section: keyof typeof followUpGroups, entries: FollowUpEntry[]) {
+    if (entries.length === 0) {
+      return null
+    }
+
+    return (
+      <section className="follow-up-section stack" key={section}>
+        <div className="section-heading">
+          <h2>{uiText.followUps.sections[section]}</h2>
+          <span className="meta-pill">{entries.length}</span>
+        </div>
+        {entries.map((entry) => (
+          <FollowUpCard
+            key={entry.id}
+            entry={entry}
+            statusLabel={getFollowUpStatus(entry.followUpDate)}
+            isEditing={editingFollowUpId === entry.prospectId}
+            editDate={followUpEditDraft.date}
+            editTime={followUpEditDraft.time}
+            editNotes={followUpEditDraft.notes}
+            onStartEdit={() => startFollowUpEdit(entry)}
+            onCancelEdit={() => setEditingFollowUpId(null)}
+            onSaveEdit={() => saveFollowUpEdit(entry.prospectId)}
+            onEditDateChange={(value) => setFollowUpEditDraft((current) => ({ ...current, date: value }))}
+            onEditTimeChange={(value) => setFollowUpEditDraft((current) => ({ ...current, time: value }))}
+            onEditNotesChange={(value) => setFollowUpEditDraft((current) => ({ ...current, notes: value }))}
+            onMarkComplete={() => markFollowUpComplete(entry.prospectId)}
+            onReschedule={(date) => rescheduleFollowUp(entry.prospectId, date)}
+            onNavigate={() => navigateFollowUp(entry)}
+            onRemove={() => removeFollowUp(entry.prospectId)}
+          />
+        ))}
+      </section>
+    )
+  }
+
   function renderFollowUpsView() {
+    const hasFollowUps = Object.keys(followUpEntries).length > 0
+
     return (
       <>
         <section className="stat-grid">
           <StatCard
             label={uiText.followUps.stats.scheduled}
-            value={`${scheduledFollowUps.length}`}
+            value={`${followUpStats.scheduled}`}
             detail={uiText.followUps.stats.scheduledDetail}
             icon={CalendarClock}
           />
@@ -6564,62 +7124,13 @@ function App() {
           />
         </section>
 
-        {scheduledFollowUps.length > 0 ? (
-          <section className="stack">
-            {scheduledFollowUps.map((prospect) => {
-              const followUpStatus = getFollowUpStatus(prospect.followUpDate)
-
-              return (
-                <article className="follow-up-card" key={prospect.id}>
-                  <div className="follow-up-card__header">
-                    <div>
-                      <div className="eyebrow eyebrow--tight">{prospect.category}</div>
-                      <h3>{prospect.businessName}</h3>
-                      <p>{prospect.city}</p>
-                    </div>
-                    <span
-                      className={`meta-pill ${
-                        followUpStatus === uiText.followUps.statuses.dueNow
-                          ? 'meta-pill--hot'
-                          : followUpStatus === uiText.followUps.statuses.tomorrow ||
-                              followUpStatus === uiText.followUps.statuses.thisWeek
-                            ? 'meta-pill--warm'
-                            : 'meta-pill--cold'
-                      }`}
-                    >
-                      {followUpStatus}
-                    </span>
-                  </div>
-
-                  <div className="follow-up-card__meta">
-                    <span>{formatFollowUpDate(prospect.followUpDate)}</span>
-                    <span>Priority: {prospect.priority}</span>
-                    <span>
-                      {savedIds.includes(prospect.id)
-                        ? uiText.followUps.savedStatus
-                        : uiText.followUps.unsavedStatus}
-                    </span>
-                  </div>
-
-                  <p className="follow-up-card__notes">{prospect.notes}</p>
-
-                  <div className="follow-up-card__footer">
-                    <span className="meta-pill meta-pill--accent">{prospect.nextTouch}</span>
-                    <button
-                      type="button"
-                      className="mini-button"
-                      onClick={() => {
-                        setExpandedProspectId(prospect.id)
-                        setActiveView(savedIds.includes(prospect.id) ? 'saved' : 'search')
-                      }}
-                    >
-                      {uiText.followUps.openProspect}
-                    </button>
-                  </div>
-                </article>
-              )
-            })}
-          </section>
+        {hasFollowUps ? (
+          <div className="follow-up-sections stack">
+            {renderFollowUpSection('overdue', followUpGroups.overdue)}
+            {renderFollowUpSection('today', followUpGroups.today)}
+            {renderFollowUpSection('upcoming', followUpGroups.upcoming)}
+            {renderFollowUpSection('completed', followUpGroups.completed)}
+          </div>
         ) : (
           <EmptyState
             title={uiText.emptyStates.noFollowUpsTitle}
@@ -7317,6 +7828,14 @@ function App() {
         ) : null}
 
       </main>
+
+      {businessCardPendingAttach ? (
+        <BusinessCardAttachStopSheet
+          stops={routeProspects}
+          onSelectStop={confirmBusinessCardAttach}
+          onCancel={cancelBusinessCardAttach}
+        />
+      ) : null}
 
       {foodNearbyAnchorProspect ? (
         <FoodNearbyModal

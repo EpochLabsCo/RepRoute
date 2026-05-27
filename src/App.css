@@ -1499,6 +1499,92 @@
   flex-shrink: 0;
 }
 
+.route-workflow-action-bar .route-action-row {
+  margin-top: 4px;
+}
+
+.business-card-preview-strip {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.business-card-preview-strip__thumb {
+  display: flex;
+  justify-content: center;
+}
+
+.business-card-preview-strip__thumb img {
+  width: min(100%, 200px);
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.business-card-preview-strip__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.business-card-section__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.business-card-attach-sheet {
+  z-index: 10150;
+}
+
+.business-card-attach-sheet__panel {
+  max-height: min(80dvh, 720px);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+}
+
+.business-card-attach-sheet__list {
+  display: grid;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+}
+
+.business-card-attach-sheet__stop {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.business-card-attach-sheet__stop-order {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.business-card-attach-sheet__stop-name {
+  font-weight: 700;
+}
+
+.business-card-attach-sheet__stop-address {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
 .business-card-section {
   display: grid;
   gap: 12px;
@@ -2164,6 +2250,41 @@
   flex-wrap: wrap;
   gap: 8px 14px;
   font-size: 0.82rem;
+}
+
+.follow-up-sections {
+  display: grid;
+  gap: 24px;
+}
+
+.follow-up-section .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.follow-up-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.follow-up-card__editor {
+  display: grid;
+  gap: 12px;
+}
+
+.follow-up-card__contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.follow-up-card--completed {
+  opacity: 0.82;
 }
 
 .profile-card {

@@ -27,6 +27,9 @@ export type CrmExportRecord = {
   visitCompleted: string
   visitCompletedDateTime: string
   followUpDate: string
+  followUpTime: string
+  followUpCompleted: string
+  followUpRouteStatus: string
   lastContactedDate: string
   routeOutcomeTag: string
   googlePlaceId: string
@@ -71,6 +74,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompleted: 'Visit Completed',
       visitCompletedDateTime: 'Visit Completed Date/Time',
       followUpDate: 'Follow-Up Date',
+      followUpTime: 'Follow-Up Time',
+      followUpCompleted: 'Follow-Up Completed',
+      followUpRouteStatus: 'Follow-Up Route Status',
       lastContactedDate: 'Last Contacted Date',
       routeOutcomeTag: 'Route Outcome Tag',
       googlePlaceId: 'Place ID',
@@ -104,6 +110,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompleted: 'RepRoute visit completed',
       visitCompletedDateTime: 'RepRoute visit completed at',
       followUpDate: 'Next activity date',
+      followUpTime: 'RepRoute follow-up time',
+      followUpCompleted: 'RepRoute follow-up completed',
+      followUpRouteStatus: 'RepRoute follow-up route status',
       lastContactedDate: 'Last contacted',
       routeOutcomeTag: 'RepRoute route outcome',
       googlePlaceId: 'RepRoute Place ID',
@@ -137,6 +146,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompleted: 'Visit_Completed__c',
       visitCompletedDateTime: 'Visit_Completed_At__c',
       followUpDate: 'Follow_Up_Date__c',
+      followUpTime: 'Follow_Up_Time__c',
+      followUpCompleted: 'Follow_Up_Completed__c',
+      followUpRouteStatus: 'Follow_Up_Route_Status__c',
       lastContactedDate: 'Last_Contacted_Date__c',
       routeOutcomeTag: 'Route_Outcome__c',
       googlePlaceId: 'Place_ID__c',
@@ -170,6 +182,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompleted: 'Visit Completed',
       visitCompletedDateTime: 'Visit Completed Date/Time',
       followUpDate: 'Follow Up Date',
+      followUpTime: 'Follow Up Time',
+      followUpCompleted: 'Follow Up Completed',
+      followUpRouteStatus: 'Follow Up Route Status',
       lastContactedDate: 'Last Contacted Date',
       routeOutcomeTag: 'Route Outcome',
       googlePlaceId: 'Place ID',
@@ -203,6 +218,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompleted: 'Visit completed',
       visitCompletedDateTime: 'Visit completed at',
       followUpDate: 'Follow-up date',
+      followUpTime: 'Follow-up time',
+      followUpCompleted: 'Follow-up completed',
+      followUpRouteStatus: 'Follow-up route status',
       lastContactedDate: 'Last contacted date',
       routeOutcomeTag: 'Route outcome',
       googlePlaceId: 'Place ID',
@@ -242,6 +260,9 @@ const CRM_EXPORT_FIELD_ORDER: CrmExportColumnKey[] = [
   'visitCompleted',
   'visitCompletedDateTime',
   'followUpDate',
+  'followUpTime',
+  'followUpCompleted',
+  'followUpRouteStatus',
   'lastContactedDate',
   'routeOutcomeTag',
   'googlePlaceId',
@@ -353,6 +374,9 @@ export function buildCrmExportRecord(input: {
   contactEmail?: string
   editedByRepRouteUser?: boolean
   followUpDate?: string
+  followUpTime?: string
+  followUpCompleted?: boolean
+  followUpRouteStatus?: string
   googlePlaceId?: string
   lastContactedDate?: string
   notes: string
@@ -387,6 +411,9 @@ export function buildCrmExportRecord(input: {
     visitCompleted: input.visitCompleted ? 'Yes' : '',
     visitCompletedDateTime: input.visitCompletedDateTime ?? '',
     followUpDate: input.followUpDate ?? '',
+    followUpTime: input.followUpTime ?? '',
+    followUpCompleted: input.followUpCompleted ? 'Yes' : '',
+    followUpRouteStatus: input.followUpRouteStatus ?? '',
     lastContactedDate: input.lastContactedDate ?? '',
     routeOutcomeTag: input.routeOutcomeTag ?? '',
     googlePlaceId: input.googlePlaceId ?? '',
