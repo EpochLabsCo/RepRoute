@@ -103,6 +103,8 @@ import {
 } from './lib/businessCardStorage'
 import {
   fetchRouteDirectionsWithFallback,
+  optimizeRouteStopOrder,
+  ROUTE_OPTIMIZATION_BATCH_STOPS,
   validateRouteStopsForDirections,
   waitForGoogleMaps,
   type RouteDirectionsStop,
@@ -220,7 +222,15 @@ type ToastMessage = {
 type RouteOptimizationState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'success'; forRouteKey: string; distanceMiles: number; driveMinutes: number }
+  | {
+      status: 'success'
+      forRouteKey: string
+      distanceMiles: number
+      driveMinutes: number
+      optimizedCount: number
+      skippedCount: number
+      batched: boolean
+    }
   | { status: 'error'; message: string }
 
 type RouteActionMessage = { tone: 'info' | 'error' | 'success'; text: string; persistent?: boolean } | null
@@ -234,6 +244,9 @@ type RouteOptimizationDebug = {
   destination?: unknown
   waypointCount?: number
   stopCount: number
+  optimizedCount: number
+  skippedCount: number
+  batched: boolean
   missingCoordinatesCount: number
 } | null
 
@@ -247,7 +260,9 @@ type RouteRenderDebug = {
   directionsStatus: string
   rendererStatus: RouteLineRenderStatus
   usedFallback: boolean
+  partialLine: boolean
   waypointCount: number
+  requestedStopCount: number
 } | null
 
 type ImportPreview = {
@@ -2416,6 +2431,8 @@ function App() {
   const routeCalculationSummaryRef = useRef<HTMLElement | null>(null)
   const routeMapSectionRef = useRef<HTMLElement | null>(null)
   const routeNavHistoryPushedRef = useRef(false)
+  const routeDirectionsRequestIdRef = useRef(0)
+  const optimizeRouteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const routeNavSuppressPopStateRef = useRef(false)
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
   const [activeView, setActiveView] = useState<View>('search')
@@ -4323,6 +4340,7 @@ function App() {
   }
 
   async function loadRouteNavigationDirections() {
+    const requestId = ++routeDirectionsRequestIdRef.current
     const attemptedAt = new Date().toISOString()
     const origin =
       routeOrigin.origin ??
@@ -4343,7 +4361,9 @@ function App() {
         directionsStatus: 'NO_ORIGIN',
         rendererStatus: 'no-directions',
         usedFallback: false,
+        partialLine: false,
         waypointCount: 0,
+        requestedStopCount: routeProspects.length,
       })
       return
     }
@@ -4406,7 +4426,9 @@ function App() {
         directionsStatus: 'NO_STOPS',
         rendererStatus: mapReady ? 'no-directions' : 'map-loading',
         usedFallback: false,
+        partialLine: false,
         waypointCount: 0,
+        requestedStopCount: routeProspects.length,
       })
       return
     }
@@ -4427,8 +4449,14 @@ function App() {
         directionsStatus: 'NO_MAPS',
         rendererStatus: 'map-loading',
         usedFallback: false,
+        partialLine: false,
         waypointCount: Math.max(0, orderedStops.length - 1),
+        requestedStopCount: orderedStops.length,
       })
+      return
+    }
+
+    if (requestId !== routeDirectionsRequestIdRef.current) {
       return
     }
 
@@ -4439,6 +4467,10 @@ function App() {
       orderedStops,
       travelMode: getGoogleDirectionsTravelMode(travelMode),
     })
+
+    if (requestId !== routeDirectionsRequestIdRef.current) {
+      return
+    }
 
     setRouteNavigationLoading(false)
     setRouteDirectionsApiStatus(fetchResult.status)
@@ -4456,16 +4488,10 @@ function App() {
       directionsStatus: fetchResult.status,
       rendererStatus: 'rendering',
       usedFallback: fetchResult.usedFallback,
+      partialLine: fetchResult.partialLine,
       waypointCount: fetchResult.waypointCount,
+      requestedStopCount: fetchResult.requestedStopCount,
     })
-
-    if (fetchResult.status === 'WAYPOINT_LIMIT_EXCEEDED') {
-      setRouteNavigationDirections(null)
-      setRouteNavigationError(uiText.routes.inAppNavigation.tooManyStops)
-      setRouteLineRenderStatus('no-directions')
-      console.warn('[RepRoute] Route line waypoint limit exceeded', fetchResult.waypointCount)
-      return
-    }
 
     if (!fetchResult.result || fetchResult.status !== okStatus) {
       setRouteNavigationDirections(null)
@@ -4479,8 +4505,20 @@ function App() {
     setRouteNavigationError(null)
     setRouteLineRenderStatus('rendering')
 
+    if (fetchResult.partialLine) {
+      setRouteActionMessage({
+        tone: 'info',
+        text: uiText.routes.inAppNavigation.partialRouteLine,
+        persistent: true,
+      })
+    }
+
     if (fetchResult.usedFallback) {
       console.info('[RepRoute] Route line used sequential fallback', fetchResult.status)
+    }
+
+    if (fetchResult.partialLine) {
+      console.info('[RepRoute] Route line truncated for large route', fetchResult.requestedStopCount)
     }
   }
 
@@ -4589,11 +4627,6 @@ function App() {
     const stopsForNavigation =
       routeOrigin.source === 'first-stop' ? routeProspects.slice(1) : routeProspects
 
-    if (stopsForNavigation.length > 25) {
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.routeTooLarge })
-      return
-    }
-
     if (!stopsForNavigation.every((stop) => isFiniteLatLng(stop.location))) {
       setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.missingCoordinates })
       return
@@ -4616,8 +4649,31 @@ function App() {
       return
     }
 
-    void loadRouteNavigationDirections()
+    const timer = window.setTimeout(() => {
+      void loadRouteNavigationDirections()
+    }, 400)
+
+    return () => window.clearTimeout(timer)
   }, [activeView, routeIds.join('|'), travelMode, routeStartLocation, manualMarketLabel])
+
+  useEffect(() => {
+    return () => {
+      if (optimizeRouteTimerRef.current) {
+        window.clearTimeout(optimizeRouteTimerRef.current)
+      }
+    }
+  }, [])
+
+  function scheduleOptimizeRoute(originOverride?: string) {
+    if (optimizeRouteTimerRef.current) {
+      window.clearTimeout(optimizeRouteTimerRef.current)
+    }
+
+    optimizeRouteTimerRef.current = window.setTimeout(() => {
+      optimizeRouteTimerRef.current = null
+      void optimizeRoute(originOverride)
+    }, 400)
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -4657,7 +4713,6 @@ function App() {
     const attemptedAt = new Date().toISOString()
     const stopCount = routeProspects.length
     const missingCoordinatesCount = routeProspects.filter((stop) => !isFiniteLatLng(stop.location)).length
-
     const logPrefix = '[RepRoute] Optimize Route'
 
     const originCandidate =
@@ -4671,49 +4726,28 @@ function App() {
     const originFromMarket = manualMarketLabel ? manualMarketLabel : null
     const originResolved = originCandidate ?? originFromMarket ?? null
 
+    const setDebug = (patch: Partial<NonNullable<RouteOptimizationDebug>>) => {
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'idle',
+        stopCount,
+        optimizedCount: 0,
+        skippedCount: 0,
+        batched: false,
+        missingCoordinatesCount,
+        ...patch,
+      })
+    }
+
     console.groupCollapsed(`${logPrefix} (${attemptedAt})`)
     console.info('routeStopCount', stopCount)
-    console.info('routeTrackerLocation', routeTrackerLocation)
-    console.info('startingLocationField', routeStartLocation)
-    console.info('market', manualMarketLabel)
-    console.info('originResolved', originResolved)
-    console.table(
-      routeProspects.map((stop, index) => ({
-        index,
-        id: stop.id,
-        name: stop.businessName,
-        address: stop.address,
-        lat: stop.location?.lat,
-        lng: stop.location?.lng,
-        hasCoords: isFiniteLatLng(stop.location),
-      })),
-    )
+    console.info('batchLimit', ROUTE_OPTIMIZATION_BATCH_STOPS)
 
     if (stopCount === 0) {
       console.warn('No route stops')
       console.groupEnd()
       setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops, persistent: true })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'error',
-        message: uiText.routes.optimization.noStops,
-        stopCount,
-        missingCoordinatesCount,
-      })
-      return
-    }
-
-    if (stopCount > 25) {
-      console.warn('Too many stops', stopCount)
-      console.groupEnd()
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.routeTooLarge, persistent: true })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'error',
-        message: uiText.routes.optimization.routeTooLarge,
-        stopCount,
-        missingCoordinatesCount,
-      })
+      setDebug({ status: 'error', message: uiText.routes.optimization.noStops })
       return
     }
 
@@ -4723,31 +4757,22 @@ function App() {
 
     if (invalidStops.length > 0) {
       const firstInvalid = invalidStops[0]?.stop
-      const message = firstInvalid ? uiText.routes.optimization.invalidStop(firstInvalid.businessName) : uiText.routes.optimization.error
+      const message = firstInvalid
+        ? uiText.routes.optimization.invalidStop(firstInvalid.businessName)
+        : uiText.routes.optimization.error
       console.warn('Invalid stops for directions', invalidStops.map((entry) => entry.stop.businessName))
       console.groupEnd()
       setRouteActionMessage({ tone: 'error', text: message, persistent: true })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'error',
-        message,
-        stopCount,
-        missingCoordinatesCount,
-      })
+      setDebug({ status: 'error', message })
       return
     }
 
-    if (typeof window === 'undefined' || !('google' in window) || !window.google?.maps) {
+    const mapsReady = await waitForGoogleMaps()
+    if (!mapsReady) {
       console.warn('Google Maps JS not available')
       console.groupEnd()
       setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'error',
-        message: uiText.routes.optimization.error,
-        stopCount,
-        missingCoordinatesCount,
-      })
+      setDebug({ status: 'error', message: uiText.routes.optimization.error })
       return
     }
 
@@ -4758,164 +4783,82 @@ function App() {
     if (!origin) {
       console.warn('No origin available')
       console.groupEnd()
-      setRouteActionMessage({
-        tone: 'error',
-        text: uiText.routes.optimization.error,
-        persistent: true,
-      })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'error',
-        message: uiText.routes.optimization.error,
-        stopCount,
-        missingCoordinatesCount,
-      })
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
+      setDebug({ status: 'error', message: uiText.routes.optimization.error })
       return
     }
 
     setRouteOptimization({ status: 'loading' })
     setRouteActionMessage(null)
-    setRouteOptimizationDebug({
-      lastAttemptedAt: attemptedAt,
-      status: 'loading',
-      stopCount,
-      missingCoordinatesCount,
+    setDebug({ status: 'loading' })
+
+    const directionsStops = routeProspects.map(prospectToRouteDirectionsStop)
+    const optimization = await optimizeRouteStopOrder({
+      origin,
+      stops: directionsStops,
+      travelMode: getGoogleDirectionsTravelMode(travelMode),
+      batchStopLimit: ROUTE_OPTIMIZATION_BATCH_STOPS,
     })
 
-    const resolvedStops = routeProspects.map((stop) => ({
-      id: stop.id,
-      location: resolveDirectionsLocation(stop) as string | { lat: number; lng: number },
-    }))
-
-    const destination = resolvedStops[resolvedStops.length - 1]?.location
-    const waypointEntries = resolvedStops.slice(0, -1)
-
-    const request: google.maps.DirectionsRequest = {
-      origin,
-      destination,
-      travelMode: getGoogleDirectionsTravelMode(travelMode),
-      optimizeWaypoints: stopCount > 2,
-      waypoints:
-        waypointEntries.length > 0
-          ? waypointEntries.map((entry) => ({
-              location: entry.location,
-              stopover: true,
-            }))
-          : undefined,
-    }
-
-    console.info('DirectionsService request', request)
-
-    const service = new google.maps.DirectionsService()
-
-    const { result, status } = await new Promise<{ result: google.maps.DirectionsResult | null; status: string }>(
-      (resolve) => {
-        service.route(request, (response, responseStatus) => {
-          resolve({
-            result: response ?? null,
-            status: String(responseStatus),
-          })
-        })
-      },
-    )
-
-    console.info('DirectionsService status', status)
-    if (!result) {
-      console.warn('DirectionsService result missing', status)
-    }
-    console.info('DirectionsService result', result)
+    console.info('optimizeRouteStopOrder', optimization)
     console.groupEnd()
 
-    if (!result?.routes?.[0] || status !== String(google.maps.DirectionsStatus.OK)) {
+    const okStatus = String(google.maps.DirectionsStatus.OK)
+    const distanceMiles = metersToMiles(optimization.distanceMeters)
+    const driveMinutes = secondsToMinutes(optimization.durationSeconds)
+    const waypointCount = Math.max(0, Math.min(optimization.optimizedStopCount, stopCount) - 1)
+
+    if (optimization.status !== okStatus && optimization.status !== 'NO_STOPS') {
       setRouteOptimization({ status: 'idle' })
       setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
+      setDebug({
         status: 'error',
-        directionsStatus: status,
+        directionsStatus: optimization.status,
         message: uiText.routes.optimization.error,
         origin,
-        destination,
-        waypointCount: waypointEntries.length,
-        stopCount,
-        missingCoordinatesCount,
+        waypointCount,
+        optimizedCount: optimization.optimizedStopCount,
+        skippedCount: optimization.skippedStopCount,
+        batched: optimization.batched,
       })
       return
     }
 
-    const route = result.routes[0]
-    const legs = route.legs ?? []
-    const distanceMeters = legs.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0)
-    const durationSeconds = legs.reduce((sum, leg) => sum + (leg.duration?.value ?? 0), 0)
-    const distanceMiles = metersToMiles(distanceMeters)
-    const driveMinutes = secondsToMinutes(durationSeconds)
+    const currentKey = routeIds.join('|')
+    const optimizedKey = optimization.orderedIds.join('|')
+    const orderChanged = optimizedKey !== currentKey
 
-    // 1–2 stops: no reorder needed, but still record metrics.
-    if (stopCount <= 2 || !(route.waypoint_order?.length)) {
-      const key = routeIds.join('|')
-      setRouteOptimization({
-        status: 'success',
-        forRouteKey: key,
-        distanceMiles,
-        driveMinutes,
-      })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'success',
-        directionsStatus: status,
-        origin,
-        destination,
-        waypointCount: waypointEntries.length,
-        stopCount,
-        missingCoordinatesCount,
-      })
-      setActionToast({ type: 'success', text: uiText.routes.optimization.optimized })
-      await loadRouteNavigationDirections()
-      return
+    if (orderChanged) {
+      setRouteIds(optimization.orderedIds)
     }
 
-    const waypointOrder = route.waypoint_order ?? []
-    const waypointIds = waypointEntries.map((entry) => entry.id)
-
-    if (waypointOrder.length !== waypointIds.length) {
-      setRouteOptimization({ status: 'idle' })
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
-      setRouteOptimizationDebug({
-        lastAttemptedAt: attemptedAt,
-        status: 'error',
-        directionsStatus: status,
-        message: uiText.routes.optimization.error,
-        origin,
-        destination,
-        waypointCount: waypointEntries.length,
-        stopCount,
-        missingCoordinatesCount,
-      })
-      return
-    }
-
-    const optimizedWaypointIds = waypointOrder.map((index) => waypointIds[index]).filter(Boolean)
-    const destinationId = resolvedStops[resolvedStops.length - 1]?.id
-    const optimizedIds = [...optimizedWaypointIds, destinationId].filter(Boolean)
-    const optimizedKey = optimizedIds.join('|')
-
-    setRouteIds(optimizedIds)
     setRouteOptimization({
       status: 'success',
       forRouteKey: optimizedKey,
       distanceMiles,
       driveMinutes,
+      optimizedCount: optimization.optimizedStopCount,
+      skippedCount: optimization.skippedStopCount,
+      batched: optimization.batched,
     })
-    setRouteOptimizationDebug({
-      lastAttemptedAt: attemptedAt,
+    setDebug({
       status: 'success',
-      directionsStatus: status,
+      directionsStatus: optimization.status,
       origin,
-      destination,
-      waypointCount: waypointEntries.length,
-      stopCount,
-      missingCoordinatesCount,
+      waypointCount,
+      optimizedCount: optimization.optimizedStopCount,
+      skippedCount: optimization.skippedStopCount,
+      batched: optimization.batched,
     })
+
+    if (optimization.batched) {
+      setRouteActionMessage({
+        tone: 'info',
+        text: uiText.routes.optimization.largeRouteBatch(ROUTE_OPTIMIZATION_BATCH_STOPS),
+        persistent: true,
+      })
+    }
+
     setActionToast({ type: 'success', text: uiText.routes.optimization.optimized })
     await loadRouteNavigationDirections()
 
@@ -5600,7 +5543,7 @@ function App() {
                 <button
                   type="button"
                   className="button button--ghost"
-                  onClick={() => optimizeRoute()}
+                  onClick={() => scheduleOptimizeRoute()}
                   disabled={routeOptimization.status === 'loading'}
                 >
                   <Route size={16} />
@@ -5661,6 +5604,29 @@ function App() {
                 <p className="route-map-external__hint">{uiText.routes.inAppNavigation.openInMapsHint}</p>
               </div>
 
+              <div className="route-diagnostics-summary inline-summary inline-summary--compact">
+                <span className="meta-pill">
+                  {uiText.routes.routeRender.stopCount(routeProspects.length)}
+                </span>
+                <span className="meta-pill">
+                  {uiText.routes.routeRender.optimizedCount(
+                    routeOptimization.status === 'success'
+                      ? routeOptimization.optimizedCount
+                      : routeOptimizationDebug?.optimizedCount ?? routeProspects.length,
+                  )}
+                </span>
+                <span className="meta-pill">
+                  {uiText.routes.routeRender.skippedCount(
+                    routeOptimization.status === 'success'
+                      ? routeOptimization.skippedCount
+                      : routeOptimizationDebug?.skippedCount ?? 0,
+                  )}
+                </span>
+                <span className="meta-pill">
+                  {uiText.routes.routeRender.apiStatus(routeDirectionsApiStatus ?? '—')}
+                </span>
+              </div>
+
               {import.meta.env.DEV ? (
                 <details className="route-diagnostics">
                   <summary className="filter-dropdown__trigger">
@@ -5707,6 +5673,12 @@ function App() {
                       </div>
                     ) : null}
                     <div className="inline-summary">
+                      <span>
+                        {uiText.routes.routeRender.optimizedCount(routeOptimizationDebug?.optimizedCount ?? 0)}
+                      </span>
+                      <span>
+                        {uiText.routes.routeRender.skippedCount(routeOptimizationDebug?.skippedCount ?? 0)}
+                      </span>
                       <span>Last optimize: {routeOptimizationDebug?.status ?? 'idle'}</span>
                       <span>
                         {routeOptimizationDebug?.directionsStatus

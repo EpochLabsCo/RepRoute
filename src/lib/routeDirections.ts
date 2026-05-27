@@ -1,4 +1,14 @@
-export const MAX_OPTIMIZED_WAYPOINTS = 10
+/** Stops included in a single Google waypoint-optimization request (mobile-safe default). */
+export const ROUTE_OPTIMIZATION_BATCH_STOPS = 20
+
+/** Google Directions API allows up to 25 intermediate waypoints per request. */
+export const DIRECTIONS_MAX_WAYPOINTS = 25
+
+/** Max stops in one directions request when origin is separate from the first stop. */
+export const DIRECTIONS_MAX_STOPS_PER_REQUEST = DIRECTIONS_MAX_WAYPOINTS + 1
+
+/** @deprecated Use DIRECTIONS_MAX_WAYPOINTS */
+export const MAX_OPTIMIZED_WAYPOINTS = DIRECTIONS_MAX_WAYPOINTS
 
 export type RouteDirectionsStop = {
   id: string
@@ -22,7 +32,20 @@ export type RouteDirectionsFetchResult = {
   usedFallback: boolean
   optimizeWaypoints: boolean
   waypointCount: number
+  requestedStopCount: number
+  partialLine: boolean
   request: google.maps.DirectionsRequest | null
+}
+
+export type RouteOptimizationResult = {
+  orderedIds: string[]
+  totalStopCount: number
+  optimizedStopCount: number
+  skippedStopCount: number
+  batched: boolean
+  status: string
+  distanceMeters: number
+  durationSeconds: number
 }
 
 export function isFiniteLatLng(value: { lat: number; lng: number } | null | undefined) {
@@ -146,6 +169,26 @@ export function buildDirectionsRequest({
   }
 }
 
+function sumRouteMetrics(route: google.maps.DirectionsRoute) {
+  const legs = route.legs ?? []
+  const distanceMeters = legs.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0)
+  const durationSeconds = legs.reduce((sum, leg) => sum + (leg.duration?.value ?? 0), 0)
+  return { distanceMeters, durationSeconds }
+}
+
+function applyWaypointOrder(stops: RouteDirectionsStop[], waypointOrder: number[]) {
+  if (stops.length <= 1) {
+    return stops.map((stop) => stop.id)
+  }
+
+  const waypointStops = stops.slice(0, -1)
+  const destination = stops[stops.length - 1]
+  const waypointIds = waypointStops.map((stop) => stop.id)
+  const optimizedWaypointIds = waypointOrder.map((index) => waypointIds[index]).filter(Boolean)
+
+  return [...optimizedWaypointIds, destination?.id].filter(Boolean) as string[]
+}
+
 export async function waitForGoogleMaps(maxMs = 12000) {
   if (typeof window === 'undefined') {
     return false
@@ -185,6 +228,203 @@ async function requestDirections(request: google.maps.DirectionsRequest) {
   })
 }
 
+export async function optimizeRouteStopOrder({
+  origin,
+  stops,
+  travelMode,
+  batchStopLimit = ROUTE_OPTIMIZATION_BATCH_STOPS,
+}: {
+  origin: string | { lat: number; lng: number }
+  stops: RouteDirectionsStop[]
+  travelMode: google.maps.TravelMode
+  batchStopLimit?: number
+}): Promise<RouteOptimizationResult> {
+  const totalStopCount = stops.length
+
+  if (totalStopCount === 0) {
+    return {
+      orderedIds: [],
+      totalStopCount: 0,
+      optimizedStopCount: 0,
+      skippedStopCount: 0,
+      batched: false,
+      status: 'NO_STOPS',
+      distanceMeters: 0,
+      durationSeconds: 0,
+    }
+  }
+
+  if (typeof window === 'undefined' || !window.google?.maps) {
+    return {
+      orderedIds: stops.map((stop) => stop.id),
+      totalStopCount,
+      optimizedStopCount: 0,
+      skippedStopCount: 0,
+      batched: false,
+      status: 'NO_MAPS',
+      distanceMeters: 0,
+      durationSeconds: 0,
+    }
+  }
+
+  const batched = totalStopCount > batchStopLimit
+  const stopsToOptimize = batched ? stops.slice(0, batchStopLimit) : stops
+  const remainder = batched ? stops.slice(batchStopLimit) : []
+  const skippedStopCount = remainder.length
+
+  if (stopsToOptimize.length <= 2) {
+    const request = buildDirectionsRequest({
+      origin,
+      orderedStops: stopsToOptimize,
+      travelMode,
+      optimizeWaypoints: false,
+    })
+
+    if (!request) {
+      return {
+        orderedIds: [...stopsToOptimize, ...remainder].map((stop) => stop.id),
+        totalStopCount,
+        optimizedStopCount: stopsToOptimize.length,
+        skippedStopCount,
+        batched,
+        status: 'INVALID_STOPS',
+        distanceMeters: 0,
+        durationSeconds: 0,
+      }
+    }
+
+    const { result, status } = await requestDirections(request)
+    const route = result?.routes?.[0]
+    const okStatus = String(google.maps.DirectionsStatus.OK)
+
+    if (route && status === okStatus) {
+      const { distanceMeters, durationSeconds } = sumRouteMetrics(route)
+      return {
+        orderedIds: [...stopsToOptimize, ...remainder].map((stop) => stop.id),
+        totalStopCount,
+        optimizedStopCount: stopsToOptimize.length,
+        skippedStopCount,
+        batched,
+        status,
+        distanceMeters,
+        durationSeconds,
+      }
+    }
+
+    return {
+      orderedIds: stops.map((stop) => stop.id),
+      totalStopCount,
+      optimizedStopCount: stopsToOptimize.length,
+      skippedStopCount,
+      batched,
+      status,
+      distanceMeters: 0,
+      durationSeconds: 0,
+    }
+  }
+
+  const waypointCount = Math.max(0, stopsToOptimize.length - 1)
+  const canOptimize =
+    stopsToOptimize.length > 2 &&
+    waypointCount > 0 &&
+    waypointCount <= DIRECTIONS_MAX_WAYPOINTS
+
+  const optimizedRequest = buildDirectionsRequest({
+    origin,
+    orderedStops: stopsToOptimize,
+    travelMode,
+    optimizeWaypoints: canOptimize,
+  })
+
+  if (!optimizedRequest) {
+    return {
+      orderedIds: stops.map((stop) => stop.id),
+      totalStopCount,
+      optimizedStopCount: stopsToOptimize.length,
+      skippedStopCount,
+      batched,
+      status: 'INVALID_STOPS',
+      distanceMeters: 0,
+      durationSeconds: 0,
+    }
+  }
+
+  const optimized = await requestDirections(optimizedRequest)
+  const okStatus = String(google.maps.DirectionsStatus.OK)
+  const route = optimized.result?.routes?.[0]
+
+  if (route && optimized.status === okStatus) {
+    const { distanceMeters, durationSeconds } = sumRouteMetrics(route)
+    let batchOrderedIds = stopsToOptimize.map((stop) => stop.id)
+
+    if (canOptimize && route.waypoint_order?.length) {
+      const waypointIds = stopsToOptimize.slice(0, -1).map((stop) => stop.id)
+      if (route.waypoint_order.length === waypointIds.length) {
+        batchOrderedIds = applyWaypointOrder(stopsToOptimize, route.waypoint_order)
+      }
+    }
+
+    return {
+      orderedIds: [...batchOrderedIds, ...remainder.map((stop) => stop.id)],
+      totalStopCount,
+      optimizedStopCount: stopsToOptimize.length,
+      skippedStopCount,
+      batched,
+      status: optimized.status,
+      distanceMeters,
+      durationSeconds,
+    }
+  }
+
+  const sequentialRequest = buildDirectionsRequest({
+    origin,
+    orderedStops: stopsToOptimize,
+    travelMode,
+    optimizeWaypoints: false,
+  })
+
+  if (sequentialRequest) {
+    const sequential = await requestDirections(sequentialRequest)
+    const sequentialRoute = sequential.result?.routes?.[0]
+
+    if (sequentialRoute && sequential.status === okStatus) {
+      const { distanceMeters, durationSeconds } = sumRouteMetrics(sequentialRoute)
+      return {
+        orderedIds: [...stopsToOptimize, ...remainder].map((stop) => stop.id),
+        totalStopCount,
+        optimizedStopCount: stopsToOptimize.length,
+        skippedStopCount,
+        batched,
+        status: sequential.status,
+        distanceMeters,
+        durationSeconds,
+      }
+    }
+
+    return {
+      orderedIds: stops.map((stop) => stop.id),
+      totalStopCount,
+      optimizedStopCount: stopsToOptimize.length,
+      skippedStopCount,
+      batched,
+      status: sequential.status,
+      distanceMeters: 0,
+      durationSeconds: 0,
+    }
+  }
+
+  return {
+    orderedIds: stops.map((stop) => stop.id),
+    totalStopCount,
+    optimizedStopCount: stopsToOptimize.length,
+    skippedStopCount,
+    batched,
+    status: optimized.status,
+    distanceMeters: 0,
+    durationSeconds: 0,
+  }
+}
+
 export async function fetchRouteDirectionsWithFallback({
   origin,
   orderedStops,
@@ -194,6 +434,8 @@ export async function fetchRouteDirectionsWithFallback({
   orderedStops: RouteDirectionsStop[]
   travelMode: google.maps.TravelMode
 }): Promise<RouteDirectionsFetchResult> {
+  const requestedStopCount = orderedStops.length
+
   if (typeof window === 'undefined' || !window.google?.maps) {
     return {
       result: null,
@@ -201,6 +443,8 @@ export async function fetchRouteDirectionsWithFallback({
       usedFallback: false,
       optimizeWaypoints: false,
       waypointCount: 0,
+      requestedStopCount,
+      partialLine: false,
       request: null,
     }
   }
@@ -212,28 +456,26 @@ export async function fetchRouteDirectionsWithFallback({
       usedFallback: false,
       optimizeWaypoints: false,
       waypointCount: 0,
+      requestedStopCount,
+      partialLine: false,
       request: null,
     }
   }
 
-  const waypointCount = Math.max(0, orderedStops.length - 1)
+  let stopsForRequest = orderedStops
+  let partialLine = false
 
-  if (waypointCount > MAX_OPTIMIZED_WAYPOINTS) {
-    return {
-      result: null,
-      status: 'WAYPOINT_LIMIT_EXCEEDED',
-      usedFallback: false,
-      optimizeWaypoints: false,
-      waypointCount,
-      request: null,
-    }
+  if (orderedStops.length > DIRECTIONS_MAX_STOPS_PER_REQUEST) {
+    stopsForRequest = orderedStops.slice(0, DIRECTIONS_MAX_STOPS_PER_REQUEST)
+    partialLine = true
   }
 
-  const shouldOptimize = orderedStops.length > 2
+  const effectiveWaypointCount = Math.max(0, stopsForRequest.length - 1)
+  const shouldOptimize = stopsForRequest.length > 2 && effectiveWaypointCount <= DIRECTIONS_MAX_WAYPOINTS
 
   const optimizedRequest = buildDirectionsRequest({
     origin,
-    orderedStops,
+    orderedStops: stopsForRequest,
     travelMode,
     optimizeWaypoints: shouldOptimize,
   })
@@ -244,77 +486,72 @@ export async function fetchRouteDirectionsWithFallback({
       status: 'INVALID_STOPS',
       usedFallback: false,
       optimizeWaypoints: false,
-      waypointCount,
+      waypointCount: effectiveWaypointCount,
+      requestedStopCount,
+      partialLine,
       request: null,
     }
   }
 
-  console.groupCollapsed('[RepRoute] DirectionsService request')
-  console.info('origin', origin)
-  console.info('orderedStopCount', orderedStops.length)
-  console.info('waypointCount', waypointCount)
-  console.info('optimizeWaypoints', optimizedRequest.optimizeWaypoints)
-  console.info('request', optimizedRequest)
-
   const optimized = await requestDirections(optimizedRequest)
-  console.info('DirectionsService status (optimized)', optimized.status)
-  console.info('DirectionsService result (optimized)', optimized.result)
+  const okStatus = String(google.maps.DirectionsStatus.OK)
 
-  if (optimized.result && optimized.status === String(google.maps.DirectionsStatus.OK)) {
-    console.groupEnd()
+  if (optimized.result && optimized.status === okStatus) {
     return {
       result: optimized.result,
       status: optimized.status,
       usedFallback: false,
       optimizeWaypoints: Boolean(optimizedRequest.optimizeWaypoints),
-      waypointCount,
+      waypointCount: effectiveWaypointCount,
+      requestedStopCount,
+      partialLine,
       request: optimizedRequest,
     }
   }
 
   if (!shouldOptimize) {
-    console.groupEnd()
     return {
       result: optimized.result,
       status: optimized.status,
       usedFallback: false,
       optimizeWaypoints: false,
-      waypointCount,
+      waypointCount: effectiveWaypointCount,
+      requestedStopCount,
+      partialLine,
       request: optimizedRequest,
     }
   }
 
   const sequentialRequest = buildDirectionsRequest({
     origin,
-    orderedStops,
+    orderedStops: stopsForRequest,
     travelMode,
     optimizeWaypoints: false,
   })
 
   if (!sequentialRequest) {
-    console.groupEnd()
     return {
       result: null,
       status: optimized.status,
       usedFallback: true,
       optimizeWaypoints: false,
-      waypointCount,
+      waypointCount: effectiveWaypointCount,
+      requestedStopCount,
+      partialLine,
       request: optimizedRequest,
     }
   }
 
-  console.info('DirectionsService fallback request (sequential)', sequentialRequest)
   const sequential = await requestDirections(sequentialRequest)
-  console.info('DirectionsService status (sequential)', sequential.status)
-  console.info('DirectionsService result (sequential)', sequential.result)
-  console.groupEnd()
 
   return {
     result: sequential.result,
     status: sequential.status,
     usedFallback: true,
     optimizeWaypoints: false,
-    waypointCount,
+    waypointCount: effectiveWaypointCount,
+    requestedStopCount,
+    partialLine,
     request: sequentialRequest,
   }
 }

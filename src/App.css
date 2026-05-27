@@ -911,6 +911,15 @@
   background: var(--surface-soft);
 }
 
+.route-workflow-stack .route-stop-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 7.5rem;
+}
+
+.route-diagnostics-summary {
+  margin-top: 10px;
+}
+
 .route-stop-card {
   display: grid;
   gap: 14px;
