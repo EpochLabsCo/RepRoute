@@ -1240,6 +1240,184 @@
   min-height: 500px;
 }
 
+.route-nav-map {
+  min-height: 320px;
+}
+
+.route-nav-map__canvas {
+  min-height: 320px;
+}
+
+.route-navigation-view {
+  display: grid;
+  gap: 14px;
+}
+
+.route-navigation-view__header {
+  display: grid;
+  gap: 12px;
+}
+
+.route-navigation-view__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.route-navigation-view__back {
+  padding-inline: 10px;
+}
+
+.route-navigation-view__summary,
+.route-navigation-view__progress {
+  flex-wrap: wrap;
+}
+
+.route-navigation-view__map-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.route-navigation-view__next-card h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.route-navigation-stop-list {
+  display: grid;
+  gap: 12px;
+}
+
+.route-navigation-stop-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.route-navigation-stop-card--active {
+  border-color: rgba(49, 196, 190, 0.45);
+  box-shadow: 0 0 0 1px rgba(49, 196, 190, 0.2);
+}
+
+.route-navigation-stop-card--completed {
+  opacity: 0.82;
+}
+
+.route-navigation-stop-card__select {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.route-navigation-stop-card__heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.route-navigation-stop-card__order {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(74, 123, 255, 0.16);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.route-navigation-stop-card__heading strong {
+  color: var(--text-primary);
+}
+
+.route-navigation-stop-card__heading p,
+.route-navigation-stop-card__meta,
+.route-navigation-stop-card__leg {
+  margin: 0;
+}
+
+.route-navigation-stop-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-navigation-stop-card__panel {
+  display: grid;
+  gap: 12px;
+}
+
+.modal-sheet--food {
+  max-height: min(86dvh, 860px);
+}
+
+.chip-row--tight {
+  gap: 8px;
+}
+
+.food-results-stack {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.food-result-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.food-result-card__top {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.food-result-card__meta {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.food-result-card h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.food-result-card p,
+.food-result-card a {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.food-result-card__details {
+  display: grid;
+  gap: 6px;
+}
+
+.food-result-card__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .prominent-search-callout {
   display: grid;
   gap: 6px;

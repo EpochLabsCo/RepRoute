@@ -28,6 +28,7 @@ import {
   Compass,
   Download,
   ExternalLink,
+  UtensilsCrossed,
   Flame,
   GripVertical,
   Map as MapIcon,
@@ -51,6 +52,8 @@ import {
 import './App.css'
 import { uiText } from './constants/uiText'
 import RepRouteMap, { type RepRouteMapMarker } from './components/RepRouteMap'
+import type { RouteNavigationStop } from './components/RepRouteNavigationMap'
+import RouteNavigationView, { type RouteNavigationLegSummary } from './components/RouteNavigationView'
 import {
   buildCrmExportRecord,
   buildCrmExportRows,
@@ -128,6 +131,7 @@ type ProspectRecord = {
   visitOutcome?: OutcomeTag | ''
   routeCompleted?: boolean
   visitCompletedAt?: string
+  isFoodStop?: boolean
   editedByRepRouteUser?: boolean
 }
 
@@ -138,6 +142,7 @@ type Prospect = BaseProspect & {
   visitNote: string
   visitOutcome: OutcomeTag | ''
   visitCompletedAt: string
+  isFoodStop: boolean
   editedByRepRouteUser: boolean
 }
 
@@ -519,6 +524,7 @@ function toLiveProspect(
   keyword: string,
   location: string,
   searchCenter = AUSTIN_FALLBACK,
+  distanceMilesPrecise?: number,
 ): BaseProspect | null {
   const lat = place.location?.latitude
   const lng = place.location?.longitude
@@ -545,7 +551,7 @@ function toLiveProspect(
     contactTitle: '',
     contactEmail: '',
     category,
-    distance: calculateDistanceMiles(searchCenter, { lat, lng }),
+    distance: Number((distanceMilesPrecise ?? calculateDistanceMilesPrecise(searchCenter, { lat, lng })).toFixed(1)),
     priority: 'Unassigned',
     lastContact: 'Not contacted yet',
     notes: 'Imported from Live Search.',
@@ -578,6 +584,12 @@ function normalizeWebsiteUrl(website: string) {
     ? website
     : `https://${website}`
 }
+
+type FoodRadiusMiles = 0.5 | 1 | 3 | 5
+const FOOD_RADIUS_OPTIONS: FoodRadiusMiles[] = [0.5, 1, 3, 5]
+const FOOD_SEARCH_TERMS = ['restaurants', 'coffee', 'breakfast', 'lunch', 'catering'] as const
+type FoodQuickChip = 'Coffee' | 'Breakfast' | 'Lunch' | 'BBQ' | 'Tacos' | 'Catering'
+const FOOD_QUICK_CHIPS: FoodQuickChip[] = ['Coffee', 'Breakfast', 'Lunch', 'BBQ', 'Tacos', 'Catering']
 
 function createCallHref(phone: string) {
   const digits = phone.replace(/[^\d+]/g, '')
@@ -690,6 +702,94 @@ function openExternalNavigation(url: string) {
   if (!nextWindow) {
     window.location.assign(url)
   }
+}
+
+function buildStopLegMap(
+  routeProspects: Prospect[],
+  directions: google.maps.DirectionsResult | null,
+  originIsFirstStop: boolean,
+): Record<string, RouteNavigationLegSummary | null> {
+  const legs = directions?.routes?.[0]?.legs ?? []
+  const map: Record<string, RouteNavigationLegSummary | null> = {}
+  let legIndex = 0
+
+  for (let index = 0; index < routeProspects.length; index += 1) {
+    const stop = routeProspects[index]
+
+    if (index === 0 && originIsFirstStop) {
+      map[stop.id] = {
+        distanceText: uiText.routes.inAppNavigation.atStart,
+        durationText: '',
+      }
+      continue
+    }
+
+    const leg = legs[legIndex]
+    legIndex += 1
+    map[stop.id] = leg
+      ? {
+          distanceText: leg.distance?.text ?? '',
+          durationText: leg.duration?.text ?? '',
+        }
+      : null
+  }
+
+  return map
+}
+
+async function fetchRouteDirectionsForStops(
+  origin: string | { lat: number; lng: number },
+  stops: Prospect[],
+  travelMode: TravelMode,
+): Promise<{ result: google.maps.DirectionsResult | null; status: string }> {
+  if (typeof window === 'undefined' || !window.google?.maps) {
+    return { result: null, status: 'NO_MAPS' }
+  }
+
+  if (stops.length === 0) {
+    return { result: null, status: 'NO_STOPS' }
+  }
+
+  const resolvedStops = stops
+    .map((stop) => ({
+      id: stop.id,
+      location: resolveDirectionsLocation(stop),
+    }))
+    .filter((entry): entry is { id: string; location: string | { lat: number; lng: number } } =>
+      Boolean(entry.location),
+    )
+
+  if (resolvedStops.length === 0) {
+    return { result: null, status: 'INVALID_STOPS' }
+  }
+
+  const destination = resolvedStops[resolvedStops.length - 1]?.location
+  const waypointEntries = resolvedStops.slice(0, -1)
+
+  const request: google.maps.DirectionsRequest = {
+    origin,
+    destination,
+    travelMode: getGoogleDirectionsTravelMode(travelMode),
+    optimizeWaypoints: false,
+    waypoints:
+      waypointEntries.length > 0
+        ? waypointEntries.map((entry) => ({
+            location: entry.location,
+            stopover: true,
+          }))
+        : undefined,
+  }
+
+  const service = new google.maps.DirectionsService()
+
+  return new Promise((resolve) => {
+    service.route(request, (response, responseStatus) => {
+      resolve({
+        result: response ?? null,
+        status: String(responseStatus),
+      })
+    })
+  })
 }
 
 function getDataSourceLabel(source: SearchDataSource) {
@@ -851,6 +951,10 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
 
       if (isIsoDateTime(record.visitCompletedAt)) {
         nextRecord.visitCompletedAt = record.visitCompletedAt
+      }
+
+      if (typeof record.isFoodStop === 'boolean') {
+        nextRecord.isFoodStop = record.isFoodStop
       }
 
       if (typeof record.editedByRepRouteUser === 'boolean') {
@@ -1089,6 +1193,165 @@ function RemoveProspectSheet({
   )
 }
 
+function FoodNearbySheet({
+  anchorProspect,
+  radiusMiles,
+  activeChip,
+  isLoading,
+  error,
+  results,
+  savedAsFoodStopIds,
+  onChangeRadius,
+  onSelectChip,
+  onNavigate,
+  onSaveAsFoodStop,
+  onClose,
+}: {
+  anchorProspect: Prospect
+  radiusMiles: FoodRadiusMiles
+  activeChip: FoodQuickChip | null
+  isLoading: boolean
+  error: string | null
+  results: Prospect[]
+  savedAsFoodStopIds: Set<string>
+  onChangeRadius: (miles: FoodRadiusMiles) => void
+  onSelectChip: (chip: FoodQuickChip | null) => void
+  onNavigate: (prospect: Prospect) => void
+  onSaveAsFoodStop: (prospectId: string) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="modal-sheet modal-sheet--food"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="food-nearby-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <div className="eyebrow eyebrow--tight">{uiText.foodNearby.eyebrow}</div>
+        <h2 id="food-nearby-title">{uiText.foodNearby.heading(anchorProspect.businessName)}</h2>
+        <p className="section-copy">{uiText.foodNearby.description}</p>
+
+        <div className="field-group">
+          <span className="field-label">{uiText.foodNearby.radiusLabel}</span>
+          <div className="chip-row chip-row--tight">
+            {FOOD_RADIUS_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`chip ${radiusMiles === option ? 'chip--active' : ''}`}
+                onClick={() => onChangeRadius(option)}
+              >
+                {uiText.foodNearby.radiusOption(option)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field-group">
+          <span className="field-label">{uiText.foodNearby.quickFiltersLabel}</span>
+          <div className="chip-row chip-row--tight">
+            <button
+              type="button"
+              className={`chip ${activeChip === null ? 'chip--active' : ''}`}
+              onClick={() => onSelectChip(null)}
+            >
+              {uiText.foodNearby.quickFilterAll}
+            </button>
+            {FOOD_QUICK_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className={`chip ${activeChip === chip ? 'chip--active' : ''}`}
+                onClick={() => onSelectChip(chip)}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="status-banner status-banner--info">
+            <p>{uiText.foodNearby.loading}</p>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="status-banner status-banner--error">
+            <p>{error}</p>
+          </div>
+        ) : null}
+
+        {results.length === 0 && !isLoading && !error ? (
+          <div className="status-banner status-banner--info">
+            <p>{uiText.foodNearby.empty}</p>
+          </div>
+        ) : null}
+
+        <div className="food-results-stack">
+          {results.map((result) => {
+            const websiteHref = normalizeWebsiteUrl(result.website)
+            const hasPhone = result.phone !== 'Phone unavailable'
+            const alreadySaved = savedAsFoodStopIds.has(result.id)
+
+            return (
+              <article key={result.id} className="food-result-card">
+                <div className="food-result-card__top">
+                  <div>
+                    <div className="eyebrow eyebrow--tight">{uiText.foodNearby.resultBadge}</div>
+                    <h3>{result.businessName}</h3>
+                    <p>{result.category}</p>
+                  </div>
+                  <div className="food-result-card__meta">
+                    <span className="meta-pill">{uiText.foodNearby.distanceAway(formatDistance(result.distance))}</span>
+                    {result.rating !== null ? (
+                      <span className="meta-pill">{result.rating.toFixed(1)} stars</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="food-result-card__details">
+                  <p>{result.address}</p>
+                  {hasPhone ? <p>{result.phone}</p> : null}
+                  {websiteHref ? (
+                    <a href={websiteHref} target="_blank" rel="noreferrer">
+                      {result.website}
+                    </a>
+                  ) : null}
+                </div>
+
+                <div className="food-result-card__actions">
+                  <button type="button" className="button button--ghost" onClick={() => onNavigate(result)}>
+                    <Navigation size={16} />
+                    {uiText.foodNearby.navigate}
+                  </button>
+                  <button
+                    type="button"
+                    className={`button ${alreadySaved ? 'button--secondary' : ''}`}
+                    onClick={() => onSaveAsFoodStop(result.id)}
+                    disabled={alreadySaved}
+                  >
+                    {alreadySaved ? uiText.foodNearby.savedAsFoodStop : uiText.foodNearby.saveAsFoodStop}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+
+        <div className="modal-sheet__actions">
+          <button type="button" className="button button--ghost" onClick={onClose}>
+            {uiText.foodNearby.close}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RouteCalculationCard({
   routeCount,
   estimatedDriveMinutes,
@@ -1161,6 +1424,7 @@ function CurrentStopCard({
   travelMode,
   onNavigate,
   onOpenSaved,
+  onFindFoodNearby,
   onRequestRemove,
   onToggleCompleted,
   onToggleSaved,
@@ -1181,6 +1445,7 @@ function CurrentStopCard({
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onOpenSaved: (prospectId: string) => void
+  onFindFoodNearby: (prospectId: string) => void
   onRequestRemove: (prospectId: string) => void
   onToggleCompleted: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
@@ -1252,6 +1517,9 @@ function CurrentStopCard({
           <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
             {prospect.priority}
           </span>
+        {prospect.isFoodStop ? (
+          <span className="meta-pill meta-pill--accent">{uiText.foodNearby.foodStopLabel}</span>
+        ) : null}
           {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
           {prospect.visitCompletedAt ? (
             <span className="meta-pill">{formatDateTime(prospect.visitCompletedAt)}</span>
@@ -1289,6 +1557,10 @@ function CurrentStopCard({
           <span className="route-toggle-button__label">
             {isInRoute ? uiText.search.card.removeRoute : uiText.search.card.addToRoute}
           </span>
+        </button>
+        <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
         </button>
       </div>
 
@@ -1508,6 +1780,7 @@ function RouteWorkflowStopCard({
   travelMode,
   onNavigate,
   onOpenSaved,
+  onFindFoodNearby,
   onToggleCompleted,
   onToggleSaved,
   onToggleRoute,
@@ -1524,6 +1797,7 @@ function RouteWorkflowStopCard({
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onOpenSaved: (prospectId: string) => void
+  onFindFoodNearby: (prospectId: string) => void
   onToggleCompleted: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
@@ -1637,6 +1911,9 @@ function RouteWorkflowStopCard({
         {prospect.visitOutcome ? (
           <span className="meta-pill meta-pill--accent">{prospect.visitOutcome}</span>
         ) : null}
+        {prospect.isFoodStop ? (
+          <span className="meta-pill meta-pill--accent">{uiText.foodNearby.foodStopLabel}</span>
+        ) : null}
         {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
@@ -1658,6 +1935,10 @@ function RouteWorkflowStopCard({
           {travelMode === 'walking'
             ? uiText.routes.actions.navigateWalk
             : uiText.routes.actions.navigateDrive}
+        </button>
+        <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
         </button>
         <button
           type="button"
@@ -1745,6 +2026,7 @@ function LiveSearchResultCard({
   travelMode,
   onNavigate,
   onOpenSaved,
+  onFindFoodNearby,
   onUpdatePriority,
   onRequestRemove,
   onToggleSaved,
@@ -1756,6 +2038,7 @@ function LiveSearchResultCard({
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onOpenSaved: (prospectId: string) => void
+  onFindFoodNearby: (prospectId: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onRequestRemove: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
@@ -1773,6 +2056,7 @@ function LiveSearchResultCard({
           <p>{prospect.category}</p>
         </div>
         <div className="live-result-card__meta">
+          <span className="meta-pill">{`${formatDistance(prospect.distance)} away`}</span>
           <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
             {prospect.priority}
           </span>
@@ -1816,6 +2100,10 @@ function LiveSearchResultCard({
             ? uiText.search.card.navigateWalk
             : uiText.search.card.navigateDrive}
         </button>
+        <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
+        </button>
         {isInRoute || isSaved ? (
           <button
             type="button"
@@ -1852,6 +2140,7 @@ function ProspectCard({
   isExpanded,
   travelMode,
   onNavigate,
+  onFindFoodNearby,
   onRequestRemove,
   onToggleRoute,
   onToggleExpanded,
@@ -1864,6 +2153,7 @@ function ProspectCard({
   isExpanded: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
+  onFindFoodNearby: (prospectId: string) => void
   onRequestRemove: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
   onToggleExpanded: (prospectId: string) => void
@@ -1896,6 +2186,9 @@ function ProspectCard({
           {prospect.priority}
         </span>
         <span className="meta-pill">{formatDistance(prospect.distance)}</span>
+        {prospect.isFoodStop ? (
+          <span className="meta-pill meta-pill--accent">{uiText.foodNearby.foodStopLabel}</span>
+        ) : null}
         {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
@@ -1937,6 +2230,10 @@ function ProspectCard({
             {travelMode === 'walking'
               ? uiText.search.card.navigateWalk
               : uiText.search.card.navigateDrive}
+          </button>
+          <button type="button" className="button button--ghost" onClick={() => onFindFoodNearby(prospect.id)}>
+            <UtensilsCrossed size={16} />
+            {uiText.foodNearby.findFoodNearby}
           </button>
           <button type="button" className="button button--ghost" onClick={() => onToggleExpanded(prospect.id)}>
             {isExpanded ? uiText.search.prospectCard.hide : uiText.saved.edit}
@@ -2027,6 +2324,19 @@ function App() {
   const [routeOptimization, setRouteOptimization] = useState<RouteOptimizationState>({ status: 'idle' })
   const [routeOptimizationDebug, setRouteOptimizationDebug] = useState<RouteOptimizationDebug>(null)
   const [routeStartLocation, setRouteStartLocation] = useState('')
+  const [routeNavigationOpen, setRouteNavigationOpen] = useState(false)
+  const [routeNavigationDirections, setRouteNavigationDirections] =
+    useState<google.maps.DirectionsResult | null>(null)
+  const [routeNavigationLoading, setRouteNavigationLoading] = useState(false)
+  const [routeNavigationError, setRouteNavigationError] = useState<string | null>(null)
+  const [navigationActiveStopId, setNavigationActiveStopId] = useState<string | null>(null)
+  const [navigationArrivedStopIds, setNavigationArrivedStopIds] = useState<Record<string, boolean>>({})
+  const [foodNearbyOpenForProspectId, setFoodNearbyOpenForProspectId] = useState<string | null>(null)
+  const [foodNearbyRadiusMiles, setFoodNearbyRadiusMiles] = useState<FoodRadiusMiles>(1)
+  const [foodNearbyActiveChip, setFoodNearbyActiveChip] = useState<FoodQuickChip | null>(null)
+  const [foodNearbyLoading, setFoodNearbyLoading] = useState(false)
+  const [foodNearbyError, setFoodNearbyError] = useState<string | null>(null)
+  const [foodNearbyResultIds, setFoodNearbyResultIds] = useState<string[]>([])
   const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [removeProspectPrompt, setRemoveProspectPrompt] = useState<RemoveProspectPrompt | null>(null)
@@ -2188,7 +2498,11 @@ function App() {
   }
 
   useEffect(() => {
-    if (activeView !== 'map' || routeIds.length === 0) {
+    if (routeIds.length === 0) {
+      return
+    }
+
+    if (activeView !== 'map' && !routeNavigationOpen) {
       return
     }
 
@@ -2218,7 +2532,7 @@ function App() {
     return () => {
       navigator.geolocation.clearWatch(watchId)
     }
-  }, [activeView, routeIds.length])
+  }, [activeView, routeIds.length, routeNavigationOpen])
 
   useEffect(() => {
     const syncPermission = () => {
@@ -2424,6 +2738,7 @@ function App() {
           visitNote: record?.visitNote ?? '',
           visitOutcome: record?.visitOutcome ?? '',
           visitCompletedAt: record?.visitCompletedAt ?? '',
+          isFoodStop: record?.isFoodStop ?? false,
           editedByRepRouteUser: record?.editedByRepRouteUser ?? false,
         }
       }),
@@ -2440,6 +2755,15 @@ function App() {
     () => (removeProspectPrompt ? prospectMap.get(removeProspectPrompt.prospectId) ?? null : null),
     [prospectMap, removeProspectPrompt],
   )
+  const foodNearbyAnchorProspect = useMemo(
+    () =>
+      foodNearbyOpenForProspectId ? prospectMap.get(foodNearbyOpenForProspectId) ?? null : null,
+    [foodNearbyOpenForProspectId, prospectMap],
+  )
+  const foodNearbyResults = useMemo(
+    () => foodNearbyResultIds.map((id) => prospectMap.get(id)).filter(Boolean) as Prospect[],
+    [foodNearbyResultIds, prospectMap],
+  )
 
   const savedProspects = useMemo(
     () =>
@@ -2455,6 +2779,10 @@ function App() {
         .map((id) => prospectMap.get(id))
         .filter((prospect): prospect is Prospect => Boolean(prospect)),
     [prospectMap, routeIds],
+  )
+  const foodStopIds = useMemo(
+    () => new Set(routeProspects.filter((prospect) => prospect.isFoodStop).map((prospect) => prospect.id)),
+    [routeProspects],
   )
 
   const liveSearchProspects = useMemo(
@@ -2497,6 +2825,9 @@ function App() {
 
         if (routeSet.has(prospect.id)) {
           categories.push('route')
+        }
+        if (routeSet.has(prospect.id) && prospect.isFoodStop) {
+          categories.push('food')
         }
 
         return {
@@ -2727,6 +3058,29 @@ function App() {
 
     return { origin: null, source: null }
   }, [manualMarketLabel, routeProspects, routeStartLocation, routeTrackerLocation])
+  const navigationStops = useMemo<RouteNavigationStop[]>(
+    () =>
+      routeProspects
+        .filter((prospect) => isFiniteLatLng(prospect.location))
+        .map((prospect, index) => ({
+          id: prospect.id,
+          businessName: prospect.businessName,
+          position: prospect.location,
+          routeOrder: index + 1,
+          isActive: prospect.id === navigationActiveStopId,
+          isCompleted: prospect.routeCompleted,
+        })),
+    [navigationActiveStopId, routeProspects],
+  )
+  const navigationLegByStopId = useMemo(
+    () =>
+      buildStopLegMap(
+        routeProspects,
+        routeNavigationDirections,
+        routeOrigin.source === 'first-stop',
+      ),
+    [routeNavigationDirections, routeOrigin.source, routeProspects],
+  )
   const effectiveRadiusMiles = getEffectiveRadiusMiles(searchRadiusChoice, customRadiusMiles)
   const usesCurrentLocation = searchRadiusChoice === 'current-location' || !manualMarketLabel
   const effectiveRadiusLabel = effectiveRadiusMiles
@@ -2926,6 +3280,202 @@ function App() {
     setRemoveProspectPrompt(null)
   }
 
+  async function resolveFoodSearchCenter(anchor: Prospect) {
+    if (isFiniteLatLng(anchor.location)) {
+      return { ok: true as const, center: anchor.location }
+    }
+
+    const address = anchor.address?.trim()
+    if (!address) {
+      return { ok: false as const, error: uiText.errors.locationRequired }
+    }
+
+    const geocode = await searchGooglePlaces({
+      apiKey: googleMapsApiKey,
+      query: address,
+      maxResultCount: 1,
+    })
+
+    if (!geocode.ok) {
+      return { ok: false as const, error: geocode.error }
+    }
+
+    const placeWithLocation = geocode.places.find(
+      (place) =>
+        typeof place.location?.latitude === 'number' && typeof place.location?.longitude === 'number',
+    )
+
+    if (!placeWithLocation?.location) {
+      return { ok: false as const, error: uiText.errors.locationRequired }
+    }
+
+    return {
+      ok: true as const,
+      center: {
+        lat: placeWithLocation.location.latitude ?? AUSTIN_FALLBACK.lat,
+        lng: placeWithLocation.location.longitude ?? AUSTIN_FALLBACK.lng,
+      },
+    }
+  }
+
+  function getFoodSearchTerms() {
+    if (!foodNearbyActiveChip) {
+      return [...FOOD_SEARCH_TERMS]
+    }
+
+    const map: Record<FoodQuickChip, string> = {
+      Coffee: 'coffee',
+      Breakfast: 'breakfast',
+      Lunch: 'lunch',
+      BBQ: 'bbq',
+      Tacos: 'tacos',
+      Catering: 'catering',
+    }
+
+    return [map[foodNearbyActiveChip]]
+  }
+
+  async function runFoodNearbySearch(anchor: Prospect) {
+    setFoodNearbyLoading(true)
+    setFoodNearbyError(null)
+    setFoodNearbyResultIds([])
+
+    const centerResult = await resolveFoodSearchCenter(anchor)
+    if (!centerResult.ok) {
+      setFoodNearbyLoading(false)
+      setFoodNearbyError(centerResult.error)
+      return
+    }
+
+    const searchCenter = centerResult.center
+    const terms = getFoodSearchTerms()
+    const locationBias = {
+      latitude: searchCenter.lat,
+      longitude: searchCenter.lng,
+      radiusMeters: milesToMeters(foodNearbyRadiusMiles),
+    }
+
+    console.groupCollapsed('[RepRoute] Food Nearby')
+    console.info('anchor', { id: anchor.id, name: anchor.businessName })
+    console.info('radiusMiles', foodNearbyRadiusMiles)
+    console.info('center', searchCenter)
+    console.info('terms', terms)
+    console.groupEnd()
+
+    const results = await Promise.all(
+      terms.map(async (term) => ({
+        term,
+        result: await searchGooglePlaces({
+          apiKey: googleMapsApiKey,
+          query: `${term} near ${anchor.address || anchor.businessName}`.trim(),
+          maxResultCount: 8,
+          locationBias,
+        }),
+      })),
+    )
+
+    const successfulResults: Array<{
+      term: string
+      result: { ok: true; places: GooglePlacesApiPlace[]; query: string }
+    }> = []
+    const failedResults: Array<{
+      term: string
+      result: { ok: false; error: string; details: unknown; query: string; status: number | null }
+    }> = []
+
+    for (const entry of results) {
+      if (entry.result.ok) {
+        successfulResults.push({ term: entry.term, result: entry.result })
+      } else {
+        failedResults.push({ term: entry.term, result: entry.result })
+      }
+    }
+
+    const dedupedPlaces = dedupePlaces(successfulResults.flatMap((entry) => entry.result.places))
+
+    const normalizedWithDistance = dedupedPlaces.reduce<
+      Array<{ prospect: BaseProspect; distanceMilesPrecise: number; lat: number; lng: number }>
+    >((collection, place) => {
+      const lat = place.location?.latitude
+      const lng = place.location?.longitude
+
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        return collection
+      }
+
+      const matchingEntry = successfulResults.find((entry) =>
+        entry.result.places.some((candidate) =>
+          candidate.id && place.id
+            ? candidate.id === place.id
+            : candidate.displayName?.text === place.displayName?.text &&
+              candidate.formattedAddress === place.formattedAddress,
+        ),
+      )
+
+      const distanceMilesPrecise = calculateDistanceMilesPrecise(searchCenter, { lat, lng })
+      const prospect = toLiveProspect(
+        place,
+        matchingEntry?.term ?? 'Food',
+        anchor.city,
+        searchCenter,
+        distanceMilesPrecise,
+      )
+
+      if (prospect) {
+        collection.push({ prospect, distanceMilesPrecise, lat, lng })
+      }
+
+      return collection
+    }, [])
+
+    const withinRadius = normalizedWithDistance.filter(
+      (entry) => entry.distanceMilesPrecise <= foodNearbyRadiusMiles,
+    )
+    withinRadius.sort((a, b) => a.distanceMilesPrecise - b.distanceMilesPrecise)
+    const normalizedProspects = withinRadius.map((entry) => entry.prospect)
+
+    console.groupCollapsed('[RepRoute] Food Nearby results')
+    console.info('candidateCount', normalizedWithDistance.length)
+    console.info('withinRadiusCount', normalizedProspects.length)
+    console.table(
+      normalizedWithDistance.map((entry) => ({
+        name: entry.prospect.businessName,
+        lat: entry.lat,
+        lng: entry.lng,
+        distanceMiles: Number(entry.distanceMilesPrecise.toFixed(2)),
+        withinRadius: entry.distanceMilesPrecise <= foodNearbyRadiusMiles,
+      })),
+    )
+    console.groupEnd()
+
+    if (normalizedProspects.length > 0) {
+      setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
+      setFoodNearbyResultIds(normalizedProspects.map((prospect) => prospect.id))
+      setFoodNearbyLoading(false)
+      return
+    }
+
+    setFoodNearbyLoading(false)
+    if (failedResults.length > 0 && normalizedWithDistance.length === 0) {
+      setFoodNearbyError(failedResults[0]?.result.error ?? uiText.errors.searchFailedDetail)
+    }
+  }
+
+  function openFoodNearby(prospectId: string) {
+    setFoodNearbyOpenForProspectId(prospectId)
+    setFoodNearbyRadiusMiles(1)
+    setFoodNearbyActiveChip(null)
+    setFoodNearbyError(null)
+    setFoodNearbyResultIds([])
+  }
+
+  function closeFoodNearby() {
+    setFoodNearbyOpenForProspectId(null)
+    setFoodNearbyError(null)
+    setFoodNearbyLoading(false)
+    setFoodNearbyResultIds([])
+  }
+
   function handleRemoveFromRoute(prospectId: string) {
     setRouteIds((current) => current.filter((id) => id !== prospectId))
     if (expandedProspectId === prospectId) {
@@ -2954,6 +3504,15 @@ function App() {
       visitCompletedAt:
         !(current?.routeCompleted ?? false) ? new Date().toISOString() : '',
     }))
+  }
+
+  function saveAsFoodStop(prospectId: string) {
+    setRouteIds((current) => (current.includes(prospectId) ? current : [...current, prospectId]))
+    updateProspectRecord(prospectId, (current) => ({
+      ...current,
+      isFoodStop: true,
+    }))
+    setActionToast({ type: 'success', text: uiText.foodNearby.addedFoodStopToast })
   }
 
   function updateVisitNote(prospectId: string, visitNote: string) {
@@ -3003,6 +3562,15 @@ function App() {
     }))
   }
 
+  useEffect(() => {
+    if (!foodNearbyAnchorProspect) {
+      return
+    }
+
+    void runFoodNearbySearch(foodNearbyAnchorProspect)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- use foodNearby state intentionally
+  }, [foodNearbyOpenForProspectId, foodNearbyRadiusMiles, foodNearbyActiveChip])
+
   function handleRouteDragEnd(event: DragEndEvent) {
     const { active, over } = event
 
@@ -3037,6 +3605,134 @@ function App() {
   function handleNavigateProspect(prospect: Prospect) {
     openExternalNavigation(createNavigateHref(prospect, travelMode))
   }
+
+  async function loadRouteNavigationDirections() {
+    const origin =
+      routeOrigin.origin ??
+      (routeProspects[0] ? resolveDirectionsLocation(routeProspects[0]) : null)
+
+    if (!origin) {
+      setRouteNavigationDirections(null)
+      setRouteNavigationLoading(false)
+      setRouteNavigationError(uiText.routes.inAppNavigation.needOrigin)
+      return
+    }
+
+    const stopsForDirections =
+      routeOrigin.source === 'first-stop' ? routeProspects.slice(1) : routeProspects
+
+    if (stopsForDirections.length === 0) {
+      setRouteNavigationDirections(null)
+      setRouteNavigationLoading(false)
+      setRouteNavigationError(null)
+      return
+    }
+
+    setRouteNavigationLoading(true)
+    setRouteNavigationError(null)
+
+    const { result, status } = await fetchRouteDirectionsForStops(
+      origin,
+      stopsForDirections,
+      travelMode,
+    )
+
+    setRouteNavigationLoading(false)
+
+    if (!result || status !== String(google.maps.DirectionsStatus.OK)) {
+      setRouteNavigationDirections(null)
+      setRouteNavigationError(uiText.routes.inAppNavigation.routeLineError)
+      console.warn('[RepRoute] Route navigation directions failed', status)
+      return
+    }
+
+    setRouteNavigationDirections(result)
+    setRouteNavigationError(null)
+  }
+
+  async function startRouteNavigation() {
+    if (routeProspects.length === 0) {
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops })
+      return
+    }
+
+    const origin =
+      routeOrigin.origin ??
+      (routeProspects[0] ? resolveDirectionsLocation(routeProspects[0]) : null)
+
+    if (!origin) {
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.inAppNavigation.needOrigin })
+      return
+    }
+
+    setNavigationActiveStopId(
+      routeProspects.find((prospect) => !prospect.routeCompleted)?.id ?? routeProspects[0]?.id ?? null,
+    )
+    setNavigationArrivedStopIds({})
+    setRouteNavigationOpen(true)
+    setActiveView('map')
+    await loadRouteNavigationDirections()
+  }
+
+  function closeRouteNavigation() {
+    setRouteNavigationOpen(false)
+    setRouteNavigationDirections(null)
+    setRouteNavigationLoading(false)
+    setRouteNavigationError(null)
+  }
+
+  function handleNavigationMarkArrived(prospectId: string) {
+    setNavigationArrivedStopIds((current) => ({
+      ...current,
+      [prospectId]: true,
+    }))
+    setNavigationActiveStopId(prospectId)
+  }
+
+  function handleNavigationMarkCompleted(prospectId: string) {
+    const prospect = routeProspects.find((entry) => entry.id === prospectId)
+
+    if (!prospect || prospect.routeCompleted) {
+      return
+    }
+
+    const currentIndex = routeProspects.findIndex((entry) => entry.id === prospectId)
+    const nextStop =
+      routeProspects.slice(currentIndex + 1).find((entry) => !entry.routeCompleted) ??
+      routeProspects.find((entry) => !entry.routeCompleted && entry.id !== prospectId)
+
+    toggleRouteCompleted(prospectId)
+    setNavigationArrivedStopIds((current) => {
+      const next = { ...current }
+      delete next[prospectId]
+      return next
+    })
+
+    if (nextStop) {
+      setNavigationActiveStopId(nextStop.id)
+    }
+  }
+
+  function handleOpenRouteInMaps() {
+    handleNavigateEntireRoute()
+  }
+
+  useEffect(() => {
+    if (!routeNavigationOpen) {
+      return
+    }
+
+    void loadRouteNavigationDirections()
+  }, [routeNavigationOpen, routeIds.join('|'), travelMode, routeStartLocation, manualMarketLabel])
+
+  useEffect(() => {
+    if (routeIds.length === 0 && routeNavigationOpen) {
+      setRouteNavigationOpen(false)
+      setRouteNavigationDirections(null)
+      setRouteNavigationLoading(false)
+      setRouteNavigationError(null)
+    }
+  }, [routeIds.length, routeNavigationOpen])
 
   function handleNavigateEntireRoute() {
     if (routeProspects.length === 0) {
@@ -3490,11 +4186,23 @@ function App() {
         market: shouldUseCurrentLocation ? '' : trimmedMarket,
         usesCurrentLocation: shouldUseCurrentLocation,
       })
+      const radiusHardFilterSummary = uiText.search.radiusHardFilterSummary(
+        effectiveRadiusMiles,
+        shouldUseCurrentLocation ? uiText.routes.currentLocation : trimmedMarket,
+      )
       const locationBias = {
         latitude: activeSearchCenter.lat,
         longitude: activeSearchCenter.lng,
         radiusMeters: milesToMeters(effectiveRadiusMiles),
       }
+
+      console.groupCollapsed('[RepRoute] Live Search radius filter')
+      console.info('selectedRadiusMiles', effectiveRadiusMiles)
+      console.info('searchCenter', activeSearchCenter)
+      console.info('radiusMeters (API hint)', locationBias.radiusMeters)
+      console.info('market', trimmedMarket)
+      console.info('usesCurrentLocation', shouldUseCurrentLocation)
+      console.groupEnd()
 
       const results = await Promise.all(
         searchTerms.map(async (term) => ({
@@ -3534,7 +4242,15 @@ function App() {
       const dedupedPlaces = dedupePlaces(
         successfulResults.flatMap((entry) => entry.result.places),
       )
-      const normalizedProspects = dedupedPlaces.reduce<BaseProspect[]>((collection, place) => {
+      const normalizedProspectsWithDistance = dedupedPlaces.reduce<
+        Array<{ prospect: BaseProspect; distanceMilesPrecise: number; lat: number; lng: number }>
+      >((collection, place) => {
+        const lat = place.location?.latitude
+        const lng = place.location?.longitude
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          return collection
+        }
+
         const matchingEntry = successfulResults.find((entry) =>
           entry.result.places.some((candidate) =>
             candidate.id && place.id
@@ -3543,19 +4259,42 @@ function App() {
                 candidate.formattedAddress === place.formattedAddress,
           ),
         )
+        const distanceMilesPrecise = calculateDistanceMilesPrecise(activeSearchCenter, { lat, lng })
         const prospect = toLiveProspect(
           place,
           matchingEntry?.term ?? industries[0],
           fallbackLocationLabel,
           activeSearchCenter,
+          distanceMilesPrecise,
         )
 
-        if (prospect) {
-          collection.push(prospect)
+        if (prospect && Number.isFinite(distanceMilesPrecise)) {
+          collection.push({ prospect, distanceMilesPrecise, lat, lng })
         }
 
         return collection
       }, [])
+
+      const withinRadius = normalizedProspectsWithDistance.filter(
+        (entry) => entry.distanceMilesPrecise <= effectiveRadiusMiles,
+      )
+      withinRadius.sort((a, b) => a.distanceMilesPrecise - b.distanceMilesPrecise)
+      const normalizedProspects = withinRadius.map((entry) => entry.prospect)
+
+      console.groupCollapsed('[RepRoute] Live Search radius filter results')
+      console.info('candidateCount', normalizedProspectsWithDistance.length)
+      console.info('withinRadiusCount', normalizedProspects.length)
+      console.table(
+        normalizedProspectsWithDistance.map((entry) => ({
+          id: entry.prospect.id,
+          name: entry.prospect.businessName,
+          lat: entry.lat,
+          lng: entry.lng,
+          distanceMiles: Number(entry.distanceMilesPrecise.toFixed(2)),
+          withinRadius: entry.distanceMilesPrecise <= effectiveRadiusMiles,
+        })),
+      )
+      console.groupEnd()
 
       if (normalizedProspects.length > 0) {
         setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
@@ -3573,7 +4312,7 @@ function App() {
                   .join(' | ')}`
               : undefined,
           resultsCount: normalizedProspects.length,
-          query: filterSummary,
+          query: radiusHardFilterSummary,
         })
         return
       }
@@ -3584,14 +4323,17 @@ function App() {
           source: 'api-error',
           message: failedResults[0]?.result.error ?? uiText.errors.searchFailedDetail,
           details: failedResults.map((entry) => `${entry.term}: ${entry.result.error}`).join(' | '),
-          query: filterSummary,
+          query: radiusHardFilterSummary,
         })
       } else {
         setSearchStatus({
           source: 'live',
-          message: uiText.search.statusMessages.noLiveResults(filterSummary || 'your filters'),
+          message:
+            normalizedProspectsWithDistance.length > 0
+              ? uiText.search.statusMessages.noLiveResultsWithinRadius
+              : uiText.search.statusMessages.noLiveResults(filterSummary || 'your filters'),
           resultsCount: 0,
-          query: filterSummary,
+          query: radiusHardFilterSummary,
         })
       }
     } finally {
@@ -4053,6 +4795,7 @@ function App() {
                   isExpanded={expandedProspectId === prospect.id}
                   travelMode={travelMode}
                   onNavigate={handleNavigateProspect}
+                  onFindFoodNearby={openFoodNearby}
                   onRequestRemove={openRemoveProspectPrompt}
                   onToggleRoute={toggleRoute}
                   onToggleExpanded={toggleExpandedProspect}
@@ -4093,6 +4836,34 @@ function App() {
   function renderMapView() {
     const selectedTravelModeLabel =
       travelMode === 'walking' ? uiText.navigation.travelMode.walking : uiText.navigation.travelMode.driving
+
+    if (routeNavigationOpen && routeProspects.length > 0) {
+      return (
+        <RouteNavigationView
+          routeProspects={routeProspects}
+          navigationStops={navigationStops}
+          directions={routeNavigationDirections}
+          directionsLoading={routeNavigationLoading}
+          directionsError={routeNavigationError}
+          userLocation={routeTrackerLocation}
+          activeStopId={navigationActiveStopId}
+          arrivedStopIds={navigationArrivedStopIds}
+          legByStopId={navigationLegByStopId}
+          completedStops={completedRouteStops}
+          remainingStops={remainingRouteStops}
+          completionPercentage={completionPercentage}
+          routeMiles={routeMiles}
+          estimatedDriveMinutes={estimatedDriveMinutes}
+          onClose={closeRouteNavigation}
+          onOpenMaps={handleOpenRouteInMaps}
+          onSelectStop={setNavigationActiveStopId}
+          onMarkArrived={handleNavigationMarkArrived}
+          onMarkCompleted={handleNavigationMarkCompleted}
+          onUpdateVisitNote={updateVisitNote}
+          onUpdateOutcome={updateVisitOutcome}
+        />
+      )
+    }
 
     return (
       <>
@@ -4145,9 +4916,13 @@ function App() {
           </div>
           {routeProspects.length > 0 ? (
             <div className="button-row route-map-actions">
+              <button type="button" className="button" onClick={() => void startRouteNavigation()}>
+                <Navigation size={16} />
+                {uiText.routes.inAppNavigation.startRoute}
+              </button>
               <button
                 type="button"
-                className="button"
+                className="button button--ghost"
                 onClick={() => optimizeRoute()}
                 disabled={routeOptimization.status === 'loading' || routeProspects.length === 0}
               >
@@ -4157,7 +4932,7 @@ function App() {
                   : uiText.routes.optimization.button}
               </button>
               <button type="button" className="button button--ghost" onClick={handleNavigateEntireRoute}>
-                <Navigation size={16} />
+                <ExternalLink size={16} />
                 {uiText.routes.navigateEntireRoute}
               </button>
               <button
@@ -4269,6 +5044,12 @@ function App() {
               <DataSourceBadge source={effectiveSearchStatus.source} />
             </div>
 
+            {effectiveSearchStatus.query ? (
+              <p className="section-copy" style={{ marginTop: 4 }}>
+                {effectiveSearchStatus.query}
+              </p>
+            ) : null}
+
             <div className="live-results-stack">
               {searchResultProspects.map((prospect) => (
                 <LiveSearchResultCard
@@ -4279,6 +5060,7 @@ function App() {
                   travelMode={travelMode}
                   onNavigate={handleNavigateProspect}
                   onOpenSaved={openSavedProspect}
+                  onFindFoodNearby={openFoodNearby}
                   onUpdatePriority={updateProspectPriority}
                   onRequestRemove={openRemoveProspectPrompt}
                   onToggleSaved={toggleSaved}
@@ -4303,6 +5085,7 @@ function App() {
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
                 onOpenSaved={openSavedProspect}
+                onFindFoodNearby={openFoodNearby}
                 onRequestRemove={openRemoveProspectPrompt}
                 onToggleCompleted={toggleRouteCompleted}
                 onToggleSaved={toggleSaved}
@@ -4394,6 +5177,13 @@ function App() {
                 </div>
               ) : null}
 
+              <div className="button-row">
+                <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
+                  <Navigation size={16} />
+                  {uiText.routes.inAppNavigation.startRoute}
+                </button>
+              </div>
+
               <div className="route-progress-track" aria-hidden="true">
                 <span
                   className="route-progress-track__fill"
@@ -4434,6 +5224,7 @@ function App() {
                         travelMode={travelMode}
                         onNavigate={handleNavigateProspect}
                         onOpenSaved={openSavedProspect}
+                        onFindFoodNearby={openFoodNearby}
                         onToggleCompleted={toggleRouteCompleted}
                         onToggleSaved={toggleSaved}
                         onToggleRoute={toggleRoute}
@@ -4802,6 +5593,7 @@ function App() {
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
                 onOpenSaved={openSavedProspect}
+                onFindFoodNearby={openFoodNearby}
                 onUpdatePriority={updateProspectPriority}
                 onRequestRemove={openRemoveProspectPrompt}
                 onToggleSaved={toggleSaved}
@@ -4888,6 +5680,7 @@ function App() {
                 isExpanded={expandedProspectId === prospect.id}
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
+                onFindFoodNearby={openFoodNearby}
                 onRequestRemove={openRemoveProspectPrompt}
                 onToggleRoute={toggleRoute}
                 onToggleExpanded={toggleExpandedProspect}
@@ -5671,6 +6464,23 @@ function App() {
             onRemoveFromRoute={() => handleRemoveFromRoute(promptedProspect.id)}
             onRemoveFromSaved={() => handleRemoveFromSavedProspects(promptedProspect.id)}
             onCancel={closeRemoveProspectPrompt}
+          />
+        ) : null}
+
+        {foodNearbyAnchorProspect ? (
+          <FoodNearbySheet
+            anchorProspect={foodNearbyAnchorProspect}
+            radiusMiles={foodNearbyRadiusMiles}
+            activeChip={foodNearbyActiveChip}
+            isLoading={foodNearbyLoading}
+            error={foodNearbyError}
+            results={foodNearbyResults}
+            savedAsFoodStopIds={foodStopIds}
+            onChangeRadius={(miles) => setFoodNearbyRadiusMiles(miles)}
+            onSelectChip={(chip) => setFoodNearbyActiveChip(chip)}
+            onNavigate={handleNavigateProspect}
+            onSaveAsFoodStop={saveAsFoodStop}
+            onClose={closeFoodNearby}
           />
         ) : null}
 

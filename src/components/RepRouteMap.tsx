@@ -12,7 +12,7 @@ const AUSTIN_CENTER = { lat: 30.2672, lng: -97.7431 }
 const GOOGLE_MAPS_LIBRARIES: Libraries = ['places']
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 
-export type RepRouteMapMarkerCategory = 'search' | 'saved' | 'route'
+export type RepRouteMapMarkerCategory = 'search' | 'saved' | 'route' | 'food'
 
 export type RepRouteMapMarker = {
   id: string
@@ -40,6 +40,10 @@ type RepRouteMapProps = {
 function getPrimaryMarkerCategory(marker: RepRouteMapMarker) {
   if (marker.categories.includes('route')) {
     return 'route'
+  }
+
+  if (marker.categories.includes('food')) {
+    return 'food'
   }
 
   if (marker.categories.includes('saved')) {
@@ -182,12 +186,16 @@ function RepRouteMap({ markers, onToggleSaved, onToggleRoute }: RepRouteMapProps
           const fill =
             primaryCategory === 'route'
               ? '#4a7bff'
+              : primaryCategory === 'food'
+                ? '#c77dff'
               : primaryCategory === 'saved'
                 ? '#f7b955'
                 : '#44d1c8'
           const label =
             primaryCategory === 'route'
               ? `${marker.routeOrder ?? ''}`
+              : primaryCategory === 'food'
+                ? 'F'
               : primaryCategory === 'saved'
                 ? 'S'
                 : undefined
