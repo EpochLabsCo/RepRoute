@@ -1127,12 +1127,14 @@ function CurrentStopCard({
   distanceFeet,
   trackingMessage,
   isSaved,
+  isInRoute,
   travelMode,
   onNavigate,
   onOpenSaved,
   onRequestRemove,
   onToggleCompleted,
   onToggleSaved,
+  onToggleRoute,
   onUpdateContactDetails,
   onUpdateNotes,
   onUpdateVisitNote,
@@ -1145,12 +1147,14 @@ function CurrentStopCard({
   distanceFeet: number | null
   trackingMessage: string
   isSaved: boolean
+  isInRoute: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onOpenSaved: (prospectId: string) => void
   onRequestRemove: (prospectId: string) => void
   onToggleCompleted: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
+  onToggleRoute: (prospectId: string) => void
   onUpdateContactDetails: (
     prospectId: string,
     fields: Partial<
@@ -1243,6 +1247,14 @@ function CurrentStopCard({
           {travelMode === 'walking'
             ? uiText.routes.actions.navigateWalk
             : uiText.routes.actions.navigateDrive}
+        </button>
+        <button
+          type="button"
+          className={`route-action-button ${isInRoute ? 'button--danger-outline' : ''}`}
+          onClick={() => onToggleRoute(prospect.id)}
+        >
+          <Trash2 size={16} />
+          {isInRoute ? uiText.search.card.removeRoute : uiText.search.card.addToRoute}
         </button>
       </div>
 
@@ -1464,6 +1476,7 @@ function RouteWorkflowStopCard({
   onOpenSaved,
   onToggleCompleted,
   onToggleSaved,
+  onToggleRoute,
   onUpdatePriority,
   onUpdateVisitNote,
   onUpdateOutcome,
@@ -1479,6 +1492,7 @@ function RouteWorkflowStopCard({
   onOpenSaved: (prospectId: string) => void
   onToggleCompleted: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
+  onToggleRoute: (prospectId: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateVisitNote: (prospectId: string, note: string) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
@@ -1613,6 +1627,14 @@ function RouteWorkflowStopCard({
         </button>
         <button
           type="button"
+          className="route-action-button button--danger-outline"
+          onClick={() => onToggleRoute(prospect.id)}
+        >
+          <Trash2 size={16} />
+          {uiText.search.card.removeRoute}
+        </button>
+        <button
+          type="button"
           className="route-action-button"
           onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
         >
@@ -1742,7 +1764,7 @@ function LiveSearchResultCard({
         </button>
         <button
           type="button"
-          className={`button ${isInRoute ? 'button--secondary' : ''}`}
+          className={`button ${isInRoute ? 'button--danger-outline' : ''}`}
           onClick={() => onToggleRoute(prospect.id)}
         >
           {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
@@ -1860,7 +1882,7 @@ function ProspectCard({
         <div className="prospect-card__button-group prospect-card__button-group--saved">
           <button
             type="button"
-            className={`button ${isInRoute ? 'button--secondary' : ''}`}
+            className={`button ${isInRoute ? 'button--danger-outline' : ''}`}
             onClick={() => onToggleRoute(prospect.id)}
           >
             {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
@@ -4031,12 +4053,14 @@ function App() {
                 distanceFeet={currentStopDistanceFeet}
                 trackingMessage={routeTrackerMessage}
                 isSaved={savedIds.includes(currentStopProspect.id)}
+                isInRoute={routeIds.includes(currentStopProspect.id)}
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
                 onOpenSaved={openSavedProspect}
                 onRequestRemove={openRemoveProspectPrompt}
                 onToggleCompleted={toggleRouteCompleted}
                 onToggleSaved={toggleSaved}
+                onToggleRoute={toggleRoute}
                 onUpdateContactDetails={updateContactDetails}
                 onUpdateNotes={updateProspectNotes}
                 onUpdateVisitNote={updateVisitNote}
@@ -4166,6 +4190,7 @@ function App() {
                         onOpenSaved={openSavedProspect}
                         onToggleCompleted={toggleRouteCompleted}
                         onToggleSaved={toggleSaved}
+                        onToggleRoute={toggleRoute}
                         onUpdatePriority={updateProspectPriority}
                         onUpdateVisitNote={updateVisitNote}
                         onUpdateOutcome={updateVisitOutcome}
@@ -4198,14 +4223,12 @@ function App() {
                       </div>
                       <button
                         type="button"
-                        className="button"
+                        className={`button ${routeIds.includes(prospect.id) ? 'button--danger-outline' : ''}`}
                         onClick={() =>
-                          setRouteIds((current) =>
-                            current.includes(prospect.id) ? current : [...current, prospect.id],
-                          )
+                          toggleRoute(prospect.id)
                         }
                       >
-                        {uiText.routes.actions.addToRoute}
+                        {routeIds.includes(prospect.id) ? uiText.search.card.removeRoute : uiText.routes.actions.addToRoute}
                       </button>
                     </article>
                   ))}

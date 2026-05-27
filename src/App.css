@@ -624,6 +624,12 @@
   color: #ffb7a1;
 }
 
+.button--danger-outline {
+  background: transparent;
+  color: #ffb7a1;
+  border: 1px solid rgba(255, 114, 76, 0.3);
+}
+
 .button--ghost {
   color: var(--text-primary);
 }

@@ -295,7 +295,7 @@ export const uiText = {
       removeSaved: 'Remove Saved Prospect',
       removeProspect: 'Remove Prospect',
       addToRoute: 'Add to Route',
-      inRoute: 'In Route',
+      inRoute: 'Remove from Route',
       removeRoute: 'Remove from Route',
       openSaved: 'Open Saved',
       openInMaps: 'Open in Maps',
