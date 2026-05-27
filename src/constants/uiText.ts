@@ -98,8 +98,8 @@ export const uiText = {
     prominentDescription:
       'Run a Live Search by target industry and radius, then save qualified Prospects or add them to a Route.',
     marketLabel: 'City or market',
-    marketPlaceholder: 'Houston, TX',
-    marketHelp: 'Use your current location by default, or enter a market manually.',
+    marketPlaceholder: 'Optional city or market',
+    marketHelp: 'Leave blank to search near your current location.',
     radiusLabel: 'Mileage radius',
     radiusOptions: [5, 10, 15, 25, 50] as const,
     radiusOptionLabels: {
@@ -110,7 +110,11 @@ export const uiText = {
     industriesLabel: 'Target industries',
     industriesPlaceholder: 'Select industries',
     industriesSelected: (count: number) =>
-      count === 0 ? 'Select industries' : `${count} industry${count === 1 ? '' : 'ies'} selected`,
+      count === 0
+        ? 'Select industries'
+        : count === 1
+          ? '1 industry selected'
+          : `${count} industries selected`,
     industryOptions: [
       'Construction',
       'Oil & Gas',
@@ -147,8 +151,6 @@ export const uiText = {
       'plumbing contractors',
       'construction companies',
     ],
-    priorityFilterLabel: 'Priority Filter',
-    priorityOptions: ['All', 'Hot', 'Warm', 'Cold'] as const,
     statusHeading: 'Live Search Status',
     catalogHeading: 'Business Catalog',
     resultsEyebrow: 'Live Results',
@@ -222,6 +224,21 @@ export const uiText = {
   },
   routes: {
     suggestedKeywordCta: 'Find prospects',
+    calculation: {
+      eyebrow: 'Route Builder',
+      heading: 'Calculate Route',
+      description:
+        'Finalize your selected stops and jump straight into Today’s Route without hunting for the Route tab.',
+      button: 'Calculate Route',
+      summaryHeading: 'Route Summary',
+      emptyState: 'Add prospects to build a route.',
+      singleStopHint: 'Add more stops to optimize a multi-stop route.',
+      multiStopHint: 'Route ready. Review your stops and start navigating.',
+      stopCount: (count: number) => `${count} stop${count === 1 ? '' : 's'}`,
+      estimatedDrive: (time: string) => `Est. drive time: ${time}`,
+      travelMode: (mode: string) => `Travel mode: ${mode}`,
+      filters: (summary: string) => `Filters: ${summary}`,
+    },
     routeSnapshotEyebrow: 'Today’s Route',
     routeSnapshotHeading: 'Route Snapshot',
     openRoute: 'Open Route',

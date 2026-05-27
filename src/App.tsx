@@ -75,7 +75,8 @@ import {
 } from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
 
-type Priority = 'Hot' | 'Warm' | 'Cold'
+type AssignedPriority = 'Hot' | 'Warm' | 'Cold'
+type Priority = AssignedPriority | 'Unassigned'
 type Theme = 'dark' | 'light'
 type TravelMode = 'driving' | 'walking'
 type View = 'dashboard' | 'map' | 'search' | 'saved' | 'follow-ups' | 'settings'
@@ -121,7 +122,7 @@ type ProspectRecord = {
   contactWebsite?: string
   lastContactDate?: string
   notes?: string
-  priority?: Priority
+  priority?: AssignedPriority
   followUpDate?: string
   visitNote?: string
   visitOutcome?: OutcomeTag | ''
@@ -186,10 +187,15 @@ type SearchRadiusChoice = 'current-location' | SearchRadiusMiles | 'custom'
 type SearchIndustry = (typeof uiText.search.industryOptions)[number]
 type ArrivalDetectionRadiusFeet = 150 | 300 | 500 | 1320
 type RouteTrackingState = 'idle' | 'tracking' | 'denied' | 'unsupported' | 'error'
+type RouteCalculationContext = {
+  filterSummary: string
+}
+type PendingRouteScrollTarget = 'summary' | 'map'
 
 type SettingsSection = 'top' | 'notifications' | 'crm' | 'backup'
 
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
+const ASSIGNED_PRIORITY_OPTIONS: AssignedPriority[] = ['Hot', 'Warm', 'Cold']
 const SEARCH_RADIUS_OPTIONS: SearchRadiusMiles[] = [...uiText.search.radiusOptions]
 const SEARCH_INDUSTRY_OPTIONS: SearchIndustry[] = [...uiText.search.industryOptions]
 const SUGGESTED_SEARCH_INDUSTRIES = SEARCH_INDUSTRY_OPTIONS.slice(0, 6)
@@ -278,8 +284,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isPriority(value: unknown): value is Priority {
+function isAssignedPriority(value: unknown): value is AssignedPriority {
   return value === 'Hot' || value === 'Warm' || value === 'Cold'
+}
+
+function isPriority(value: unknown): value is Priority {
+  return value === 'Unassigned' || isAssignedPriority(value)
+}
+
+function getPriorityTone(priority: Priority) {
+  return priority === 'Hot'
+    ? 'hot'
+    : priority === 'Warm'
+      ? 'warm'
+      : priority === 'Cold'
+        ? 'cold'
+        : 'unassigned'
 }
 
 function isOutcomeTag(value: unknown): value is OutcomeTag {
@@ -391,22 +411,6 @@ function formatDateTime(value: string) {
   }).format(date)
 }
 
-function priorityFromRating(rating: number | null): Priority {
-  if (rating === null) {
-    return 'Warm'
-  }
-
-  if (rating >= 4.6) {
-    return 'Hot'
-  }
-
-  if (rating >= 4) {
-    return 'Warm'
-  }
-
-  return 'Cold'
-}
-
 function createFallbackLiveProspectId(place: GooglePlacesApiPlace, query: string) {
   const name = place.displayName?.text?.trim() ?? 'place'
   const address = place.formattedAddress?.trim() ?? query
@@ -418,7 +422,7 @@ function toLiveProspect(
   keyword: string,
   location: string,
   searchCenter = AUSTIN_FALLBACK,
-) {
+): BaseProspect | null {
   const lat = place.location?.latitude
   const lng = place.location?.longitude
 
@@ -445,7 +449,7 @@ function toLiveProspect(
     contactEmail: '',
     category,
     distance: calculateDistanceMiles(searchCenter, { lat, lng }),
-    priority: priorityFromRating(rating),
+    priority: 'Unassigned',
     lastContact: 'Not contacted yet',
     notes: 'Imported from Live Search.',
     city: extractCity(address, location.trim()),
@@ -721,7 +725,7 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
         nextRecord.notes = record.notes
       }
 
-      if (isPriority(record.priority)) {
+      if (isAssignedPriority(record.priority)) {
         nextRecord.priority = record.priority
       }
 
@@ -926,6 +930,68 @@ function DataSourceBadge({ source }: { source: SearchDataSource }) {
   return <span className={`source-badge source-badge--${source}`}>{getDataSourceLabel(source)}</span>
 }
 
+function RouteCalculationCard({
+  routeCount,
+  estimatedDriveMinutes,
+  travelMode,
+  filterSummary,
+  onCalculate,
+}: {
+  routeCount: number
+  estimatedDriveMinutes: number
+  travelMode: TravelMode
+  filterSummary: string
+  onCalculate: () => void
+}) {
+  const disabled = routeCount === 0
+  const travelModeLabel =
+    travelMode === 'walking' ? uiText.navigation.travelMode.walking : uiText.navigation.travelMode.driving
+  const helperText = disabled
+    ? uiText.routes.calculation.emptyState
+    : routeCount === 1
+      ? uiText.routes.calculation.singleStopHint
+      : uiText.routes.calculation.multiStopHint
+
+  return (
+    <section className="panel section-panel route-build-card">
+      <div className="section-heading">
+        <div>
+          <div className="eyebrow eyebrow--tight">{uiText.routes.calculation.eyebrow}</div>
+          <h2>{uiText.routes.calculation.heading}</h2>
+        </div>
+      </div>
+
+      <p className="section-copy">{uiText.routes.calculation.description}</p>
+
+      <div className="route-build-card__summary">
+        <span className="meta-pill">{uiText.routes.calculation.stopCount(routeCount)}</span>
+        {routeCount > 0 ? (
+          <span className="meta-pill">
+            {uiText.routes.calculation.estimatedDrive(formatDriveTime(estimatedDriveMinutes))}
+          </span>
+        ) : null}
+        <span className="meta-pill">{uiText.routes.calculation.travelMode(travelModeLabel)}</span>
+        {filterSummary ? (
+          <span className="meta-pill meta-pill--accent">
+            {uiText.routes.calculation.filters(filterSummary)}
+          </span>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        className="button button--wide route-build-card__button"
+        onClick={onCalculate}
+        disabled={disabled}
+      >
+        {uiText.routes.calculation.button}
+      </button>
+
+      <p className="editor-hint route-build-card__hint">{helperText}</p>
+    </section>
+  )
+}
+
 function CurrentStopCard({
   prospect,
   isOnLocation,
@@ -957,7 +1023,7 @@ function CurrentStopCard({
   onUpdateNotes: (prospectId: string, notes: string) => void
   onUpdateVisitNote: (prospectId: string, note: string) => void
   onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
-  onUpdatePriority: (prospectId: string, priority: Priority) => void
+  onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
 }) {
   const [openPanels, setOpenPanels] = useState({
@@ -1012,7 +1078,7 @@ function CurrentStopCard({
           </p>
         </div>
         <div className="route-stop-card__meta">
-          <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
+          <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
             {prospect.priority}
           </span>
           {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
@@ -1195,7 +1261,7 @@ function CurrentStopCard({
         <div className="field-group current-stop-card__panel">
           <span className="field-label">{uiText.search.prospectCard.priority}</span>
           <div className="segment-row">
-            {(['Hot', 'Warm', 'Cold'] as Priority[]).map((option) => (
+            {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
               <button
                 type="button"
                 key={option}
@@ -1242,6 +1308,7 @@ function RouteWorkflowStopCard({
   travelMode,
   onNavigate,
   onToggleCompleted,
+  onUpdatePriority,
   onUpdateVisitNote,
   onUpdateOutcome,
   onRemove,
@@ -1253,6 +1320,7 @@ function RouteWorkflowStopCard({
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onToggleCompleted: (prospectId: string) => void
+  onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateVisitNote: (prospectId: string, note: string) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
   onRemove: (prospectId: string) => void
@@ -1323,7 +1391,7 @@ function RouteWorkflowStopCard({
         {!isOnLocation && isCurrentStop ? (
           <span className="meta-pill">{uiText.routes.currentStop.label}</span>
         ) : null}
-        <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
+        <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
           {prospect.priority}
         </span>
         {prospect.visitOutcome ? (
@@ -1351,6 +1419,22 @@ function RouteWorkflowStopCard({
             ? uiText.routes.actions.navigateWalk
             : uiText.routes.actions.navigateDrive}
         </button>
+      </div>
+
+      <div className="field-group">
+        <span className="field-label">{uiText.search.prospectCard.priority}</span>
+        <div className="segment-row">
+          {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+            <button
+              type="button"
+              key={option}
+              className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+              onClick={() => onUpdatePriority(prospect.id, option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="field-group">
@@ -1400,6 +1484,7 @@ function LiveSearchResultCard({
   isInRoute,
   travelMode,
   onNavigate,
+  onUpdatePriority,
   onToggleSaved,
   onToggleRoute,
 }: {
@@ -1408,6 +1493,7 @@ function LiveSearchResultCard({
   isInRoute: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
+  onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
 }) {
@@ -1422,7 +1508,12 @@ function LiveSearchResultCard({
           <h3>{prospect.businessName}</h3>
           <p>{prospect.category}</p>
         </div>
-        {prospect.rating !== null ? <span className="meta-pill">{prospect.rating.toFixed(1)} stars</span> : null}
+        <div className="live-result-card__meta">
+          <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
+            {prospect.priority}
+          </span>
+          {prospect.rating !== null ? <span className="meta-pill">{prospect.rating.toFixed(1)} stars</span> : null}
+        </div>
       </div>
 
       <div className="live-result-card__details">
@@ -1457,6 +1548,22 @@ function LiveSearchResultCard({
             : uiText.search.card.navigateDrive}
         </button>
       </div>
+
+      <div className="field-group">
+        <span className="field-label">{uiText.search.prospectCard.priority}</span>
+        <div className="segment-row">
+          {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+            <button
+              type="button"
+              key={option}
+              className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+              onClick={() => onUpdatePriority(prospect.id, option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      </div>
     </article>
   )
 }
@@ -1485,7 +1592,7 @@ function ProspectCard({
   onToggleRoute: (prospectId: string) => void
   onToggleExpanded: (prospectId: string) => void
   onUpdateNotes: (prospectId: string, notes: string) => void
-  onUpdatePriority: (prospectId: string, priority: Priority) => void
+  onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
 }) {
   return (
@@ -1511,7 +1618,7 @@ function ProspectCard({
 
       <div className="prospect-card__meta">
         <span className="meta-pill">{formatDistance(prospect.distance)}</span>
-        <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
+        <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
           {prospect.priority}
         </span>
         <span className="meta-pill">{prospect.lastContact}</span>
@@ -1565,7 +1672,7 @@ function ProspectCard({
           <div className="field-group">
             <span className="field-label">{uiText.search.prospectCard.priority}</span>
             <div className="segment-row">
-              {(['Hot', 'Warm', 'Cold'] as Priority[]).map((option) => (
+              {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
                 <button
                   type="button"
                   key={option}
@@ -1622,10 +1729,13 @@ function App() {
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
   const accountMenuRef = useRef<HTMLDivElement | null>(null)
   const pendingSettingsSectionRef = useRef<SettingsSection | null>(null)
+  const pendingRouteScrollTargetRef = useRef<PendingRouteScrollTarget | null>(null)
   const settingsTopRef = useRef<HTMLElement | null>(null)
   const notificationSectionRef = useRef<HTMLElement | null>(null)
   const crmExportSectionRef = useRef<HTMLElement | null>(null)
   const backupSectionRef = useRef<HTMLElement | null>(null)
+  const routeCalculationSummaryRef = useRef<HTMLElement | null>(null)
+  const routeMapSectionRef = useRef<HTMLElement | null>(null)
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
   const [activeView, setActiveView] = useState<View>('search')
   const [expandedProspectId, setExpandedProspectId] = useState<string | null>(null)
@@ -1634,6 +1744,9 @@ function App() {
   const [accountMenuMessage, setAccountMenuMessage] = useState<BackupMessage | null>(null)
   const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [routeCalculationContext, setRouteCalculationContext] = useState<RouteCalculationContext | null>(
+    null,
+  )
   const [theme, setTheme] = usePersistentState<Theme>(STORAGE_KEYS.theme, 'dark')
   const [liveProspects, setLiveProspects] = usePersistentState<BaseProspect[]>(
     STORAGE_KEYS.liveProspects,
@@ -1679,7 +1792,6 @@ function App() {
   const [routeTrackerLocation, setRouteTrackerLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   )
-  const [priorityFilter, setPriorityFilter] = useState<'All' | Priority>('All')
   const [travelMode, setTravelMode] = useState<TravelMode>('driving')
   const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
   const [crmExportScope, setCrmExportScope] = useState<CrmExportScope>('all')
@@ -1829,6 +1941,38 @@ function App() {
     pendingSettingsSectionRef.current = null
   }, [activeView])
 
+  useEffect(() => {
+    if (routeIds.length > 0) {
+      return
+    }
+
+    setRouteCalculationContext(null)
+  }, [routeIds.length])
+
+  useEffect(() => {
+    if (activeView !== 'map' || !pendingRouteScrollTargetRef.current) {
+      return
+    }
+
+    const target =
+      pendingRouteScrollTargetRef.current === 'summary'
+        ? routeCalculationSummaryRef.current ?? routeMapSectionRef.current
+        : routeMapSectionRef.current
+
+    if (!target) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      pendingRouteScrollTargetRef.current = null
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [activeView, routeCalculationContext, routeIds.length])
+
   const effectiveSearchStatus = useMemo<SearchStatus>(
     () =>
       searchStatus ??
@@ -1932,9 +2076,8 @@ function App() {
     () =>
       liveSearchIds
         .map((id) => prospectMap.get(id))
-        .filter((prospect): prospect is Prospect => Boolean(prospect))
-        .filter((prospect) => priorityFilter === 'All' || prospect.priority === priorityFilter),
-    [liveSearchIds, priorityFilter, prospectMap],
+        .filter((prospect): prospect is Prospect => Boolean(prospect)),
+    [liveSearchIds, prospectMap],
   )
 
   const searchResultProspects = useMemo(() => {
@@ -2169,6 +2312,12 @@ function App() {
   const effectiveRadiusLabel = effectiveRadiusMiles
     ? uiText.search.filters.radius(effectiveRadiusMiles)
     : uiText.search.radiusOptionLabels.custom
+  const routeCalculationFilterSummary = summarizeSearchFilters({
+    selectedIndustries,
+    radiusLabel: effectiveRadiusLabel,
+    market: usesCurrentLocation ? '' : manualMarketLabel,
+    usesCurrentLocation,
+  })
   const searchLocationMessage =
     manualMarketLabel && !usesCurrentLocation
       ? uiText.search.location.marketOverride(manualMarketLabel)
@@ -2363,7 +2512,7 @@ function App() {
     }))
   }
 
-  function updateProspectPriority(prospectId: string, priority: Priority) {
+  function updateProspectPriority(prospectId: string, priority: AssignedPriority) {
     updateProspectRecord(prospectId, (current) => ({
       ...current,
       priority,
@@ -2441,6 +2590,18 @@ function App() {
 
   function clearRoute() {
     setRouteIds([])
+  }
+
+  function handleCalculateRoute() {
+    if (routeProspects.length === 0) {
+      return
+    }
+
+    setRouteCalculationContext({
+      filterSummary: routeCalculationFilterSummary,
+    })
+    pendingRouteScrollTargetRef.current = 'summary'
+    setActiveView('map')
   }
 
   function toggleExpandedProspect(prospectId: string) {
@@ -2938,7 +3099,6 @@ function App() {
     setRouteIds(importPreview.payload.routeList)
     setProspectRecords(importPreview.payload.prospectRecords)
     setExpandedProspectId(null)
-    setPriorityFilter('All')
     setLiveSearchIds([])
     setSearchStatus(null)
     setImportPreview(null)
@@ -2973,7 +3133,7 @@ function App() {
                     {prospect.category} · {formatDistance(prospect.distance)}
                   </p>
                 </div>
-                <span className={`meta-pill meta-pill--${prospect.priority.toLowerCase()}`}>
+                <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
                   {prospect.priority}
                 </span>
               </div>
@@ -3170,9 +3330,50 @@ function App() {
   }
 
   function renderMapView() {
+    const selectedTravelModeLabel =
+      travelMode === 'walking' ? uiText.navigation.travelMode.walking : uiText.navigation.travelMode.driving
+
     return (
       <>
-        <section className="panel section-panel">
+        {routeCalculationContext && routeProspects.length > 0 ? (
+          <section ref={routeCalculationSummaryRef} className="panel section-panel route-build-card">
+            <div className="section-heading">
+              <div>
+                <div className="eyebrow eyebrow--tight">{uiText.routes.calculation.eyebrow}</div>
+                <h2>{uiText.routes.calculation.summaryHeading}</h2>
+              </div>
+            </div>
+
+            <div className="route-build-card__summary">
+              <span className="meta-pill">{uiText.routes.calculation.stopCount(routeProspects.length)}</span>
+              <span className="meta-pill">
+                {uiText.routes.calculation.estimatedDrive(formatDriveTime(estimatedDriveMinutes))}
+              </span>
+              <span className="meta-pill">
+                {uiText.routes.calculation.travelMode(selectedTravelModeLabel)}
+              </span>
+              {routeCalculationContext.filterSummary ? (
+                <span className="meta-pill meta-pill--accent">
+                  {uiText.routes.calculation.filters(routeCalculationContext.filterSummary)}
+                </span>
+              ) : null}
+            </div>
+
+            <div
+              className={`status-banner ${
+                routeProspects.length === 1 ? 'status-banner--info' : 'status-banner--success'
+              }`}
+            >
+              <p>
+                {routeProspects.length === 1
+                  ? uiText.routes.calculation.singleStopHint
+                  : uiText.routes.calculation.multiStopHint}
+              </p>
+            </div>
+          </section>
+        ) : null}
+
+        <section ref={routeMapSectionRef} className="panel section-panel">
           <div className="section-heading">
             <div>
               <div className="eyebrow eyebrow--tight">{uiText.routes.routeMapEyebrow}</div>
@@ -3259,6 +3460,7 @@ function App() {
                   isInRoute={routeIds.includes(prospect.id)}
                   travelMode={travelMode}
                   onNavigate={handleNavigateProspect}
+                  onUpdatePriority={updateProspectPriority}
                   onToggleSaved={toggleSaved}
                   onToggleRoute={toggleRoute}
                 />
@@ -3367,6 +3569,7 @@ function App() {
                         travelMode={travelMode}
                         onNavigate={handleNavigateProspect}
                         onToggleCompleted={toggleRouteCompleted}
+                        onUpdatePriority={updateProspectPriority}
                         onUpdateVisitNote={updateVisitNote}
                         onUpdateOutcome={updateVisitOutcome}
                         onRemove={toggleRoute}
@@ -3604,22 +3807,6 @@ function App() {
             {effectiveSearchStatus.details ? <p>{effectiveSearchStatus.details}</p> : null}
           </div>
 
-          <div>
-            <p className="field-label">{uiText.search.priorityFilterLabel}</p>
-            <div className="chip-row">
-              {uiText.search.priorityOptions.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`chip ${priorityFilter === option ? 'chip--active' : ''}`}
-                  onClick={() => setPriorityFilter(option)}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="inline-summary">
             <span>
               {effectiveSearchStatus.source === 'live'
@@ -3632,6 +3819,14 @@ function App() {
           </div>
         </section>
 
+        <RouteCalculationCard
+          routeCount={routeProspects.length}
+          estimatedDriveMinutes={estimatedDriveMinutes}
+          travelMode={travelMode}
+          filterSummary={routeCalculationFilterSummary}
+          onCalculate={handleCalculateRoute}
+        />
+
         {searchResultProspects.length > 0 ? (
           <div className="live-results-stack">
             {searchResultProspects.map((prospect) => (
@@ -3640,8 +3835,9 @@ function App() {
                 prospect={prospect}
                 isSaved={savedIds.includes(prospect.id)}
                 isInRoute={routeIds.includes(prospect.id)}
-                  travelMode={travelMode}
-                  onNavigate={handleNavigateProspect}
+                travelMode={travelMode}
+                onNavigate={handleNavigateProspect}
+                onUpdatePriority={updateProspectPriority}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
               />
@@ -3707,6 +3903,14 @@ function App() {
             </div>
           </div>
         </section>
+
+        <RouteCalculationCard
+          routeCount={routeProspects.length}
+          estimatedDriveMinutes={estimatedDriveMinutes}
+          travelMode={travelMode}
+          filterSummary={routeCalculationFilterSummary}
+          onCalculate={handleCalculateRoute}
+        />
 
         {savedProspects.length > 0 ? (
           <div className="stack">
@@ -3794,7 +3998,7 @@ function App() {
 
                   <div className="follow-up-card__meta">
                     <span>{formatFollowUpDate(prospect.followUpDate)}</span>
-                    <span>{prospect.priority} priority</span>
+                    <span>Priority: {prospect.priority}</span>
                     <span>
                       {savedIds.includes(prospect.id)
                         ? uiText.followUps.savedStatus

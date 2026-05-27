@@ -979,6 +979,12 @@
   border-color: rgba(91, 159, 255, 0.2);
 }
 
+.meta-pill--unassigned {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .meta-pill--accent {
   color: var(--accent-soft);
   background: rgba(74, 123, 255, 0.12);
@@ -1165,6 +1171,13 @@
 .live-result-card__actions {
   display: flex;
   gap: 12px;
+}
+
+.live-result-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .live-result-card__header {
@@ -1363,6 +1376,29 @@
   background:
     linear-gradient(160deg, rgba(74, 123, 255, 0.14), rgba(49, 196, 190, 0.08)),
     var(--surface-soft);
+}
+
+.route-build-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(74, 123, 255, 0.22);
+  background:
+    linear-gradient(160deg, rgba(74, 123, 255, 0.14), rgba(49, 196, 190, 0.08)),
+    var(--surface-soft);
+}
+
+.route-build-card__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-build-card__button {
+  min-height: 54px;
+}
+
+.route-build-card__hint {
+  margin: 0;
 }
 
 .notification-permission-card__copy {
