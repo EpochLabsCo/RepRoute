@@ -188,7 +188,8 @@ type ConnectionTestState = {
 type SearchLocationState = 'idle' | 'requesting' | 'granted' | 'denied' | 'unsupported'
 type SearchRadiusMiles = (typeof uiText.search.radiusOptions)[number]
 type SearchRadiusChoice = 'current-location' | SearchRadiusMiles | 'custom'
-type SearchIndustry = (typeof uiText.search.industryOptions)[number]
+type SearchIndustryGroup = (typeof uiText.search.industryGroups)[number]
+type SearchIndustry = SearchIndustryGroup['options'][number]
 type ArrivalDetectionRadiusFeet = 150 | 300 | 500 | 1320
 type RouteTrackingState = 'idle' | 'tracking' | 'denied' | 'unsupported' | 'error'
 type RouteCalculationContext = {
@@ -204,8 +205,19 @@ type SettingsSection = 'top' | 'notifications' | 'crm' | 'backup'
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
 const ASSIGNED_PRIORITY_OPTIONS: AssignedPriority[] = ['Hot', 'Warm', 'Cold']
 const SEARCH_RADIUS_OPTIONS: SearchRadiusMiles[] = [...uiText.search.radiusOptions]
-const SEARCH_INDUSTRY_OPTIONS: SearchIndustry[] = [...uiText.search.industryOptions]
-const SUGGESTED_SEARCH_INDUSTRIES = SEARCH_INDUSTRY_OPTIONS.slice(0, 6)
+const SEARCH_INDUSTRY_GROUPS = uiText.search.industryGroups.map((group) => ({
+  label: group.label,
+  options: [...group.options],
+})) as Array<{ label: string; options: SearchIndustry[] }>
+const SEARCH_INDUSTRY_OPTIONS = SEARCH_INDUSTRY_GROUPS.flatMap((group) => group.options)
+const SUGGESTED_SEARCH_INDUSTRIES: SearchIndustry[] = [
+  'General Contractors',
+  'HVAC Contractors',
+  'Oil & Gas',
+  'Equipment Rental',
+  'Property Management',
+  'IT Services',
+]
 const ARRIVAL_RADIUS_OPTIONS: ArrivalDetectionRadiusFeet[] = [150, 300, 500, 1320]
 
 const STORAGE_KEYS = {
@@ -1937,6 +1949,11 @@ function App() {
   const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>('current-location')
   const [customRadiusMiles, setCustomRadiusMiles] = useState('35')
   const [selectedIndustries, setSelectedIndustries] = useState<SearchIndustry[]>([])
+  const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false)
+  const [industrySearchQuery, setIndustrySearchQuery] = useState('')
+  const [collapsedIndustryGroups, setCollapsedIndustryGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(SEARCH_INDUSTRY_GROUPS.map((group) => [group.label, false])),
+  )
   const [searchLocationState, setSearchLocationState] = useState<SearchLocationState>(() => {
     if (typeof navigator === 'undefined') {
       return 'idle'
@@ -2150,6 +2167,12 @@ function App() {
     }
   }, [actionToast])
 
+  useEffect(() => {
+    if (!industryDropdownOpen) {
+      setIndustrySearchQuery('')
+    }
+  }, [industryDropdownOpen])
+
   const effectiveSearchStatus = useMemo<SearchStatus>(
     () =>
       searchStatus ??
@@ -2188,6 +2211,19 @@ function App() {
       { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
     ],
     [savedIds.length],
+  )
+  const normalizedIndustrySearchQuery = industrySearchQuery.trim().toLowerCase()
+  const filteredIndustryGroups = useMemo(
+    () =>
+      SEARCH_INDUSTRY_GROUPS.map((group) => ({
+        ...group,
+        options: group.options.filter((industry) =>
+          normalizedIndustrySearchQuery
+            ? industry.toLowerCase().includes(normalizedIndustrySearchQuery)
+            : true,
+        ),
+      })).filter((group) => group.options.length > 0),
+    [normalizedIndustrySearchQuery],
   )
 
   const liveCatalogProspects = useMemo(
@@ -2828,6 +2864,21 @@ function App() {
         ? current.filter((entry) => entry !== industry)
         : [...current, industry],
     )
+  }
+
+  function toggleIndustryGroup(groupLabel: string) {
+    setCollapsedIndustryGroups((current) => ({
+      ...current,
+      [groupLabel]: !current[groupLabel],
+    }))
+  }
+
+  function selectAllIndustries() {
+    setSelectedIndustries(SEARCH_INDUSTRY_OPTIONS)
+  }
+
+  function clearAllIndustries() {
+    setSelectedIndustries([])
   }
 
   async function resolveMarketSearchCenter(market: string) {
@@ -3957,22 +4008,80 @@ function App() {
 
             <div className="field-group">
               <span className="field-label">{uiText.search.industriesLabel}</span>
-              <details className="filter-dropdown">
+              <details
+                className="filter-dropdown"
+                open={industryDropdownOpen}
+                onToggle={(event) => setIndustryDropdownOpen(event.currentTarget.open)}
+              >
                 <summary className="filter-dropdown__trigger">
                   <span>{uiText.search.industriesSelected(selectedIndustries.length)}</span>
                   <ChevronDown size={16} />
                 </summary>
                 <div className="filter-dropdown__panel">
-                  {SEARCH_INDUSTRY_OPTIONS.map((industry) => (
-                    <label key={industry} className="filter-dropdown__option">
-                      <input
-                        type="checkbox"
-                        checked={selectedIndustries.includes(industry)}
-                        onChange={() => toggleIndustrySelection(industry)}
-                      />
-                      <span>{industry}</span>
-                    </label>
-                  ))}
+                  <div className="filter-dropdown__toolbar">
+                    <button type="button" className="text-button" onClick={selectAllIndustries}>
+                      {uiText.search.industriesSelectAll}
+                    </button>
+                    <button type="button" className="text-button" onClick={clearAllIndustries}>
+                      {uiText.search.industriesClearAll}
+                    </button>
+                  </div>
+                  <label className="search-field filter-dropdown__search">
+                    <Search size={16} />
+                    <input
+                      type="search"
+                      value={industrySearchQuery}
+                      onChange={(event) => setIndustrySearchQuery(event.target.value)}
+                      placeholder={uiText.search.industriesSearchPlaceholder}
+                      aria-label={uiText.search.industriesSearchPlaceholder}
+                    />
+                  </label>
+                  <div className="filter-dropdown__groups">
+                    {filteredIndustryGroups.length > 0 ? (
+                      filteredIndustryGroups.map((group) => {
+                        const groupOptions =
+                          SEARCH_INDUSTRY_GROUPS.find((entry) => entry.label === group.label)?.options ?? group.options
+                        const selectedCount = groupOptions.filter((industry) =>
+                          selectedIndustries.includes(industry),
+                        ).length
+                        const isExpanded = normalizedIndustrySearchQuery
+                          ? true
+                          : !(collapsedIndustryGroups[group.label] ?? false)
+
+                        return (
+                          <section key={group.label} className="filter-dropdown__group">
+                            <button
+                              type="button"
+                              className="filter-dropdown__group-toggle"
+                              onClick={() => toggleIndustryGroup(group.label)}
+                            >
+                              <div className="filter-dropdown__group-copy">
+                                <strong>{group.label}</strong>
+                                <span>{uiText.search.industriesSectionSelected(selectedCount)}</span>
+                              </div>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </button>
+                            {isExpanded ? (
+                              <div className="filter-dropdown__group-options">
+                                {group.options.map((industry) => (
+                                  <label key={industry} className="filter-dropdown__option">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedIndustries.includes(industry)}
+                                      onChange={() => toggleIndustrySelection(industry)}
+                                    />
+                                    <span>{industry}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : null}
+                          </section>
+                        )
+                      })
+                    ) : (
+                      <p className="filter-dropdown__empty">{uiText.search.industriesEmpty}</p>
+                    )}
+                  </div>
                 </div>
               </details>
             </div>

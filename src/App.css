@@ -1418,13 +1418,75 @@
 .filter-dropdown__panel {
   margin-top: 10px;
   display: grid;
-  gap: 8px;
-  max-height: 280px;
+  gap: 10px;
+  max-height: min(52dvh, 420px);
   overflow-y: auto;
-  padding: 10px;
+  overflow-x: hidden;
+  padding: 12px;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: var(--surface-soft);
+  scrollbar-gutter: stable;
+}
+
+.filter-dropdown__toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-dropdown__search {
+  min-height: 46px;
+}
+
+.filter-dropdown__groups,
+.filter-dropdown__group-options {
+  display: grid;
+  gap: 8px;
+}
+
+.filter-dropdown__group {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.filter-dropdown__group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+}
+
+.filter-dropdown__group-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.filter-dropdown__group-copy strong {
+  color: var(--text-primary);
+}
+
+.filter-dropdown__group-copy span,
+.filter-dropdown__empty {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.filter-dropdown__empty {
+  margin: 0;
+  padding: 12px 4px 4px;
 }
 
 .filter-dropdown__option {
@@ -1439,6 +1501,7 @@
 
 .filter-dropdown__option input {
   margin: 0;
+  flex: 0 0 auto;
 }
 
 .notification-permission-card {
@@ -1993,6 +2056,28 @@
 
   .industry-grid {
     grid-template-columns: 1fr;
+  }
+
+  .filter-dropdown__panel {
+    max-height: min(58dvh, 460px);
+    padding: 10px;
+  }
+
+  .filter-dropdown__toolbar {
+    gap: 8px;
+  }
+
+  .filter-dropdown__toolbar .text-button {
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .filter-dropdown__group {
+    padding: 8px;
   }
 
   .prospect-card__footer {
