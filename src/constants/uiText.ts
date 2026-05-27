@@ -338,6 +338,13 @@ export const uiText = {
       optimizing: 'Optimizing route…',
       optimized: 'Route optimized.',
       error: 'Couldn’t optimize route. Check location access or try fewer stops.',
+      locationOffMessage: 'Location access is off. Enter a starting location to optimize or navigate.',
+      startingLocationLabel: 'Starting location',
+      startingLocationPlaceholder: 'Use current location or enter a starting address',
+      useCurrentLocation: 'Use My Current Location',
+      routeTooLarge: 'Route is too large to optimize. Try fewer stops.',
+      noStops: 'Add route stops before navigating.',
+      missingCoordinates: 'One or more stops are missing coordinates. Try removing and re-adding them.',
       startPromptHeading: 'Choose a starting point',
       startPromptDescription:
         'Enter a starting address or landmark. RepRoute uses this as the route origin when current location is unavailable.',
