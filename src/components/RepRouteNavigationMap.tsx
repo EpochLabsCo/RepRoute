@@ -7,6 +7,7 @@ import {
   type Libraries,
 } from '@react-google-maps/api'
 import { uiText } from '../constants/uiText'
+import { type RouteLineRenderStatus } from './RepRouteMap'
 
 const AUSTIN_CENTER = { lat: 30.2672, lng: -97.7431 }
 const GOOGLE_MAPS_LIBRARIES: Libraries = ['places']
@@ -21,10 +22,32 @@ export type RouteNavigationStop = {
   isCompleted: boolean
 }
 
+function directionsResponseReady(
+  directions: google.maps.DirectionsResult | null,
+  directionsApiStatus: string | null | undefined,
+) {
+  if (!directions?.routes?.[0]) {
+    return false
+  }
+
+  if (!directionsApiStatus) {
+    return true
+  }
+
+  const okStatus =
+    typeof google !== 'undefined' && google.maps?.DirectionsStatus
+      ? String(google.maps.DirectionsStatus.OK)
+      : 'OK'
+
+  return directionsApiStatus === okStatus
+}
+
 type RepRouteNavigationMapProps = {
   directions: google.maps.DirectionsResult | null
+  directionsApiStatus?: string | null
   stops: RouteNavigationStop[]
   userLocation: { lat: number; lng: number } | null
+  onRouteLineRenderStatusChange?: (status: RouteLineRenderStatus) => void
 }
 
 function createMarkerIcon(fill: string, scale = 1) {
@@ -45,7 +68,13 @@ function createMarkerIcon(fill: string, scale = 1) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-function RepRouteNavigationMap({ directions, stops, userLocation }: RepRouteNavigationMapProps) {
+function RepRouteNavigationMap({
+  directions,
+  directionsApiStatus = null,
+  stops,
+  userLocation,
+  onRouteLineRenderStatusChange,
+}: RepRouteNavigationMapProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null)
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
@@ -56,6 +85,38 @@ function RepRouteNavigationMap({ directions, stops, userLocation }: RepRouteNavi
     googleMapsApiKey: hasApiKey ? apiKey : 'missing-api-key',
     libraries: GOOGLE_MAPS_LIBRARIES,
   })
+
+  const canRenderRouteLine = Boolean(
+    map && isLoaded && directionsResponseReady(directions, directionsApiStatus),
+  )
+
+  useEffect(() => {
+    if (!isLoaded) {
+      onRouteLineRenderStatusChange?.('map-loading')
+      return
+    }
+
+    if (!directions) {
+      onRouteLineRenderStatusChange?.('no-directions')
+      return
+    }
+
+    if (!map) {
+      onRouteLineRenderStatusChange?.('map-ready')
+      return
+    }
+
+    if (!canRenderRouteLine) {
+      onRouteLineRenderStatusChange?.('no-directions')
+      return
+    }
+
+    onRouteLineRenderStatusChange?.('rendering')
+  }, [canRenderRouteLine, directions, isLoaded, map, onRouteLineRenderStatusChange])
+
+  const handleDirectionsRendererLoad = useCallback(() => {
+    onRouteLineRenderStatusChange?.('rendered')
+  }, [onRouteLineRenderStatusChange])
 
   const mapCenter = useMemo(() => {
     if (userLocation) {
@@ -145,8 +206,9 @@ function RepRouteNavigationMap({ directions, stops, userLocation }: RepRouteNavi
           zoomControl: true,
         }}
       >
-        {directions ? (
+        {canRenderRouteLine && directions ? (
           <DirectionsRenderer
+            onLoad={handleDirectionsRendererLoad}
             options={{
               directions,
               suppressMarkers: true,

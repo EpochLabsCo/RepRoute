@@ -8,6 +8,7 @@ import {
   Navigation,
 } from 'lucide-react'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
+import { type RouteLineRenderStatus } from './RepRouteMap'
 import { uiText } from '../constants/uiText'
 
 type OutcomeTag =
@@ -37,8 +38,10 @@ type RouteNavigationViewProps = {
   routeProspects: RouteNavigationProspect[]
   navigationStops: RouteNavigationStop[]
   directions: google.maps.DirectionsResult | null
+  directionsApiStatus?: string | null
   directionsLoading: boolean
   directionsError: string | null
+  onRouteLineRenderStatusChange?: (status: RouteLineRenderStatus) => void
   userLocation: { lat: number; lng: number } | null
   activeStopId: string | null
   arrivedStopIds: Record<string, boolean>
@@ -72,8 +75,10 @@ function RouteNavigationView({
   routeProspects,
   navigationStops,
   directions,
+  directionsApiStatus = null,
   directionsLoading,
   directionsError,
+  onRouteLineRenderStatusChange,
   userLocation,
   activeStopId,
   arrivedStopIds,
@@ -168,8 +173,10 @@ function RouteNavigationView({
       <section className="panel section-panel route-navigation-view__map-panel">
         <RepRouteNavigationMap
           directions={directions}
+          directionsApiStatus={directionsApiStatus}
           stops={navigationStops}
           userLocation={userLocation}
+          onRouteLineRenderStatusChange={onRouteLineRenderStatusChange}
         />
       </section>
 

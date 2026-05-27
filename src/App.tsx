@@ -51,7 +51,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 import { uiText } from './constants/uiText'
-import RepRouteMap, { type RepRouteMapMarker } from './components/RepRouteMap'
+import RepRouteMap, { type RepRouteMapMarker, type RouteLineRenderStatus } from './components/RepRouteMap'
 import type { RouteNavigationStop } from './components/RepRouteNavigationMap'
 import RouteNavigationView, { type RouteNavigationLegSummary } from './components/RouteNavigationView'
 import {
@@ -77,6 +77,12 @@ import {
   type NotificationReminderLog,
 } from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
+import {
+  fetchRouteDirectionsWithFallback,
+  validateRouteStopsForDirections,
+  waitForGoogleMaps,
+  type RouteDirectionsStop,
+} from './lib/routeDirections'
 
 type AssignedPriority = 'Hot' | 'Warm' | 'Cold'
 type Priority = AssignedPriority | 'Unassigned'
@@ -191,6 +197,19 @@ type RouteOptimizationDebug = {
   waypointCount?: number
   stopCount: number
   missingCoordinatesCount: number
+} | null
+
+type RouteRenderDebug = {
+  lastAttemptedAt: string
+  mapReady: boolean
+  validStopCount: number
+  invalidRemovedCount: number
+  autoRemovedStopNames: string[]
+  routeStatus: string
+  directionsStatus: string
+  rendererStatus: RouteLineRenderStatus
+  usedFallback: boolean
+  waypointCount: number
 } | null
 
 type ImportPreview = {
@@ -739,59 +758,14 @@ function buildStopLegMap(
   return map
 }
 
-async function fetchRouteDirectionsForStops(
-  origin: string | { lat: number; lng: number },
-  stops: Prospect[],
-  travelMode: TravelMode,
-): Promise<{ result: google.maps.DirectionsResult | null; status: string }> {
-  if (typeof window === 'undefined' || !window.google?.maps) {
-    return { result: null, status: 'NO_MAPS' }
+function prospectToRouteDirectionsStop(prospect: Prospect): RouteDirectionsStop {
+  return {
+    id: prospect.id,
+    businessName: prospect.businessName,
+    address: prospect.address,
+    googlePlaceId: prospect.googlePlaceId,
+    location: prospect.location,
   }
-
-  if (stops.length === 0) {
-    return { result: null, status: 'NO_STOPS' }
-  }
-
-  const resolvedStops = stops
-    .map((stop) => ({
-      id: stop.id,
-      location: resolveDirectionsLocation(stop),
-    }))
-    .filter((entry): entry is { id: string; location: string | { lat: number; lng: number } } =>
-      Boolean(entry.location),
-    )
-
-  if (resolvedStops.length === 0) {
-    return { result: null, status: 'INVALID_STOPS' }
-  }
-
-  const destination = resolvedStops[resolvedStops.length - 1]?.location
-  const waypointEntries = resolvedStops.slice(0, -1)
-
-  const request: google.maps.DirectionsRequest = {
-    origin,
-    destination,
-    travelMode: getGoogleDirectionsTravelMode(travelMode),
-    optimizeWaypoints: false,
-    waypoints:
-      waypointEntries.length > 0
-        ? waypointEntries.map((entry) => ({
-            location: entry.location,
-            stopover: true,
-          }))
-        : undefined,
-  }
-
-  const service = new google.maps.DirectionsService()
-
-  return new Promise((resolve) => {
-    service.route(request, (response, responseStatus) => {
-      resolve({
-        result: response ?? null,
-        status: String(responseStatus),
-      })
-    })
-  })
 }
 
 function getDataSourceLabel(source: SearchDataSource) {
@@ -2475,8 +2449,11 @@ function App() {
   const [routeNavigationOpen, setRouteNavigationOpen] = useState(false)
   const [routeNavigationDirections, setRouteNavigationDirections] =
     useState<google.maps.DirectionsResult | null>(null)
+  const [routeDirectionsApiStatus, setRouteDirectionsApiStatus] = useState<string | null>(null)
   const [routeNavigationLoading, setRouteNavigationLoading] = useState(false)
   const [routeNavigationError, setRouteNavigationError] = useState<string | null>(null)
+  const [routeRenderDebug, setRouteRenderDebug] = useState<RouteRenderDebug>(null)
+  const [routeLineRenderStatus, setRouteLineRenderStatus] = useState<RouteLineRenderStatus>('idle')
   const [navigationActiveStopId, setNavigationActiveStopId] = useState<string | null>(null)
   const [navigationArrivedStopIds, setNavigationArrivedStopIds] = useState<Record<string, boolean>>({})
   const [foodNearbyOpenForProspectId, setFoodNearbyOpenForProspectId] = useState<string | null>(null)
@@ -3876,47 +3853,170 @@ function App() {
   }
 
   async function loadRouteNavigationDirections() {
+    const attemptedAt = new Date().toISOString()
     const origin =
       routeOrigin.origin ??
       (routeProspects[0] ? resolveDirectionsLocation(routeProspects[0]) : null)
 
     if (!origin) {
       setRouteNavigationDirections(null)
+      setRouteDirectionsApiStatus(null)
       setRouteNavigationLoading(false)
       setRouteNavigationError(uiText.routes.inAppNavigation.needOrigin)
-      return
-    }
-
-    const stopsForDirections =
-      routeOrigin.source === 'first-stop' ? routeProspects.slice(1) : routeProspects
-
-    if (stopsForDirections.length === 0) {
-      setRouteNavigationDirections(null)
-      setRouteNavigationLoading(false)
-      setRouteNavigationError(null)
+      setRouteRenderDebug({
+        lastAttemptedAt: attemptedAt,
+        mapReady: false,
+        validStopCount: 0,
+        invalidRemovedCount: 0,
+        autoRemovedStopNames: [],
+        routeStatus: 'missing-origin',
+        directionsStatus: 'NO_ORIGIN',
+        rendererStatus: 'no-directions',
+        usedFallback: false,
+        waypointCount: 0,
+      })
       return
     }
 
     setRouteNavigationLoading(true)
     setRouteNavigationError(null)
+    setRouteLineRenderStatus('map-loading')
 
-    const { result, status } = await fetchRouteDirectionsForStops(
-      origin,
-      stopsForDirections,
-      travelMode,
-    )
+    const mapReady = await waitForGoogleMaps()
+    const stopsInput = routeProspects.map(prospectToRouteDirectionsStop)
+    const validation = validateRouteStopsForDirections(stopsInput)
+    const autoRemovedNames = [
+      ...validation.invalid.map((entry) => entry.stop.businessName),
+      ...validation.duplicateRemoved.map((entry) => entry.stop.businessName),
+    ]
 
-    setRouteNavigationLoading(false)
+    let routeIdsForDirections = routeIds
 
-    if (!result || status !== String(google.maps.DirectionsStatus.OK)) {
+    if (autoRemovedNames.length > 0) {
+      const validIdSet = new Set(validation.valid.map((stop) => stop.id))
+      const nextRouteIds = routeIds.filter((id) => validIdSet.has(id))
+
+      if (nextRouteIds.length !== routeIds.length) {
+        console.warn('[RepRoute] Auto-removed invalid route stops', autoRemovedNames)
+        setRouteIds(nextRouteIds)
+        routeIdsForDirections = nextRouteIds
+        setRouteActionMessage({
+          tone: 'info',
+          text: uiText.routes.routeRender.autoRemoved,
+          persistent: true,
+        })
+      }
+    }
+
+    const validById = new Map(validation.valid.map((stop) => [stop.id, stop]))
+    let orderedStops = routeIdsForDirections
+      .map((id) => validById.get(id))
+      .filter((stop): stop is RouteDirectionsStop => Boolean(stop))
+
+    if (routeOrigin.source === 'first-stop') {
+      const firstStopId = routeProspects[0]?.id
+      if (firstStopId) {
+        orderedStops = orderedStops.filter((stop) => stop.id !== firstStopId)
+      }
+    }
+
+    if (orderedStops.length === 0) {
       setRouteNavigationDirections(null)
-      setRouteNavigationError(uiText.routes.inAppNavigation.routeLineError)
-      console.warn('[RepRoute] Route navigation directions failed', status)
+      setRouteDirectionsApiStatus(null)
+      setRouteNavigationLoading(false)
+      setRouteNavigationError(null)
+      setRouteLineRenderStatus(mapReady ? 'map-ready' : 'map-loading')
+      setRouteRenderDebug({
+        lastAttemptedAt: attemptedAt,
+        mapReady,
+        validStopCount: validation.valid.length,
+        invalidRemovedCount: autoRemovedNames.length,
+        autoRemovedStopNames: autoRemovedNames,
+        routeStatus: 'no-stops-for-line',
+        directionsStatus: 'NO_STOPS',
+        rendererStatus: mapReady ? 'no-directions' : 'map-loading',
+        usedFallback: false,
+        waypointCount: 0,
+      })
       return
     }
 
-    setRouteNavigationDirections(result)
+    if (!mapReady) {
+      setRouteNavigationDirections(null)
+      setRouteDirectionsApiStatus('NO_MAPS')
+      setRouteNavigationLoading(false)
+      setRouteNavigationError(uiText.routes.inAppNavigation.mapNotReady)
+      setRouteLineRenderStatus('map-loading')
+      setRouteRenderDebug({
+        lastAttemptedAt: attemptedAt,
+        mapReady: false,
+        validStopCount: orderedStops.length,
+        invalidRemovedCount: autoRemovedNames.length,
+        autoRemovedStopNames: autoRemovedNames,
+        routeStatus: 'map-not-ready',
+        directionsStatus: 'NO_MAPS',
+        rendererStatus: 'map-loading',
+        usedFallback: false,
+        waypointCount: Math.max(0, orderedStops.length - 1),
+      })
+      return
+    }
+
+    setRouteLineRenderStatus('map-ready')
+
+    const fetchResult = await fetchRouteDirectionsWithFallback({
+      origin,
+      orderedStops,
+      travelMode: getGoogleDirectionsTravelMode(travelMode),
+    })
+
+    setRouteNavigationLoading(false)
+    setRouteDirectionsApiStatus(fetchResult.status)
+
+    const okStatus = String(google.maps.DirectionsStatus.OK)
+
+    setRouteRenderDebug({
+      lastAttemptedAt: attemptedAt,
+      mapReady: true,
+      validStopCount: orderedStops.length,
+      invalidRemovedCount: autoRemovedNames.length,
+      autoRemovedStopNames: autoRemovedNames,
+      routeStatus:
+        fetchResult.result && fetchResult.status === okStatus ? 'success' : 'error',
+      directionsStatus: fetchResult.status,
+      rendererStatus: 'rendering',
+      usedFallback: fetchResult.usedFallback,
+      waypointCount: fetchResult.waypointCount,
+    })
+
+    if (fetchResult.status === 'WAYPOINT_LIMIT_EXCEEDED') {
+      setRouteNavigationDirections(null)
+      setRouteNavigationError(uiText.routes.inAppNavigation.tooManyStops)
+      setRouteLineRenderStatus('no-directions')
+      console.warn('[RepRoute] Route line waypoint limit exceeded', fetchResult.waypointCount)
+      return
+    }
+
+    if (!fetchResult.result || fetchResult.status !== okStatus) {
+      setRouteNavigationDirections(null)
+      setRouteNavigationError(uiText.routes.inAppNavigation.routeLineError)
+      setRouteLineRenderStatus('no-directions')
+      console.warn('[RepRoute] Route navigation directions failed', fetchResult.status, fetchResult)
+      return
+    }
+
+    setRouteNavigationDirections(fetchResult.result)
     setRouteNavigationError(null)
+    setRouteLineRenderStatus('rendering')
+
+    if (fetchResult.usedFallback) {
+      console.info('[RepRoute] Route line used sequential fallback', fetchResult.status)
+    }
+  }
+
+  function handleRouteLineRenderStatusChange(status: RouteLineRenderStatus) {
+    setRouteLineRenderStatus(status)
+    setRouteRenderDebug((current) => (current ? { ...current, rendererStatus: status } : current))
   }
 
   async function startRouteNavigationForStop(prospectId: string) {
@@ -4075,8 +4175,11 @@ function App() {
       routeNavHistoryPushedRef.current = false
       setRouteNavigationOpen(false)
       setRouteNavigationDirections(null)
+      setRouteDirectionsApiStatus(null)
       setRouteNavigationLoading(false)
       setRouteNavigationError(null)
+      setRouteRenderDebug(null)
+      setRouteLineRenderStatus('idle')
     }
   }, [routeIds.length, routeNavigationOpen])
 
@@ -4297,6 +4400,7 @@ function App() {
         missingCoordinatesCount,
       })
       setActionToast({ type: 'success', text: uiText.routes.optimization.optimized })
+      await loadRouteNavigationDirections()
       return
     }
 
@@ -4343,6 +4447,7 @@ function App() {
       missingCoordinatesCount,
     })
     setActionToast({ type: 'success', text: uiText.routes.optimization.optimized })
+    await loadRouteNavigationDirections()
 
     if (routeCalculationContext) {
       setRouteCalculationContext({ ...routeCalculationContext })
@@ -5168,8 +5273,10 @@ function App() {
           routeProspects={routeProspects}
           navigationStops={navigationStops}
           directions={routeNavigationDirections}
+          directionsApiStatus={routeDirectionsApiStatus}
           directionsLoading={routeNavigationLoading}
           directionsError={routeNavigationError}
+          onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
           userLocation={routeTrackerLocation}
           activeStopId={navigationActiveStopId}
           arrivedStopIds={navigationArrivedStopIds}
@@ -5397,38 +5504,75 @@ function App() {
           <RepRouteMap
             markers={mapMarkers}
             directions={routeNavigationDirections}
+            directionsApiStatus={routeDirectionsApiStatus}
             userLocation={routeTrackerLocation}
             activeRouteStopId={currentRouteStop?.id ?? null}
+            onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
             onToggleSaved={toggleSaved}
             onToggleRoute={toggleRoute}
           />
 
-          {import.meta.env.DEV ? (
-            <details className="panel section-panel" style={{ marginTop: 12 }}>
-              <summary className="filter-dropdown__trigger">Route Diagnostics</summary>
+          {routeProspects.length > 0 ? (
+            <details className="panel section-panel route-diagnostics" open>
+              <summary className="filter-dropdown__trigger">
+                {uiText.routes.routeRender.diagnosticsHeading}
+              </summary>
               <div className="filter-dropdown__panel">
                 <div className="inline-summary">
-                  <span>Location: {searchLocationState}</span>
-                  <span>Route tracker: {routeTrackerState}</span>
-                </div>
-                <div className="inline-summary">
-                  <span>Stops: {routeProspects.length}</span>
+                  <span>{uiText.routes.routeRender.validStops(routeRenderDebug?.validStopCount ?? routeProspects.length)}</span>
                   <span>
-                    Missing coords: {routeProspects.filter((stop) => !isFiniteLatLng(stop.location)).length}
+                    {uiText.routes.routeRender.invalidRemoved(routeRenderDebug?.invalidRemovedCount ?? 0)}
                   </span>
                 </div>
                 <div className="inline-summary">
+                  <span>
+                    {uiText.routes.routeRender.routeStatus}: {routeRenderDebug?.routeStatus ?? 'idle'}
+                  </span>
+                  <span>
+                    {routeRenderDebug?.mapReady
+                      ? uiText.routes.routeRender.mapReady
+                      : uiText.routes.routeRender.mapLoading}
+                  </span>
+                </div>
+                <div className="inline-summary">
+                  <span>
+                    {uiText.routes.routeRender.directionsStatus}: {routeDirectionsApiStatus ?? '—'}
+                  </span>
+                  <span>
+                    {uiText.routes.routeRender.rendererStatus}: {routeLineRenderStatus}
+                  </span>
+                </div>
+                {routeRenderDebug?.usedFallback ? (
+                  <div className="status-banner status-banner--info">
+                    <p>{uiText.routes.routeRender.usedFallback}</p>
+                  </div>
+                ) : null}
+                {routeRenderDebug?.autoRemovedStopNames.length ? (
+                  <div className="status-banner status-banner--info">
+                    <p>
+                      {uiText.routes.routeRender.autoRemoved}:{' '}
+                      {routeRenderDebug.autoRemovedStopNames.join(', ')}
+                    </p>
+                  </div>
+                ) : null}
+                <div className="inline-summary">
                   <span>Last optimize: {routeOptimizationDebug?.status ?? 'idle'}</span>
-                  <span>{routeOptimizationDebug?.directionsStatus ? `Status: ${routeOptimizationDebug.directionsStatus}` : ''}</span>
+                  <span>
+                    {routeOptimizationDebug?.directionsStatus
+                      ? `Optimize API: ${routeOptimizationDebug.directionsStatus}`
+                      : ''}
+                  </span>
                 </div>
                 {routeOptimizationDebug?.message ? (
                   <div className="status-banner status-banner--error">
                     <p>{routeOptimizationDebug.message}</p>
                   </div>
                 ) : null}
-                <pre className="editor-hint" style={{ whiteSpace: 'pre-wrap' }}>
-{JSON.stringify(routeOptimizationDebug, null, 2)}
-                </pre>
+                {import.meta.env.DEV ? (
+                  <pre className="editor-hint" style={{ whiteSpace: 'pre-wrap' }}>
+                    {JSON.stringify({ routeRenderDebug, routeOptimizationDebug }, null, 2)}
+                  </pre>
+                ) : null}
               </div>
             </details>
           ) : null}

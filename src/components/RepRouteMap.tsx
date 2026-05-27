@@ -32,11 +32,21 @@ export type RepRouteMapMarker = {
   routeOrder?: number
 }
 
+export type RouteLineRenderStatus =
+  | 'idle'
+  | 'map-loading'
+  | 'map-ready'
+  | 'no-directions'
+  | 'rendering'
+  | 'rendered'
+
 type RepRouteMapProps = {
   markers: RepRouteMapMarker[]
   directions?: google.maps.DirectionsResult | null
+  directionsApiStatus?: string | null
   userLocation?: { lat: number; lng: number } | null
   activeRouteStopId?: string | null
+  onRouteLineRenderStatusChange?: (status: RouteLineRenderStatus) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
 }
@@ -93,11 +103,33 @@ function normalizeWebsite(website: string) {
     : `https://${website}`
 }
 
+function directionsResponseReady(
+  directions: google.maps.DirectionsResult | null | undefined,
+  directionsApiStatus: string | null | undefined,
+) {
+  if (!directions?.routes?.[0]) {
+    return false
+  }
+
+  if (!directionsApiStatus) {
+    return true
+  }
+
+  const okStatus =
+    typeof google !== 'undefined' && google.maps?.DirectionsStatus
+      ? String(google.maps.DirectionsStatus.OK)
+      : 'OK'
+
+  return directionsApiStatus === okStatus
+}
+
 function RepRouteMap({
   markers,
   directions = null,
+  directionsApiStatus = null,
   userLocation: userLocationProp = null,
   activeRouteStopId = null,
+  onRouteLineRenderStatusChange,
   onToggleSaved,
   onToggleRoute,
 }: RepRouteMapProps) {
@@ -108,8 +140,6 @@ function RepRouteMap({
   )
   const [map, setMap] = useState<google.maps.Map | null>(null)
 
-  const userLocation = userLocationProp ?? internalUserLocation
-
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim() ?? ''
   const hasApiKey = apiKey.length > 0
 
@@ -118,6 +148,39 @@ function RepRouteMap({
     googleMapsApiKey: hasApiKey ? apiKey : 'missing-api-key',
     libraries: GOOGLE_MAPS_LIBRARIES,
   })
+
+  const userLocation = userLocationProp ?? internalUserLocation
+  const canRenderRouteLine = Boolean(
+    map && isLoaded && directionsResponseReady(directions, directionsApiStatus),
+  )
+
+  useEffect(() => {
+    if (!isLoaded) {
+      onRouteLineRenderStatusChange?.('map-loading')
+      return
+    }
+
+    if (!directions) {
+      onRouteLineRenderStatusChange?.('no-directions')
+      return
+    }
+
+    if (!map) {
+      onRouteLineRenderStatusChange?.('map-ready')
+      return
+    }
+
+    if (!canRenderRouteLine) {
+      onRouteLineRenderStatusChange?.('no-directions')
+      return
+    }
+
+    onRouteLineRenderStatusChange?.('rendering')
+  }, [canRenderRouteLine, directions, isLoaded, map, onRouteLineRenderStatusChange])
+
+  const handleDirectionsRendererLoad = useCallback(() => {
+    onRouteLineRenderStatusChange?.('rendered')
+  }, [onRouteLineRenderStatusChange])
 
   useEffect(() => {
     if (userLocationProp) {
@@ -231,8 +294,9 @@ function RepRouteMap({
         }}
         onClick={() => setSelectedMarkerId(null)}
       >
-        {directions ? (
+        {canRenderRouteLine && directions ? (
           <DirectionsRenderer
+            onLoad={handleDirectionsRendererLoad}
             options={{
               directions,
               suppressMarkers: true,
