@@ -164,6 +164,12 @@ type ToastMessage = {
   text: string
 }
 
+type RouteOptimizationState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; forRouteKey: string; distanceMiles: number; driveMinutes: number }
+  | { status: 'error'; message: string }
+
 type ImportPreview = {
   fileName: string
   exportedAt: string
@@ -446,6 +452,14 @@ function formatCalendarDate(value: string) {
     day: 'numeric',
     year: 'numeric',
   }).format(date)
+}
+
+function metersToMiles(meters: number) {
+  return meters / 1609.344
+}
+
+function secondsToMinutes(seconds: number) {
+  return Math.round(seconds / 60)
 }
 
 function createFallbackLiveProspectId(place: GooglePlacesApiPlace, query: string) {
@@ -1641,6 +1655,53 @@ function RouteWorkflowStopCard({
   )
 }
 
+function OptimizeRouteSheet({
+  value,
+  onChange,
+  onConfirm,
+  onCancel,
+  isWorking,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+  isWorking: boolean
+}) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal-sheet">
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <h2>{uiText.routes.optimization.startPromptHeading}</h2>
+        <p className="section-copy">{uiText.routes.optimization.startPromptDescription}</p>
+        <label className="field-group">
+          <span className="field-label">{uiText.routes.optimization.startPromptLabel}</span>
+          <input
+            className="text-input"
+            type="search"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={uiText.routes.optimization.startPromptPlaceholder}
+          />
+        </label>
+        <div className="modal-sheet__actions">
+          <button
+            type="button"
+            className="button"
+            onClick={onConfirm}
+            disabled={isWorking || !value.trim()}
+          >
+            {isWorking ? uiText.routes.optimization.optimizing : uiText.routes.optimization.startPromptConfirm}
+          </button>
+          <button type="button" className="button button--ghost" onClick={onCancel} disabled={isWorking}>
+            {uiText.routes.optimization.startPromptCancel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LiveSearchResultCard({
   prospect,
   isSaved,
@@ -1916,6 +1977,9 @@ function App() {
   const [crmExportMessage, setCrmExportMessage] = useState<BackupMessage | null>(null)
   const [accountMenuMessage, setAccountMenuMessage] = useState<BackupMessage | null>(null)
   const [actionToast, setActionToast] = useState<ToastMessage | null>(null)
+  const [routeOptimization, setRouteOptimization] = useState<RouteOptimizationState>({ status: 'idle' })
+  const [optimizeStartOpen, setOptimizeStartOpen] = useState(false)
+  const [optimizeStartValue, setOptimizeStartValue] = useState('')
   const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [removeProspectPrompt, setRemoveProspectPrompt] = useState<RemoveProspectPrompt | null>(null)
@@ -2173,6 +2237,17 @@ function App() {
     }
   }, [industryDropdownOpen])
 
+  useEffect(() => {
+    if (routeOptimization.status !== 'success') {
+      return
+    }
+
+    const routeKey = routeIds.join('|')
+    if (routeOptimization.forRouteKey !== routeKey) {
+      setRouteOptimization({ status: 'idle' })
+    }
+  }, [routeIds, routeOptimization])
+
   const effectiveSearchStatus = useMemo<SearchStatus>(
     () =>
       searchStatus ??
@@ -2412,8 +2487,15 @@ function App() {
   )
 
   const routeMiles = useMemo(
-    () => routeProspects.reduce((total, prospect) => total + prospect.distance, 0),
-    [routeProspects],
+    () => {
+      const routeKey = routeIds.join('|')
+      if (routeOptimization.status === 'success' && routeOptimization.forRouteKey === routeKey) {
+        return routeOptimization.distanceMiles
+      }
+
+      return routeProspects.reduce((total, prospect) => total + prospect.distance, 0)
+    },
+    [routeIds, routeOptimization, routeProspects],
   )
   const completedRouteStops = useMemo(
     () => routeProspects.filter((prospect) => prospect.routeCompleted).length,
@@ -2423,8 +2505,15 @@ function App() {
   const completionPercentage =
     routeProspects.length > 0 ? Math.round((completedRouteStops / routeProspects.length) * 100) : 0
   const estimatedDriveMinutes = useMemo(
-    () => Math.round(routeMiles * 2.4),
-    [routeMiles],
+    () => {
+      const routeKey = routeIds.join('|')
+      if (routeOptimization.status === 'success' && routeOptimization.forRouteKey === routeKey) {
+        return routeOptimization.driveMinutes
+      }
+
+      return Math.round(routeMiles * 2.4)
+    },
+    [routeIds, routeMiles, routeOptimization],
   )
   const currentRouteStop = useMemo(
     () => routeProspects.find((prospect) => !prospect.routeCompleted) ?? routeProspects[0] ?? null,
@@ -2836,6 +2925,113 @@ function App() {
     }
 
     openExternalNavigation(createEntireRouteNavigateHref(routeProspects, travelMode))
+  }
+
+  async function optimizeRoute(originOverride?: string) {
+    if (routeProspects.length < 2) {
+      return
+    }
+
+    if (typeof window === 'undefined' || !('google' in window) || !window.google?.maps) {
+      setRouteOptimization({
+        status: 'error',
+        message: uiText.routes.optimization.error,
+      })
+      return
+    }
+
+    const destinationProspect = routeProspects[routeProspects.length - 1]
+    if (!destinationProspect) {
+      return
+    }
+
+    const origin =
+      routeTrackerLocation ??
+      (originOverride?.trim()
+        ? originOverride.trim()
+        : null)
+
+    if (!origin) {
+      setOptimizeStartOpen(true)
+      return
+    }
+
+    setRouteOptimization({ status: 'loading' })
+
+    const waypointProspects = routeProspects.slice(0, -1)
+    const waypointIds = waypointProspects.map((prospect) => prospect.id)
+
+    const request: google.maps.DirectionsRequest = {
+      origin,
+      destination: destinationProspect.location,
+      travelMode: google.maps.TravelMode.DRIVING,
+      optimizeWaypoints: true,
+      waypoints: waypointProspects.map((prospect) => ({
+        location: prospect.location,
+        stopover: true,
+      })),
+    }
+
+    const service = new google.maps.DirectionsService()
+
+    const response = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
+      service.route(request, (result, status) => {
+        if (status !== google.maps.DirectionsStatus.OK || !result) {
+          reject(new Error(String(status)))
+          return
+        }
+        resolve(result)
+      })
+    }).catch(() => null)
+
+    if (!response?.routes?.[0]) {
+      setRouteOptimization({
+        status: 'error',
+        message: uiText.routes.optimization.error,
+      })
+      return
+    }
+
+    const route = response.routes[0]
+    const waypointOrder = route.waypoint_order ?? []
+
+    if (waypointOrder.length !== waypointIds.length) {
+      setRouteOptimization({
+        status: 'error',
+        message: uiText.routes.optimization.error,
+      })
+      return
+    }
+
+    const optimizedWaypointIds = waypointOrder.map((index) => waypointIds[index]).filter(Boolean)
+    const optimizedIds = [...optimizedWaypointIds, destinationProspect.id]
+    const optimizedKey = optimizedIds.join('|')
+
+    const legs = route.legs ?? []
+    const distanceMeters = legs.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0)
+    const durationSeconds = legs.reduce((sum, leg) => sum + (leg.duration?.value ?? 0), 0)
+    const distanceMiles = metersToMiles(distanceMeters)
+    const driveMinutes = secondsToMinutes(durationSeconds)
+
+    setRouteIds(optimizedIds)
+    setRouteOptimization({
+      status: 'success',
+      forRouteKey: optimizedKey,
+      distanceMiles,
+      driveMinutes,
+    })
+    setOptimizeStartOpen(false)
+    setOptimizeStartValue('')
+    setActionToast({
+      type: 'success',
+      text: uiText.routes.optimization.optimized,
+    })
+
+    if (routeCalculationContext) {
+      setRouteCalculationContext({
+        ...routeCalculationContext,
+      })
+    }
   }
 
   function clearRoute() {
@@ -3613,6 +3809,7 @@ function App() {
               <span className="meta-pill">
                 {uiText.routes.calculation.estimatedDrive(formatDriveTime(estimatedDriveMinutes))}
               </span>
+              <span className="meta-pill">{uiText.routes.optimization.totalDistance(routeMiles.toFixed(1))}</span>
               <span className="meta-pill">
                 {uiText.routes.calculation.travelMode(selectedTravelModeLabel)}
               </span>
@@ -3647,7 +3844,18 @@ function App() {
           </div>
           {routeProspects.length > 0 ? (
             <div className="button-row route-map-actions">
-              <button type="button" className="button" onClick={handleNavigateEntireRoute}>
+              <button
+                type="button"
+                className="button"
+                onClick={() => optimizeRoute()}
+                disabled={routeOptimization.status === 'loading' || routeProspects.length < 2}
+              >
+                <Route size={16} />
+                {routeOptimization.status === 'loading'
+                  ? uiText.routes.optimization.optimizing
+                  : uiText.routes.optimization.button}
+              </button>
+              <button type="button" className="button button--ghost" onClick={handleNavigateEntireRoute}>
                 <Navigation size={16} />
                 {uiText.routes.navigateEntireRoute}
               </button>
@@ -3664,6 +3872,21 @@ function App() {
           <p className="section-copy map-panel__copy">
             {uiText.routes.routeMapDescription}
           </p>
+
+          {routeOptimization.status === 'error' ? (
+            <div className="status-banner status-banner--error">
+              <p>{routeOptimization.message}</p>
+            </div>
+          ) : null}
+
+          {routeOptimization.status === 'success' && routeOptimization.forRouteKey === routeIds.join('|') ? (
+            <div className="status-banner status-banner--success">
+              <p>
+                {uiText.routes.optimization.totalDriveTime(formatDriveTime(routeOptimization.driveMinutes))} ·{' '}
+                {uiText.routes.optimization.totalDistance(routeOptimization.distanceMiles.toFixed(1))}
+              </p>
+            </div>
+          ) : null}
 
           <div
             className={`status-banner ${
@@ -5073,6 +5296,20 @@ function App() {
           })}
         </div>
       </nav>
+
+      {optimizeStartOpen ? (
+        <OptimizeRouteSheet
+          value={optimizeStartValue}
+          onChange={setOptimizeStartValue}
+          isWorking={routeOptimization.status === 'loading'}
+          onConfirm={() => optimizeRoute(optimizeStartValue)}
+          onCancel={() => {
+            setOptimizeStartOpen(false)
+            setOptimizeStartValue('')
+            setRouteOptimization({ status: 'idle' })
+          }}
+        />
+      ) : null}
     </div>
   )
 }

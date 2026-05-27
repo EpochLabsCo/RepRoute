@@ -333,6 +333,21 @@ export const uiText = {
   },
   routes: {
     suggestedKeywordCta: 'Find prospects',
+    optimization: {
+      button: 'Optimize Route',
+      optimizing: 'Optimizing route…',
+      optimized: 'Route optimized.',
+      error: 'Couldn’t optimize route. Check location access or try fewer stops.',
+      startPromptHeading: 'Choose a starting point',
+      startPromptDescription:
+        'Enter a starting address or landmark. RepRoute uses this as the route origin when current location is unavailable.',
+      startPromptLabel: 'Starting point',
+      startPromptPlaceholder: 'Enter an address or landmark',
+      startPromptConfirm: 'Optimize Route',
+      startPromptCancel: 'Cancel',
+      totalDistance: (miles: string) => `Total distance: ${miles} mi`,
+      totalDriveTime: (time: string) => `Total drive time: ${time}`,
+    },
     calculation: {
       eyebrow: 'Route Builder',
       heading: 'Calculate Route',
