@@ -32,6 +32,9 @@ export type CrmExportRecord = {
   googlePlaceId: string
   editedByRepRouteUser: string
   source: string
+  businessCardCaptured: string
+  businessCardCapturedAt: string
+  businessCardImageIncluded: string
 }
 
 type CrmExportColumnKey = keyof CrmExportRecord
@@ -73,6 +76,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       googlePlaceId: 'Place ID',
       editedByRepRouteUser: 'Edited By RepRoute User',
       source: 'Source',
+      businessCardCaptured: 'Business Card Captured',
+      businessCardCapturedAt: 'Business Card Captured At',
+      businessCardImageIncluded: 'Business Card Image Included',
     },
   },
   hubspot: {
@@ -103,6 +109,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       googlePlaceId: 'RepRoute Place ID',
       editedByRepRouteUser: 'RepRoute edited by',
       source: 'Lead source',
+      businessCardCaptured: 'RepRoute business card captured',
+      businessCardCapturedAt: 'RepRoute business card captured at',
+      businessCardImageIncluded: 'RepRoute business card image included',
     },
   },
   salesforce: {
@@ -133,6 +142,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       googlePlaceId: 'Place_ID__c',
       editedByRepRouteUser: 'Edited_By_RepRoute_User__c',
       source: 'LeadSource',
+      businessCardCaptured: 'Business_Card_Captured__c',
+      businessCardCapturedAt: 'Business_Card_Captured_At__c',
+      businessCardImageIncluded: 'Business_Card_Image_Included__c',
     },
   },
   zoho: {
@@ -163,6 +175,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       googlePlaceId: 'Place ID',
       editedByRepRouteUser: 'Edited By RepRoute User',
       source: 'Lead Source',
+      businessCardCaptured: 'Business Card Captured',
+      businessCardCapturedAt: 'Business Card Captured At',
+      businessCardImageIncluded: 'Business Card Image Included',
     },
   },
   pipedrive: {
@@ -193,6 +208,9 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       googlePlaceId: 'Place ID',
       editedByRepRouteUser: 'Edited by RepRoute user',
       source: 'Source',
+      businessCardCaptured: 'Business card captured',
+      businessCardCapturedAt: 'Business card captured at',
+      businessCardImageIncluded: 'Business card image included',
     },
   },
 }
@@ -229,6 +247,9 @@ const CRM_EXPORT_FIELD_ORDER: CrmExportColumnKey[] = [
   'googlePlaceId',
   'editedByRepRouteUser',
   'source',
+  'businessCardCaptured',
+  'businessCardCapturedAt',
+  'businessCardImageIncluded',
 ]
 
 function parseAddressParts(address: string) {
@@ -342,6 +363,7 @@ export function buildCrmExportRecord(input: {
   visitCompletedDateTime?: string
   visitNotes?: string
   website: string
+  businessCardCapturedAt?: string
 }) {
   const parts = parseAddressParts(input.address)
   const phone = input.phone === 'Phone unavailable' ? '' : input.phone
@@ -370,5 +392,8 @@ export function buildCrmExportRecord(input: {
     googlePlaceId: input.googlePlaceId ?? '',
     editedByRepRouteUser: input.editedByRepRouteUser ? 'RepRoute user' : '',
     source: 'RepRoute',
+    businessCardCaptured: input.businessCardCapturedAt ? 'Yes' : '',
+    businessCardCapturedAt: input.businessCardCapturedAt ?? '',
+    businessCardImageIncluded: input.businessCardCapturedAt ? 'Yes (stored in RepRoute backup)' : '',
   } satisfies CrmExportRecord
 }

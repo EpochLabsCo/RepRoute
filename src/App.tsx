@@ -79,6 +79,14 @@ import {
   type NotificationReminderLog,
 } from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
+import BusinessCardSection from './components/BusinessCardSection'
+import {
+  getBusinessCardDataUrl,
+  getBusinessCardObjectUrl,
+  removeBusinessCardImage,
+  restoreBusinessCardFromDataUrl,
+  saveBusinessCardImage,
+} from './lib/businessCardStorage'
 import {
   fetchRouteDirectionsWithFallback,
   validateRouteStopsForDirections,
@@ -149,6 +157,9 @@ type ProspectRecord = {
   visitCompletedAt?: string
   isFoodStop?: boolean
   editedByRepRouteUser?: boolean
+  businessCardCapturedAt?: string
+  businessCardMimeType?: string
+  businessCardImageDataUrl?: string
 }
 
 type Prospect = BaseProspect & {
@@ -160,6 +171,7 @@ type Prospect = BaseProspect & {
   visitCompletedAt: string
   isFoodStop: boolean
   editedByRepRouteUser: boolean
+  businessCardCapturedAt: string
 }
 
 type BackupPayload = {
@@ -960,6 +972,18 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
         nextRecord.editedByRepRouteUser = record.editedByRepRouteUser
       }
 
+      if (isIsoDateTime(record.businessCardCapturedAt)) {
+        nextRecord.businessCardCapturedAt = record.businessCardCapturedAt
+      }
+
+      if (typeof record.businessCardMimeType === 'string') {
+        nextRecord.businessCardMimeType = record.businessCardMimeType
+      }
+
+      if (typeof record.businessCardImageDataUrl === 'string' && record.businessCardImageDataUrl.startsWith('data:')) {
+        nextRecord.businessCardImageDataUrl = record.businessCardImageDataUrl
+      }
+
       if (Object.keys(nextRecord).length > 0) {
         prospectRecords[prospectId] = nextRecord
       }
@@ -986,7 +1010,44 @@ function summarizeBackupPayload(payload: BackupPayload) {
     followUps: records.filter(
       (record) => typeof record.followUpDate === 'string' && record.followUpDate !== '',
     ).length,
+    businessCards: records.filter((record) => typeof record.businessCardCapturedAt === 'string').length,
   }
+}
+
+async function enrichProspectRecordsForBackup(records: Record<string, ProspectRecord>) {
+  const enriched: Record<string, ProspectRecord> = {}
+
+  for (const [prospectId, record] of Object.entries(records)) {
+    if (!record.businessCardCapturedAt) {
+      enriched[prospectId] = record
+      continue
+    }
+
+    const dataUrl = await getBusinessCardDataUrl(prospectId)
+    enriched[prospectId] = dataUrl ? { ...record, businessCardImageDataUrl: dataUrl } : record
+  }
+
+  return enriched
+}
+
+async function restoreProspectRecordsFromBackup(records: Record<string, ProspectRecord>) {
+  const restored: Record<string, ProspectRecord> = {}
+
+  for (const [prospectId, record] of Object.entries(records)) {
+    const { businessCardImageDataUrl, ...rest } = record
+
+    if (businessCardImageDataUrl?.startsWith('data:')) {
+      await restoreBusinessCardFromDataUrl(
+        prospectId,
+        businessCardImageDataUrl,
+        record.businessCardMimeType,
+      )
+    }
+
+    restored[prospectId] = rest
+  }
+
+  return restored
 }
 
 function getDaysUntil(date: string) {
@@ -1583,6 +1644,9 @@ function CurrentStopCard({
   onUpdateFollowUp,
   onUpdatePriority,
   onUpdateOutcome,
+  cardPreviewUrl,
+  onCaptureBusinessCard,
+  onRemoveBusinessCard,
 }: {
   prospect: Prospect
   isOnLocation: boolean
@@ -1609,6 +1673,9 @@ function CurrentStopCard({
   onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
+  cardPreviewUrl: string | null
+  onCaptureBusinessCard: (prospectId: string, file: File) => void
+  onRemoveBusinessCard: (prospectId: string) => void
 }) {
   const [openPanels, setOpenPanels] = useState({
     contact: true,
@@ -1773,50 +1840,19 @@ function CurrentStopCard({
 
       {openPanels.contact ? (
         <div className="current-stop-card__panel">
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.contactName}</span>
-            <input
-              className="text-input"
-              type="text"
-              value={prospect.contactName}
-              onChange={(event) =>
-                onUpdateContactDetails(prospect.id, { contactName: event.target.value })
-              }
-            />
-          </div>
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.contactTitle}</span>
-            <input
-              className="text-input"
-              type="text"
-              value={prospect.contactTitle}
-              onChange={(event) =>
-                onUpdateContactDetails(prospect.id, { contactTitle: event.target.value })
-              }
-            />
-          </div>
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.phone}</span>
-            <input
-              className="text-input"
-              type="tel"
-              value={prospect.phone}
-              onChange={(event) =>
-                onUpdateContactDetails(prospect.id, { contactPhone: event.target.value })
-              }
-            />
-          </div>
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.email}</span>
-            <input
-              className="text-input"
-              type="email"
-              value={prospect.contactEmail}
-              onChange={(event) =>
-                onUpdateContactDetails(prospect.id, { contactEmail: event.target.value })
-              }
-            />
-          </div>
+          <BusinessCardSection
+            prospectId={prospect.id}
+            previewUrl={cardPreviewUrl}
+            contact={{
+              contactName: prospect.contactName,
+              contactTitle: prospect.contactTitle,
+              contactPhone: prospect.phone,
+              contactEmail: prospect.contactEmail,
+            }}
+            onCapture={(file) => onCaptureBusinessCard(prospect.id, file)}
+            onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
+            onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
+          />
           <div className="field-group">
             <span className="field-label">{uiText.routes.currentStop.contactFields.website}</span>
             <input
@@ -1936,6 +1972,10 @@ function RouteWorkflowStopCard({
   onUpdateVisitNote,
   onUpdateOutcome,
   onRemove,
+  cardPreviewUrl,
+  onCaptureBusinessCard,
+  onRemoveBusinessCard,
+  onUpdateContactDetails,
 }: {
   index: number
   prospect: Prospect
@@ -1953,6 +1993,15 @@ function RouteWorkflowStopCard({
   onUpdateVisitNote: (prospectId: string, note: string) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
   onRemove: (prospectId: string) => void
+  cardPreviewUrl: string | null
+  onCaptureBusinessCard: (prospectId: string, file: File) => void
+  onRemoveBusinessCard: (prospectId: string) => void
+  onUpdateContactDetails: (
+    prospectId: string,
+    fields: Partial<
+      Pick<ProspectRecord, 'contactName' | 'contactTitle' | 'contactEmail' | 'contactPhone' | 'contactWebsite'>
+    >,
+  ) => void
 }) {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const {
@@ -2107,6 +2156,20 @@ function RouteWorkflowStopCard({
           {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
         </button>
       </div>
+
+      <BusinessCardSection
+        prospectId={prospect.id}
+        previewUrl={cardPreviewUrl}
+        contact={{
+          contactName: prospect.contactName,
+          contactTitle: prospect.contactTitle,
+          contactPhone: prospect.phone,
+          contactEmail: prospect.contactEmail,
+        }}
+        onCapture={(file) => onCaptureBusinessCard(prospect.id, file)}
+        onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
+        onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
+      />
 
       <div className="field-group">
         <span className="field-label">{uiText.search.prospectCard.priority}</span>
@@ -2485,6 +2548,7 @@ function App() {
   const [navigationActiveStopId, setNavigationActiveStopId] = useState<string | null>(null)
   const [navigationArrivedStopIds, setNavigationArrivedStopIds] = useState<Record<string, boolean>>({})
   const [foodNearbySession, setFoodNearbySession] = useState<FoodNearbySession | null>(null)
+  const [businessCardPreviewUrls, setBusinessCardPreviewUrls] = useState<Record<string, string>>({})
   const [foodNearbyRadiusMiles, setFoodNearbyRadiusMiles] = useState<FoodRadiusMiles>(1)
   const [foodNearbyActiveChip, setFoodNearbyActiveChip] = useState<FoodQuickChip | null>(null)
   const [foodNearbyLoading, setFoodNearbyLoading] = useState(false)
@@ -2898,6 +2962,7 @@ function App() {
           visitCompletedAt: record?.visitCompletedAt ?? '',
           isFoodStop: record?.isFoodStop ?? false,
           editedByRepRouteUser: record?.editedByRepRouteUser ?? false,
+          businessCardCapturedAt: record?.businessCardCapturedAt ?? '',
         }
       }),
     [liveProspects, prospectRecords],
@@ -3082,6 +3147,7 @@ function App() {
         visitCompletedDateTime: prospect.visitCompletedAt,
         visitNotes: prospect.visitNote,
         website: prospect.website,
+        businessCardCapturedAt: prospect.businessCardCapturedAt,
       }),
     )
 
@@ -3845,8 +3911,105 @@ function App() {
     updateProspectRecord(prospectId, (current) => ({
       ...current,
       ...fields,
+      editedByRepRouteUser: true,
     }))
   }
+
+  async function captureBusinessCard(prospectId: string, file: File) {
+    try {
+      await saveBusinessCardImage(prospectId, file)
+      const previewUrl = await getBusinessCardObjectUrl(prospectId)
+
+      if (previewUrl) {
+        setBusinessCardPreviewUrls((current) => {
+          const previousUrl = current[prospectId]
+          if (previousUrl) {
+            URL.revokeObjectURL(previousUrl)
+          }
+
+          return {
+            ...current,
+            [prospectId]: previewUrl,
+          }
+        })
+      }
+
+      updateProspectRecord(prospectId, (current) => ({
+        ...current,
+        businessCardCapturedAt: new Date().toISOString(),
+        businessCardMimeType: file.type || 'image/jpeg',
+        editedByRepRouteUser: true,
+      }))
+    } catch {
+      setActionToast({ type: 'error', text: uiText.routes.businessCard.captureFailed })
+    }
+  }
+
+  function removeBusinessCard(prospectId: string) {
+    void removeBusinessCardImage(prospectId).finally(() => {
+      setBusinessCardPreviewUrls((current) => {
+        const previousUrl = current[prospectId]
+        if (previousUrl) {
+          URL.revokeObjectURL(previousUrl)
+        }
+
+        const next = { ...current }
+        delete next[prospectId]
+        return next
+      })
+
+      updateProspectRecord(prospectId, (current) => {
+        const next = { ...current }
+        delete next.businessCardCapturedAt
+        delete next.businessCardMimeType
+        delete next.businessCardImageDataUrl
+        return next
+      })
+
+      setActionToast({ type: 'info', text: uiText.routes.businessCard.removed })
+    })
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadBusinessCardPreviews() {
+      const entries = Object.entries(prospectRecords).filter(
+        ([, record]) => typeof record.businessCardCapturedAt === 'string',
+      )
+
+      const urls: Record<string, string> = {}
+
+      await Promise.all(
+        entries.map(async ([prospectId]) => {
+          const objectUrl = await getBusinessCardObjectUrl(prospectId)
+          if (objectUrl) {
+            urls[prospectId] = objectUrl
+          }
+        }),
+      )
+
+      if (!cancelled) {
+        setBusinessCardPreviewUrls((current) => {
+          for (const url of Object.values(current)) {
+            URL.revokeObjectURL(url)
+          }
+
+          return urls
+        })
+      } else {
+        for (const url of Object.values(urls)) {
+          URL.revokeObjectURL(url)
+        }
+      }
+    }
+
+    void loadBusinessCardPreviews()
+
+    return () => {
+      cancelled = true
+    }
+  }, [prospectRecords])
 
   useEffect(() => {
     if (!foodNearbyAnchorProspect) {
@@ -5040,13 +5203,17 @@ function App() {
     }
   }
 
-  function handleExportBackup() {
+  async function handleExportBackup() {
     try {
+      const prospectRecordsForBackup = await enrichProspectRecordsForBackup(prospectRecords)
       const backup: BackupFile = {
         app: 'RepRoute',
         version: 1,
         exportedAt: new Date().toISOString(),
-        data: currentBackupPayload,
+        data: {
+          ...currentBackupPayload,
+          prospectRecords: prospectRecordsForBackup,
+        },
       }
 
       const blob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -5118,15 +5285,17 @@ function App() {
     setBackupMessage(null)
   }
 
-  function confirmImport() {
+  async function confirmImport() {
     if (!importPreview) {
       return
     }
 
+    const restoredRecords = await restoreProspectRecordsFromBackup(importPreview.payload.prospectRecords)
+
     setLiveProspects(importPreview.payload.liveProspects)
     setSavedIds(importPreview.payload.savedProspects)
     setRouteIds(importPreview.payload.routeList)
-    setProspectRecords(importPreview.payload.prospectRecords)
+    setProspectRecords(restoredRecords)
     setExpandedProspectId(null)
     setLiveSearchIds([])
     setSearchStatus(null)
@@ -5757,6 +5926,9 @@ function App() {
                 onUpdateFollowUp={updateProspectFollowUp}
                 onUpdatePriority={updateProspectPriority}
                 onUpdateOutcome={updateVisitOutcome}
+                cardPreviewUrl={businessCardPreviewUrls[currentStopProspect.id] ?? null}
+                onCaptureBusinessCard={captureBusinessCard}
+                onRemoveBusinessCard={removeBusinessCard}
               />
             ) : null}
 
@@ -5893,6 +6065,10 @@ function App() {
                         onUpdateVisitNote={updateVisitNote}
                         onUpdateOutcome={updateVisitOutcome}
                         onRemove={openRemoveProspectPrompt}
+                        cardPreviewUrl={businessCardPreviewUrls[prospect.id] ?? null}
+                        onCaptureBusinessCard={captureBusinessCard}
+                        onRemoveBusinessCard={removeBusinessCard}
+                        onUpdateContactDetails={updateContactDetails}
                       />
                     ))}
                   </div>

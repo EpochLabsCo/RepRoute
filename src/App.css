@@ -1499,6 +1499,104 @@
   flex-shrink: 0;
 }
 
+.business-card-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.business-card-section__heading h4 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.business-card-section__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.business-card-section__preview {
+  display: flex;
+  justify-content: center;
+}
+
+.business-card-section__preview img {
+  width: min(100%, 220px);
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.business-card-section__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.business-card-section__fields {
+  display: grid;
+  gap: 10px;
+}
+
+.business-card-section__extract {
+  justify-self: start;
+  opacity: 0.72;
+}
+
+.business-card-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10200;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+.business-card-viewer__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(4, 8, 15, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+}
+
+.business-card-viewer__panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 420px);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-strong);
+}
+
+.business-card-viewer__panel img {
+  width: 100%;
+  max-height: min(70dvh, 560px);
+  object-fit: contain;
+  border-radius: 14px;
+}
+
 .chip-row--tight {
   gap: 8px;
 }
