@@ -4932,9 +4932,12 @@ function App() {
           />
         ) : null}
 
-        {actionToast ? <section className={`floating-toast floating-toast--${actionToast.type}`}>{actionToast.text}</section> : null}
+      </main>
 
-        <nav className="bottom-nav" aria-label={uiText.navigation.primaryNavAriaLabel}>
+      {actionToast ? <section className={`floating-toast floating-toast--${actionToast.type}`}>{actionToast.text}</section> : null}
+
+      <nav className="bottom-nav" aria-label={uiText.navigation.primaryNavAriaLabel}>
+        <div className="bottom-nav__inner">
           {navigationItems.map((item) => {
             const Icon = item.icon
             const isActive = activeView === item.id
@@ -4959,8 +4962,8 @@ function App() {
               </button>
             )
           })}
-        </nav>
-      </main>
+        </div>
+      </nav>
     </div>
   )
 }

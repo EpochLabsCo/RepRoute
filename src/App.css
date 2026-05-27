@@ -1,9 +1,6 @@
 .app-shell {
-  --bottom-nav-reserved-space: calc(118px + env(safe-area-inset-bottom));
-  --bottom-nav-width: min(
-    calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)),
-    480px
-  );
+  --bottom-nav-reserved-space: calc(88px + env(safe-area-inset-bottom));
+  --bottom-nav-floating-offset: calc(var(--bottom-nav-reserved-space) + 18px);
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
@@ -45,7 +42,7 @@
   width: 100%;
   max-width: 460px;
   margin: 0 auto;
-  padding: 18px;
+  padding: 18px 18px calc(88px + env(safe-area-inset-bottom));
   border: 1px solid var(--border);
   border-radius: 32px;
   background:
@@ -944,9 +941,9 @@
 .floating-route-fab {
   position: fixed;
   left: 50%;
-  width: min(var(--bottom-nav-width), 396px);
-  max-width: min(var(--bottom-nav-width), 396px);
-  bottom: calc(var(--bottom-nav-reserved-space) - 18px);
+  width: min(calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)), 396px);
+  max-width: min(calc(100% - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)), 396px);
+  bottom: var(--bottom-nav-floating-offset);
   z-index: 3;
   display: inline-flex;
   align-items: center;
@@ -1870,14 +1867,25 @@
 
 .bottom-nav {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 0;
-  z-index: 16;
-  width: var(--bottom-nav-width);
-  max-width: var(--bottom-nav-width);
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  z-index: 9999;
+  display: block;
+  padding:
+    0
+    max(12px, calc(env(safe-area-inset-right) + 12px))
+    env(safe-area-inset-bottom)
+    max(12px, calc(env(safe-area-inset-left) + 12px));
+}
+
+.bottom-nav__inner {
+  width: min(100%, 480px);
+  margin: 0 auto;
+  display: flex;
   gap: 8px;
   align-items: stretch;
+  padding: 10px;
   border-radius: 26px 26px 0 0;
   background: rgba(10, 17, 29, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1885,7 +1893,6 @@
   box-shadow:
     0 -10px 32px rgba(4, 8, 15, 0.24),
     var(--shadow-strong);
-  transform: translateX(-50%);
 }
 
 .bottom-nav__item {
@@ -1945,8 +1952,8 @@
 .floating-toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--bottom-nav-reserved-space) - 8px);
-  z-index: 13;
+  bottom: var(--bottom-nav-floating-offset);
+  z-index: 10000;
   min-height: 48px;
   padding: 12px 16px;
   border-radius: 18px;
@@ -1966,12 +1973,11 @@
 
 @media (max-width: 420px) {
   .app-shell {
-    --bottom-nav-width: calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));
-    --bottom-nav-reserved-space: calc(122px + env(safe-area-inset-bottom));
+    --bottom-nav-floating-offset: calc(var(--bottom-nav-reserved-space) + 16px);
   }
 
   .mobile-app {
-    padding: 14px;
+    padding: 14px 14px calc(88px + env(safe-area-inset-bottom));
     border-radius: 28px;
   }
 
@@ -2067,9 +2073,9 @@
   }
 
   .floating-route-fab {
-    width: min(var(--bottom-nav-width), 396px);
-    max-width: min(var(--bottom-nav-width), 396px);
-    bottom: calc(var(--bottom-nav-reserved-space) - 18px);
+    width: calc(100% - 32px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    max-width: calc(100% - 32px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    bottom: var(--bottom-nav-floating-offset);
   }
 
   .inline-summary {
