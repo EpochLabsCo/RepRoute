@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type TouchEvent } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -160,6 +160,11 @@ type BackupMessage = {
   text: string
 }
 
+type ToastMessage = {
+  type: 'success' | 'error' | 'info'
+  text: string
+}
+
 type ImportPreview = {
   fileName: string
   exportedAt: string
@@ -191,6 +196,9 @@ type RouteCalculationContext = {
   filterSummary: string
 }
 type PendingRouteScrollTarget = 'summary' | 'map'
+type RemoveProspectPrompt = {
+  prospectId: string
+}
 
 type SettingsSection = 'top' | 'notifications' | 'crm' | 'backup'
 
@@ -408,6 +416,24 @@ function formatDateTime(value: string) {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+  }).format(date)
+}
+
+function formatCalendarDate(value: string) {
+  if (!value) {
+    return ''
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   }).format(date)
 }
 
@@ -930,6 +956,61 @@ function DataSourceBadge({ source }: { source: SearchDataSource }) {
   return <span className={`source-badge source-badge--${source}`}>{getDataSourceLabel(source)}</span>
 }
 
+function RemoveProspectSheet({
+  prospect,
+  isSaved,
+  isInRoute,
+  onRemoveFromRoute,
+  onRemoveFromSaved,
+  onCancel,
+}: {
+  prospect: Prospect
+  isSaved: boolean
+  isInRoute: boolean
+  onRemoveFromRoute: () => void
+  onRemoveFromSaved: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remove-prospect-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <div className="eyebrow eyebrow--tight">{uiText.routes.removal.heading}</div>
+        <h2 id="remove-prospect-title">{prospect.businessName}</h2>
+        <p className="section-copy">{uiText.routes.removal.description}</p>
+
+        <div className="modal-sheet__actions">
+          <button
+            type="button"
+            className="button"
+            onClick={onRemoveFromRoute}
+            disabled={!isInRoute}
+          >
+            {uiText.routes.removal.removeFromRoute}
+          </button>
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={onRemoveFromSaved}
+            disabled={!isSaved}
+          >
+            {uiText.routes.removal.removeFromSaved}
+          </button>
+          <button type="button" className="button button--ghost" onClick={onCancel}>
+            {uiText.routes.removal.cancel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RouteCalculationCard({
   routeCount,
   estimatedDriveMinutes,
@@ -997,9 +1078,13 @@ function CurrentStopCard({
   isOnLocation,
   distanceFeet,
   trackingMessage,
+  isSaved,
   travelMode,
   onNavigate,
+  onOpenSaved,
+  onRequestRemove,
   onToggleCompleted,
+  onToggleSaved,
   onUpdateContactDetails,
   onUpdateNotes,
   onUpdateVisitNote,
@@ -1011,9 +1096,13 @@ function CurrentStopCard({
   isOnLocation: boolean
   distanceFeet: number | null
   trackingMessage: string
+  isSaved: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
+  onOpenSaved: (prospectId: string) => void
+  onRequestRemove: (prospectId: string) => void
   onToggleCompleted: (prospectId: string) => void
+  onToggleSaved: (prospectId: string) => void
   onUpdateContactDetails: (
     prospectId: string,
     fields: Partial<
@@ -1117,6 +1206,15 @@ function CurrentStopCard({
         </button>
         <button
           type="button"
+          className="button button--ghost"
+          onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
+        >
+          {isSaved
+            ? uiText.routes.currentStop.quickActions.openSaved
+            : uiText.routes.currentStop.quickActions.saveProspect}
+        </button>
+        <button
+          type="button"
           className={`button button--ghost ${openPanels.contact ? 'button--secondary' : ''}`}
           onClick={() => togglePanel('contact')}
         >
@@ -1149,6 +1247,13 @@ function CurrentStopCard({
           onClick={() => togglePanel('outcome')}
         >
           {uiText.routes.currentStop.quickActions.addOutcomeTag}
+        </button>
+        <button
+          type="button"
+          className="button button--ghost"
+          onClick={() => onRequestRemove(prospect.id)}
+        >
+          {uiText.routes.actions.removeProspect}
         </button>
       </div>
 
@@ -1305,9 +1410,12 @@ function RouteWorkflowStopCard({
   prospect,
   isCurrentStop,
   isOnLocation,
+  isSaved,
   travelMode,
   onNavigate,
+  onOpenSaved,
   onToggleCompleted,
+  onToggleSaved,
   onUpdatePriority,
   onUpdateVisitNote,
   onUpdateOutcome,
@@ -1317,14 +1425,18 @@ function RouteWorkflowStopCard({
   prospect: Prospect
   isCurrentStop: boolean
   isOnLocation: boolean
+  isSaved: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
+  onOpenSaved: (prospectId: string) => void
   onToggleCompleted: (prospectId: string) => void
+  onToggleSaved: (prospectId: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateVisitNote: (prospectId: string, note: string) => void
   onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
   onRemove: (prospectId: string) => void
 }) {
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const {
     attributes,
     listeners,
@@ -1335,6 +1447,36 @@ function RouteWorkflowStopCard({
   } = useSortable({ id: prospect.id })
   const callHref = createCallHref(prospect.phone)
   const websiteHref = normalizeWebsiteUrl(prospect.website)
+
+  function handleTouchStart(event: TouchEvent<HTMLElement>) {
+    const touch = event.touches[0]
+
+    if (!touch) {
+      return
+    }
+
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+    }
+  }
+
+  function handleTouchEnd(event: TouchEvent<HTMLElement>) {
+    const start = touchStartRef.current
+    const touch = event.changedTouches[0]
+    touchStartRef.current = null
+
+    if (!start || !touch) {
+      return
+    }
+
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+
+    if (deltaX <= -72 && Math.abs(deltaX) > Math.abs(deltaY) + 18) {
+      onRemove(prospect.id)
+    }
+  }
 
   return (
     <article
@@ -1348,6 +1490,8 @@ function RouteWorkflowStopCard({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <div className="route-stop-card__top">
         <div className="route-stop-card__heading">
@@ -1419,6 +1563,14 @@ function RouteWorkflowStopCard({
             ? uiText.routes.actions.navigateWalk
             : uiText.routes.actions.navigateDrive}
         </button>
+        <button
+          type="button"
+          className="route-action-button"
+          onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
+        >
+          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
+          {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
+        </button>
       </div>
 
       <div className="field-group">
@@ -1471,7 +1623,7 @@ function RouteWorkflowStopCard({
       <div className="route-stop-card__footer">
         <p>{prospect.address}</p>
         <button type="button" className="mini-button" onClick={() => onRemove(prospect.id)}>
-          {uiText.routes.actions.remove}
+          {uiText.routes.actions.removeProspect}
         </button>
       </div>
     </article>
@@ -1484,7 +1636,9 @@ function LiveSearchResultCard({
   isInRoute,
   travelMode,
   onNavigate,
+  onOpenSaved,
   onUpdatePriority,
+  onRequestRemove,
   onToggleSaved,
   onToggleRoute,
 }: {
@@ -1493,7 +1647,9 @@ function LiveSearchResultCard({
   isInRoute: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
+  onOpenSaved: (prospectId: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
+  onRequestRemove: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
 }) {
@@ -1530,7 +1686,7 @@ function LiveSearchResultCard({
         <button
           type="button"
           className={`button ${isSaved ? 'button--secondary' : ''}`}
-          onClick={() => onToggleSaved(prospect.id)}
+          onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
         >
           {isSaved ? uiText.search.card.saved : uiText.search.card.save}
         </button>
@@ -1547,6 +1703,15 @@ function LiveSearchResultCard({
             ? uiText.search.card.navigateWalk
             : uiText.search.card.navigateDrive}
         </button>
+        {isInRoute || isSaved ? (
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => onRequestRemove(prospect.id)}
+          >
+            {uiText.search.card.removeProspect}
+          </button>
+        ) : null}
       </div>
 
       <div className="field-group">
@@ -1570,12 +1735,11 @@ function LiveSearchResultCard({
 
 function ProspectCard({
   prospect,
-  isSaved,
   isInRoute,
   isExpanded,
   travelMode,
   onNavigate,
-  onToggleSaved,
+  onRequestRemove,
   onToggleRoute,
   onToggleExpanded,
   onUpdateNotes,
@@ -1583,18 +1747,26 @@ function ProspectCard({
   onUpdateFollowUp,
 }: {
   prospect: Prospect
-  isSaved: boolean
   isInRoute: boolean
   isExpanded: boolean
   travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
-  onToggleSaved: (prospectId: string) => void
+  onRequestRemove: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
   onToggleExpanded: (prospectId: string) => void
   onUpdateNotes: (prospectId: string, notes: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
   onUpdateFollowUp: (prospectId: string, followUpDate: string) => void
 }) {
+  const notesPreview = prospect.notes.trim() || prospect.visitNote.trim() || uiText.saved.notesPreviewEmpty
+  const followUpStatus = prospect.followUpDate
+    ? getFollowUpStatus(prospect.followUpDate)
+    : uiText.followUps.noDate
+  const routeStatus = isInRoute ? uiText.saved.routeStatusInRoute : uiText.saved.routeStatusNotInRoute
+  const lastVisited = prospect.visitCompletedAt
+    ? formatCalendarDate(prospect.visitCompletedAt)
+    : uiText.saved.lastVisitedEmpty
+
   return (
     <article className="prospect-card">
       <div className="prospect-card__header">
@@ -1603,66 +1775,56 @@ function ProspectCard({
           <h3>{prospect.businessName}</h3>
           <p className="prospect-card__city">{prospect.city}</p>
         </div>
-
-        <button
-          type="button"
-          className={`icon-button ${isSaved ? 'icon-button--active' : ''}`}
-          aria-label={
-            isSaved ? uiText.search.prospectCard.removeFromSavedAria : uiText.search.prospectCard.saveProspectAria
-          }
-          onClick={() => onToggleSaved(prospect.id)}
-        >
-          <Star size={16} fill={isSaved ? 'currentColor' : 'none'} />
-        </button>
+        <span className="meta-pill meta-pill--accent">{uiText.search.card.saved}</span>
       </div>
 
       <div className="prospect-card__meta">
-        <span className="meta-pill">{formatDistance(prospect.distance)}</span>
         <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
           {prospect.priority}
         </span>
-        <span className="meta-pill">{prospect.lastContact}</span>
-        {prospect.followUpDate ? (
-          <span className="meta-pill meta-pill--accent">
-            {uiText.search.prospectCard.followUpPrefix} {formatFollowUpDate(prospect.followUpDate)}
-          </span>
-        ) : null}
+        <span className="meta-pill">{formatDistance(prospect.distance)}</span>
+        {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
       <div className="prospect-card__notes-block">
-        <p className="prospect-card__footer-label">{uiText.search.prospectCard.notes}</p>
-        <p className="prospect-card__notes">{prospect.notes}</p>
+        <p className="prospect-card__footer-label">{uiText.saved.notesPreview}</p>
+        <p className="prospect-card__notes prospect-card__notes--preview">{notesPreview}</p>
+      </div>
+
+      <div className="prospect-card__status-grid">
+        <div className="prospect-card__status-item">
+          <p className="prospect-card__footer-label">{uiText.saved.followUpStatus}</p>
+          <p className="prospect-card__footer-copy">{followUpStatus}</p>
+        </div>
+        <div className="prospect-card__status-item">
+          <p className="prospect-card__footer-label">{uiText.saved.routeStatus}</p>
+          <p className="prospect-card__footer-copy">{routeStatus}</p>
+        </div>
+        <div className="prospect-card__status-item">
+          <p className="prospect-card__footer-label">{uiText.saved.lastVisited}</p>
+          <p className="prospect-card__footer-copy">{lastVisited}</p>
+        </div>
       </div>
 
       <div className="prospect-card__footer">
-        <div>
-          <p className="prospect-card__footer-label">{uiText.search.prospectCard.nextTouch}</p>
-          <p className="prospect-card__footer-copy">{prospect.nextTouch}</p>
-        </div>
-
-        <div className="prospect-card__button-group">
+        <div className="prospect-card__button-group prospect-card__button-group--saved">
           <button
             type="button"
             className={`button ${isInRoute ? 'button--secondary' : ''}`}
             onClick={() => onToggleRoute(prospect.id)}
           >
-            {isInRoute ? uiText.search.prospectCard.removeRoute : uiText.search.card.addToRoute}
+            {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
           </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={() => onToggleExpanded(prospect.id)}
-          >
-            {isExpanded ? uiText.search.prospectCard.hide : uiText.search.prospectCard.manage}
-          </button>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={() => onNavigate(prospect)}
-          >
+          <button type="button" className="button button--ghost" onClick={() => onNavigate(prospect)}>
             {travelMode === 'walking'
               ? uiText.search.card.navigateWalk
               : uiText.search.card.navigateDrive}
+          </button>
+          <button type="button" className="button button--ghost" onClick={() => onToggleExpanded(prospect.id)}>
+            {isExpanded ? uiText.search.prospectCard.hide : uiText.saved.edit}
+          </button>
+          <button type="button" className="button button--ghost" onClick={() => onRequestRemove(prospect.id)}>
+            {uiText.saved.remove}
           </button>
         </div>
       </div>
@@ -1742,8 +1904,10 @@ function App() {
   const [backupMessage, setBackupMessage] = useState<BackupMessage | null>(null)
   const [crmExportMessage, setCrmExportMessage] = useState<BackupMessage | null>(null)
   const [accountMenuMessage, setAccountMenuMessage] = useState<BackupMessage | null>(null)
+  const [actionToast, setActionToast] = useState<ToastMessage | null>(null)
   const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
+  const [removeProspectPrompt, setRemoveProspectPrompt] = useState<RemoveProspectPrompt | null>(null)
   const [routeCalculationContext, setRouteCalculationContext] = useState<RouteCalculationContext | null>(
     null,
   )
@@ -1973,6 +2137,20 @@ function App() {
     }
   }, [activeView, routeCalculationContext, routeIds.length])
 
+  useEffect(() => {
+    if (!actionToast) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setActionToast(null)
+    }, 2200)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [actionToast])
+
   const effectiveSearchStatus = useMemo<SearchStatus>(
     () =>
       searchStatus ??
@@ -1991,14 +2169,21 @@ function App() {
   const crmExportFormats = useMemo(() => getCrmExportFormats(), [])
   const crmExportScopes = useMemo(() => getCrmExportScopes(), [])
   const futureCrmApiTargets = useMemo(() => getFutureCrmApiTargets(), [])
-  const navigationItems = useMemo<Array<{ id: View; label: string; icon: typeof Route }>>(
+  const navigationItems = useMemo<
+    Array<{ id: View; label: string; icon: typeof Route; badgeCount?: number }>
+  >(
     () =>
       routeIds.length > 0
         ? [
             { id: 'search', label: uiText.navigation.items.search, icon: Search },
+            {
+              id: 'saved',
+              label: uiText.navigation.items.saved,
+              icon: Bookmark,
+              badgeCount: savedIds.length,
+            },
             { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
             { id: 'dashboard', label: uiText.navigation.items.dashboard, icon: LayoutDashboard },
-            { id: 'saved', label: uiText.navigation.items.saved, icon: Bookmark },
             {
               id: 'follow-ups',
               label: uiText.navigation.items.followUps,
@@ -2008,8 +2193,13 @@ function App() {
           ]
         : [
             { id: 'search', label: uiText.navigation.items.search, icon: Search },
+            {
+              id: 'saved',
+              label: uiText.navigation.items.saved,
+              icon: Bookmark,
+              badgeCount: savedIds.length,
+            },
             { id: 'dashboard', label: uiText.navigation.items.dashboard, icon: LayoutDashboard },
-            { id: 'saved', label: uiText.navigation.items.saved, icon: Bookmark },
             {
               id: 'follow-ups',
               label: uiText.navigation.items.followUps,
@@ -2018,7 +2208,7 @@ function App() {
             { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
             { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
           ],
-    [routeIds.length],
+    [routeIds.length, savedIds.length],
   )
 
   const liveCatalogProspects = useMemo(
@@ -2054,6 +2244,10 @@ function App() {
   const prospectMap = useMemo(
     () => new globalThis.Map(prospects.map((prospect) => [prospect.id, prospect])),
     [prospects],
+  )
+  const promptedProspect = useMemo(
+    () => (removeProspectPrompt ? prospectMap.get(removeProspectPrompt.prospectId) ?? null : null),
+    [prospectMap, removeProspectPrompt],
   )
 
   const savedProspects = useMemo(
@@ -2469,12 +2663,28 @@ function App() {
     }))
   }
 
+  function openSavedProspect(prospectId?: string) {
+    setExpandedProspectId(prospectId ?? null)
+    setActiveView('saved')
+  }
+
   function toggleSaved(prospectId: string) {
+    const isSaved = savedIds.includes(prospectId)
+
     setSavedIds((current) =>
-      current.includes(prospectId)
-        ? current.filter((id) => id !== prospectId)
-        : [...current, prospectId],
+      isSaved ? current.filter((id) => id !== prospectId) : [...current, prospectId],
     )
+
+    if (isSaved && expandedProspectId === prospectId) {
+      setExpandedProspectId(null)
+    }
+
+    if (!isSaved) {
+      setActionToast({
+        type: 'success',
+        text: uiText.saved.savedMessage,
+      })
+    }
   }
 
   function toggleRoute(prospectId: string) {
@@ -2483,6 +2693,31 @@ function App() {
         ? current.filter((id) => id !== prospectId)
         : [...current, prospectId],
     )
+  }
+
+  function openRemoveProspectPrompt(prospectId: string) {
+    setRemoveProspectPrompt({ prospectId })
+  }
+
+  function closeRemoveProspectPrompt() {
+    setRemoveProspectPrompt(null)
+  }
+
+  function handleRemoveFromRoute(prospectId: string) {
+    setRouteIds((current) => current.filter((id) => id !== prospectId))
+    if (expandedProspectId === prospectId) {
+      setExpandedProspectId(null)
+    }
+    setRemoveProspectPrompt(null)
+  }
+
+  function handleRemoveFromSavedProspects(prospectId: string) {
+    setSavedIds((current) => current.filter((id) => id !== prospectId))
+    setRouteIds((current) => current.filter((id) => id !== prospectId))
+    if (expandedProspectId === prospectId) {
+      setExpandedProspectId(null)
+    }
+    setRemoveProspectPrompt(null)
   }
 
   function toggleRouteCompleted(prospectId: string) {
@@ -3287,12 +3522,11 @@ function App() {
                 <ProspectCard
                   key={prospect.id}
                   prospect={prospect}
-                  isSaved={savedIds.includes(prospect.id)}
                   isInRoute={routeIds.includes(prospect.id)}
                   isExpanded={expandedProspectId === prospect.id}
                   travelMode={travelMode}
                   onNavigate={handleNavigateProspect}
-                  onToggleSaved={toggleSaved}
+                  onRequestRemove={openRemoveProspectPrompt}
                   onToggleRoute={toggleRoute}
                   onToggleExpanded={toggleExpandedProspect}
                   onUpdateNotes={updateProspectNotes}
@@ -3460,7 +3694,9 @@ function App() {
                   isInRoute={routeIds.includes(prospect.id)}
                   travelMode={travelMode}
                   onNavigate={handleNavigateProspect}
+                  onOpenSaved={openSavedProspect}
                   onUpdatePriority={updateProspectPriority}
+                  onRequestRemove={openRemoveProspectPrompt}
                   onToggleSaved={toggleSaved}
                   onToggleRoute={toggleRoute}
                 />
@@ -3478,9 +3714,13 @@ function App() {
                 isOnLocation={Boolean(onLocationRouteStop)}
                 distanceFeet={currentStopDistanceFeet}
                 trackingMessage={routeTrackerMessage}
+                isSaved={savedIds.includes(currentStopProspect.id)}
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
+                onOpenSaved={openSavedProspect}
+                onRequestRemove={openRemoveProspectPrompt}
                 onToggleCompleted={toggleRouteCompleted}
+                onToggleSaved={toggleSaved}
                 onUpdateContactDetails={updateContactDetails}
                 onUpdateNotes={updateProspectNotes}
                 onUpdateVisitNote={updateVisitNote}
@@ -3566,13 +3806,16 @@ function App() {
                         prospect={prospect}
                         isCurrentStop={currentStopProspect?.id === prospect.id}
                         isOnLocation={onLocationRouteStop?.prospect.id === prospect.id}
+                        isSaved={savedIds.includes(prospect.id)}
                         travelMode={travelMode}
                         onNavigate={handleNavigateProspect}
+                        onOpenSaved={openSavedProspect}
                         onToggleCompleted={toggleRouteCompleted}
+                        onToggleSaved={toggleSaved}
                         onUpdatePriority={updateProspectPriority}
                         onUpdateVisitNote={updateVisitNote}
                         onUpdateOutcome={updateVisitOutcome}
-                        onRemove={toggleRoute}
+                        onRemove={openRemoveProspectPrompt}
                       />
                     ))}
                   </div>
@@ -3837,7 +4080,9 @@ function App() {
                 isInRoute={routeIds.includes(prospect.id)}
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
+                onOpenSaved={openSavedProspect}
                 onUpdatePriority={updateProspectPriority}
+                onRequestRemove={openRemoveProspectPrompt}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
               />
@@ -3918,12 +4163,11 @@ function App() {
               <ProspectCard
                 key={prospect.id}
                 prospect={prospect}
-                isSaved={savedIds.includes(prospect.id)}
                 isInRoute={routeIds.includes(prospect.id)}
                 isExpanded={expandedProspectId === prospect.id}
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
-                onToggleSaved={toggleSaved}
+                onRequestRemove={openRemoveProspectPrompt}
                 onToggleRoute={toggleRoute}
                 onToggleExpanded={toggleExpandedProspect}
                 onUpdateNotes={updateProspectNotes}
@@ -4604,7 +4848,7 @@ function App() {
         <header className="app-header">
           <div className="brand-lockup">
             <div className="brand-lockup__logo">
-              <Route size={22} />
+              <img src="/favicon.svg" alt="" className="brand-lockup__logo-image" />
             </div>
             <div className="brand-lockup__text">
               <p className="brand-lockup__name">{uiText.navigation.appName}</p>
@@ -4698,6 +4942,19 @@ function App() {
 
         <section className="screen-content">{renderActiveView()}</section>
 
+        {promptedProspect ? (
+          <RemoveProspectSheet
+            prospect={promptedProspect}
+            isSaved={savedIds.includes(promptedProspect.id)}
+            isInRoute={routeIds.includes(promptedProspect.id)}
+            onRemoveFromRoute={() => handleRemoveFromRoute(promptedProspect.id)}
+            onRemoveFromSaved={() => handleRemoveFromSavedProspects(promptedProspect.id)}
+            onCancel={closeRemoveProspectPrompt}
+          />
+        ) : null}
+
+        {actionToast ? <section className={`floating-toast floating-toast--${actionToast.type}`}>{actionToast.text}</section> : null}
+
         <nav className="bottom-nav" aria-label={uiText.navigation.primaryNavAriaLabel}>
           {navigationItems.map((item) => {
             const Icon = item.icon
@@ -4707,11 +4964,18 @@ function App() {
               <button
                 key={item.id}
                 type="button"
-                className={`bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''}`}
+                className={`bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''} ${
+                  item.badgeCount ? 'bottom-nav__item--has-badge' : ''
+                }`}
                 onClick={() => setActiveView(item.id)}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <Icon size={18} />
+                <span className="bottom-nav__icon-wrap">
+                  <Icon size={18} />
+                  {item.badgeCount ? (
+                    <span className="bottom-nav__badge">{item.badgeCount > 99 ? '99+' : item.badgeCount}</span>
+                  ) : null}
+                </span>
                 <span>{item.label}</span>
               </button>
             )

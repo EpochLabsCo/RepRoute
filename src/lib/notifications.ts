@@ -77,8 +77,8 @@ export async function showBrowserNotification({
   const options = {
     body,
     tag,
-    badge: '/favicon.svg',
-    icon: '/favicon.svg',
+    badge: '/icon-192.png',
+    icon: '/icon-192.png',
     data: {
       url: '/',
     },
