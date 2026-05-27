@@ -29,7 +29,6 @@ import {
   ExternalLink,
   Flame,
   GripVertical,
-  LayoutDashboard,
   Map as MapIcon,
   Navigation,
   MoonStar,
@@ -2172,43 +2171,23 @@ function App() {
   const navigationItems = useMemo<
     Array<{ id: View; label: string; icon: typeof Route; badgeCount?: number }>
   >(
-    () =>
-      routeIds.length > 0
-        ? [
-            { id: 'search', label: uiText.navigation.items.search, icon: Search },
-            {
-              id: 'saved',
-              label: uiText.navigation.items.saved,
-              icon: Bookmark,
-              badgeCount: savedIds.length,
-            },
-            { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
-            { id: 'dashboard', label: uiText.navigation.items.dashboard, icon: LayoutDashboard },
-            {
-              id: 'follow-ups',
-              label: uiText.navigation.items.followUps,
-              icon: CalendarClock,
-            },
-            { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
-          ]
-        : [
-            { id: 'search', label: uiText.navigation.items.search, icon: Search },
-            {
-              id: 'saved',
-              label: uiText.navigation.items.saved,
-              icon: Bookmark,
-              badgeCount: savedIds.length,
-            },
-            { id: 'dashboard', label: uiText.navigation.items.dashboard, icon: LayoutDashboard },
-            {
-              id: 'follow-ups',
-              label: uiText.navigation.items.followUps,
-              icon: CalendarClock,
-            },
-            { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
-            { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
-          ],
-    [routeIds.length, savedIds.length],
+    () => [
+      { id: 'search', label: uiText.navigation.items.search, icon: Search },
+      { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
+      {
+        id: 'saved',
+        label: uiText.navigation.items.saved,
+        icon: Bookmark,
+        badgeCount: savedIds.length,
+      },
+      {
+        id: 'follow-ups',
+        label: uiText.navigation.items.followUps,
+        icon: CalendarClock,
+      },
+      { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
+    ],
+    [savedIds.length],
   )
 
   const liveCatalogProspects = useMemo(
@@ -4971,7 +4950,7 @@ function App() {
                 aria-current={isActive ? 'page' : undefined}
               >
                 <span className="bottom-nav__icon-wrap">
-                  <Icon size={18} />
+                  <Icon size={20} />
                   {item.badgeCount ? (
                     <span className="bottom-nav__badge">{item.badgeCount > 99 ? '99+' : item.badgeCount}</span>
                   ) : null}
