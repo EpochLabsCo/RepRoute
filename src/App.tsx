@@ -1192,7 +1192,7 @@ function RemoveProspectSheet({
   )
 }
 
-function FoodNearbyView({
+function FoodNearbyModal({
   anchorProspect,
   radiusMiles,
   activeChip,
@@ -1222,29 +1222,36 @@ function FoodNearbyView({
   onClose: () => void
 }) {
   return (
-    <section className="food-nearby-view panel section-panel" aria-labelledby="food-nearby-title">
-      <header className="food-nearby-view__header">
-        <button type="button" className="button button--ghost food-nearby-view__back" onClick={onBack}>
-          <ArrowLeft size={18} />
-          {uiText.foodNearby.backToProspect}
-        </button>
-        <button
-          type="button"
-          className="icon-button food-nearby-view__close"
-          onClick={onClose}
-          aria-label={uiText.foodNearby.closeAriaLabel}
-        >
-          <X size={18} />
-        </button>
-      </header>
+    <div className="food-nearby-modal" role="dialog" aria-modal="true" aria-labelledby="food-nearby-title">
+      <button
+        type="button"
+        className="food-nearby-modal__backdrop"
+        aria-label={uiText.foodNearby.closeAriaLabel}
+        onClick={onClose}
+      />
 
-      <div className="food-nearby-view__intro">
-        <div className="eyebrow eyebrow--tight">{uiText.foodNearby.eyebrow}</div>
-        <h2 id="food-nearby-title">{uiText.foodNearby.heading(anchorProspect.businessName)}</h2>
-        <p className="section-copy">{uiText.foodNearby.description}</p>
-      </div>
+      <div className="food-nearby-modal__panel">
+        <header className="food-nearby-modal__header">
+          <button type="button" className="button button--ghost food-nearby-modal__back" onClick={onBack}>
+            <ArrowLeft size={18} />
+            {uiText.foodNearby.backToProspect}
+          </button>
+          <div className="food-nearby-modal__title-wrap">
+            <div className="eyebrow eyebrow--tight">{uiText.foodNearby.eyebrow}</div>
+            <h2 id="food-nearby-title">{uiText.foodNearby.heading(anchorProspect.businessName)}</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button food-nearby-modal__close"
+            onClick={onClose}
+            aria-label={uiText.foodNearby.closeAriaLabel}
+          >
+            <X size={18} />
+          </button>
+        </header>
 
-      <div className="food-nearby-view__body">
+        <div className="food-nearby-modal__body">
+          <p className="section-copy food-nearby-modal__description">{uiText.foodNearby.description}</p>
 
         <div className="field-group">
           <span className="field-label">{uiText.foodNearby.radiusLabel}</span>
@@ -1353,14 +1360,15 @@ function FoodNearbyView({
             )
           })}
         </div>
-      </div>
+        </div>
 
-      <div className="food-nearby-view__footer">
-        <button type="button" className="button button--ghost button--wide" onClick={onClose}>
-          {uiText.foodNearby.closeFoodNearby}
-        </button>
+        <div className="food-nearby-modal__footer">
+          <button type="button" className="button button--ghost button--wide" onClick={onClose}>
+            {uiText.foodNearby.closeFoodNearby}
+          </button>
+        </div>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -3682,6 +3690,7 @@ function App() {
     setFoodNearbyActiveChip(null)
     setFoodNearbyError(null)
     setFoodNearbyResultIds([])
+    setFoodNearbyLoading(true)
   }
 
   function closeFoodNearby() {
@@ -3858,6 +3867,41 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dismiss when user leaves the originating tab
   }, [activeView, foodNearbySession])
+
+  useEffect(() => {
+    if (!foodNearbySession || typeof document === 'undefined') {
+      return
+    }
+
+    const html = document.documentElement
+    const previousHtmlOverflow = html.style.overflow
+    const previousBodyOverflow = document.body.style.overflow
+    const previousBodyTouchAction = document.body.style.touchAction
+    html.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    document.body.style.touchAction = 'none'
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+      document.body.style.touchAction = previousBodyTouchAction
+    }
+  }, [foodNearbySession])
+
+  useEffect(() => {
+    if (!foodNearbySession || typeof window === 'undefined') {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeFoodNearby()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [foodNearbySession])
 
   function handleRouteDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -7039,16 +7083,13 @@ function App() {
           </div>
         </header>
 
-        {!foodNearbySession ? (
-          <section className="screen-intro">
-            <div className="eyebrow">{uiText.navigation.liveBadge}</div>
-            <h2>{displayMeta.title}</h2>
-            <p>{displayMeta.subtitle}</p>
-          </section>
-        ) : null}
+        <section className="screen-intro">
+          <div className="eyebrow">{uiText.navigation.liveBadge}</div>
+          <h2>{displayMeta.title}</h2>
+          <p>{displayMeta.subtitle}</p>
+        </section>
 
-        {!foodNearbySession &&
-        (['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
+        {(['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
           <section className="travel-mode-toolbar">
             <span className="field-label">{uiText.navigation.travelMode.label}</span>
             <div className="chip-row">
@@ -7074,27 +7115,7 @@ function App() {
           </section>
         ) : null}
 
-        <section className={`screen-content ${foodNearbySession ? 'screen-content--food-nearby' : ''}`}>
-          {foodNearbyAnchorProspect ? (
-            <FoodNearbyView
-              anchorProspect={foodNearbyAnchorProspect}
-              radiusMiles={foodNearbyRadiusMiles}
-              activeChip={foodNearbyActiveChip}
-              isLoading={foodNearbyLoading}
-              error={foodNearbyError}
-              results={foodNearbyResults}
-              savedAsFoodStopIds={foodStopIds}
-              onChangeRadius={(miles) => setFoodNearbyRadiusMiles(miles)}
-              onSelectChip={(chip) => setFoodNearbyActiveChip(chip)}
-              onNavigate={handleNavigateProspect}
-              onSaveAsFoodStop={saveAsFoodStop}
-              onBack={closeFoodNearby}
-              onClose={closeFoodNearby}
-            />
-          ) : (
-            renderActiveView()
-          )}
-        </section>
+        <section className="screen-content">{renderActiveView()}</section>
 
         {promptedProspect ? (
           <RemoveProspectSheet
@@ -7120,6 +7141,24 @@ function App() {
         ) : null}
 
       </main>
+
+      {foodNearbyAnchorProspect ? (
+        <FoodNearbyModal
+          anchorProspect={foodNearbyAnchorProspect}
+          radiusMiles={foodNearbyRadiusMiles}
+          activeChip={foodNearbyActiveChip}
+          isLoading={foodNearbyLoading}
+          error={foodNearbyError}
+          results={foodNearbyResults}
+          savedAsFoodStopIds={foodStopIds}
+          onChangeRadius={(miles) => setFoodNearbyRadiusMiles(miles)}
+          onSelectChip={(chip) => setFoodNearbyActiveChip(chip)}
+          onNavigate={handleNavigateProspect}
+          onSaveAsFoodStop={saveAsFoodStop}
+          onBack={closeFoodNearby}
+          onClose={closeFoodNearby}
+        />
+      ) : null}
 
       {actionToast ? <section className={`floating-toast floating-toast--${actionToast.type}`}>{actionToast.text}</section> : null}
 
