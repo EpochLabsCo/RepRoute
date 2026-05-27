@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type TouchEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  type TouchEvent,
+} from 'react'
 import {
   closestCenter,
   DndContext,
@@ -25,30 +34,22 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
-  Clock3,
-  Compass,
   Download,
   ExternalLink,
   UtensilsCrossed,
-  Flame,
   GripVertical,
   Map as MapIcon,
   Navigation,
   MoonStar,
-  NotebookPen,
   Phone,
   Plus,
   Route,
   Search,
   Settings2,
-  Star,
   SunMedium,
-  Target,
   Trash2,
-  Truck,
   Upload,
   UserRound,
-  Users,
   X,
 } from 'lucide-react'
 import './App.css'
@@ -62,7 +63,6 @@ import {
   buildCsvContent,
   getCrmExportFormats,
   getCrmExportScopes,
-  getFutureCrmApiTargets,
   type CrmExportFormat,
   type CrmExportScope,
 } from './lib/crmExport'
@@ -296,14 +296,6 @@ const SEARCH_INDUSTRY_GROUPS = uiText.search.industryGroups.map((group) => ({
   options: [...group.options],
 })) as Array<{ label: string; options: SearchIndustry[] }>
 const SEARCH_INDUSTRY_OPTIONS = SEARCH_INDUSTRY_GROUPS.flatMap((group) => group.options)
-const SUGGESTED_SEARCH_INDUSTRIES: SearchIndustry[] = [
-  'General Contractors',
-  'HVAC Contractors',
-  'Oil & Gas',
-  'Equipment Rental',
-  'Property Management',
-  'IT Services',
-]
 const ARRIVAL_RADIUS_OPTIONS: ArrivalDetectionRadiusFeet[] = [150, 300, 500, 1320]
 
 const STORAGE_KEYS = {
@@ -474,13 +466,6 @@ function calculateDistanceMilesPrecise(
   return earthRadiusMiles * c
 }
 
-function calculateDistanceMiles(
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-) {
-  return Number(calculateDistanceMilesPrecise(from, to).toFixed(1))
-}
-
 function feetToMiles(feet: number) {
   return feet / 5280
 }
@@ -514,24 +499,6 @@ function formatDateTime(value: string) {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(date)
-}
-
-function formatCalendarDate(value: string) {
-  if (!value) {
-    return ''
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
   }).format(date)
 }
 
@@ -805,14 +772,6 @@ function prospectToRouteDirectionsStop(prospect: Prospect): RouteDirectionsStop 
     googlePlaceId: prospect.googlePlaceId,
     location: prospect.location,
   }
-}
-
-function getDataSourceLabel(source: SearchDataSource) {
-  if (source === 'live') {
-    return uiText.navigation.liveBadge
-  }
-
-  return uiText.errors.apiErrorLabel
 }
 
 function sanitizeBaseProspect(value: unknown): BaseProspect | null {
@@ -1175,31 +1134,6 @@ function dedupePlaces(places: GooglePlacesApiPlace[]) {
   return Array.from(unique.values())
 }
 
-function StatCard({
-  label,
-  value,
-  detail,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  detail: string
-  icon: typeof Route
-}) {
-  return (
-    <article className="stat-card">
-      <div className="stat-card__icon">
-        <Icon size={18} />
-      </div>
-      <div>
-        <p className="stat-card__label">{label}</p>
-        <h3 className="stat-card__value">{value}</h3>
-        <p className="stat-card__detail">{detail}</p>
-      </div>
-    </article>
-  )
-}
-
 function EmptyState({
   title,
   copy,
@@ -1227,10 +1161,6 @@ function EmptyState({
       ) : null}
     </section>
   )
-}
-
-function DataSourceBadge({ source }: { source: SearchDataSource }) {
-  return <span className={`source-badge source-badge--${source}`}>{getDataSourceLabel(source)}</span>
 }
 
 function RemoveProspectSheet({
@@ -1593,68 +1523,6 @@ function EditAddressSheet({
         </div>
       </div>
     </div>
-  )
-}
-
-function RouteCalculationCard({
-  routeCount,
-  estimatedDriveMinutes,
-  travelMode,
-  filterSummary,
-  onCalculate,
-}: {
-  routeCount: number
-  estimatedDriveMinutes: number
-  travelMode: TravelMode
-  filterSummary: string
-  onCalculate: () => void
-}) {
-  const disabled = routeCount === 0
-  const travelModeLabel =
-    travelMode === 'walking' ? uiText.navigation.travelMode.walking : uiText.navigation.travelMode.driving
-  const helperText = disabled
-    ? uiText.routes.calculation.emptyState
-    : routeCount === 1
-      ? uiText.routes.calculation.singleStopHint
-      : uiText.routes.calculation.multiStopHint
-
-  return (
-    <section className="panel section-panel route-build-card">
-      <div className="section-heading">
-        <div>
-          <div className="eyebrow eyebrow--tight">{uiText.routes.calculation.eyebrow}</div>
-          <h2>{uiText.routes.calculation.heading}</h2>
-        </div>
-      </div>
-
-      <p className="section-copy">{uiText.routes.calculation.description}</p>
-
-      <div className="route-build-card__summary">
-        <span className="meta-pill">{uiText.routes.calculation.stopCount(routeCount)}</span>
-        {routeCount > 0 ? (
-          <span className="meta-pill">
-            {uiText.routes.calculation.estimatedDrive(formatDriveTime(estimatedDriveMinutes))}
-          </span>
-        ) : null}
-        <span className="meta-pill">{uiText.routes.calculation.travelMode(travelModeLabel)}</span>
-        {filterSummary ? (
-          <span className="meta-pill meta-pill--accent">
-            {uiText.routes.calculation.filters(filterSummary)}
-          </span>
-        ) : null}
-      </div>
-
-      <button
-        type="button"
-        className="button button--wide route-build-card__button"
-        onClick={() => void onCalculate()}
-        disabled={disabled}
-      >
-        {uiText.routes.calculation.button}
-      </button>
-
-      <p className="editor-hint route-build-card__hint">{helperText}</p>
-    </section>
   )
 }
 
@@ -2180,46 +2048,12 @@ function RouteWorkflowStopCard({
         {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
-      <div className="route-action-row">
-        {callHref ? (
-          <a className="route-action-button" href={callHref}>
-            <Phone size={16} />
-            {uiText.routes.actions.callBusiness}
-          </a>
-        ) : null}
-        {websiteHref ? (
-          <a className="route-action-button" href={websiteHref} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} />
-            {uiText.routes.actions.openWebsite}
-          </a>
-        ) : null}
+      <div className="route-action-row route-action-row--primary">
         <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
           <Navigation size={16} />
           {travelMode === 'walking'
             ? uiText.routes.actions.navigateWalk
             : uiText.routes.actions.navigateDrive}
-        </button>
-        <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
-          <UtensilsCrossed size={16} />
-          {uiText.foodNearby.findFoodNearby}
-        </button>
-        <button
-          type="button"
-          className="route-action-button button--danger-outline"
-          onClick={() => onToggleRoute(prospect.id)}
-        >
-          <span className="route-toggle-button__icon" aria-hidden="true">
-            <Check size={16} />
-          </span>
-          <span className="route-toggle-button__label">{uiText.search.card.removeRoute}</span>
-        </button>
-        <button
-          type="button"
-          className="route-action-button"
-          onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
-        >
-          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
-          {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
         </button>
         <BusinessCardScanButton onFileSelected={onRouteBusinessCardCapture} />
       </div>
@@ -2230,57 +2064,6 @@ function RouteWorkflowStopCard({
         onCapture={onRouteBusinessCardCapture}
         onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
       />
-
-      <BusinessCardSection
-        prospectId={prospect.id}
-        previewUrl={cardPreviewUrl}
-        contact={{
-          contactName: prospect.contactName,
-          contactTitle: prospect.contactTitle,
-          contactPhone: prospect.phone,
-          contactEmail: prospect.contactEmail,
-        }}
-        onCapture={onRouteBusinessCardCapture}
-        onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
-        onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
-        showScanButton={false}
-      />
-
-      <div className="field-group">
-        <span className="field-label">{uiText.search.prospectCard.priority}</span>
-        <div className="segment-row">
-          {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-            <button
-              type="button"
-              key={option}
-              className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-              onClick={() => onUpdatePriority(prospect.id, option)}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="field-group">
-        <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-        <div className="route-outcome-grid">
-          {ROUTE_OUTCOME_OPTIONS.map((option) => (
-            <button
-              type="button"
-              key={option}
-              className={`route-outcome-chip ${
-                prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-              }`}
-              onClick={() =>
-                onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
-              }
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <label className="field-group">
         <span className="field-label">{uiText.routes.quickNoteLabel}</span>
@@ -2293,17 +2076,108 @@ function RouteWorkflowStopCard({
         />
       </label>
 
-      <div className="route-stop-card__footer">
-        <p>{prospect.address}</p>
-        <button type="button" className="mini-button" onClick={() => onRemove(prospect.id)}>
-          {uiText.routes.actions.removeProspect}
-        </button>
-      </div>
+      <p className="route-stop-card__address">{prospect.address}</p>
+
+      <CardMoreActions>
+        <div className="route-action-row">
+          {callHref ? (
+            <a className="route-action-button" href={callHref}>
+              <Phone size={16} />
+              {uiText.routes.actions.callBusiness}
+            </a>
+          ) : null}
+          {websiteHref ? (
+            <a className="route-action-button" href={websiteHref} target="_blank" rel="noreferrer">
+              <ExternalLink size={16} />
+              {uiText.routes.actions.openWebsite}
+            </a>
+          ) : null}
+          <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
+            <UtensilsCrossed size={16} />
+            {uiText.foodNearby.findFoodNearby}
+          </button>
+          <button
+            type="button"
+            className="route-action-button button--danger-outline"
+            onClick={() => onToggleRoute(prospect.id)}
+          >
+            {uiText.search.card.removeRoute}
+          </button>
+          <button
+            type="button"
+            className="route-action-button"
+            onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
+          >
+            <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
+            {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
+          </button>
+          <button type="button" className="mini-button" onClick={() => onRemove(prospect.id)}>
+            {uiText.routes.actions.removeProspect}
+          </button>
+        </div>
+        <BusinessCardSection
+          prospectId={prospect.id}
+          previewUrl={cardPreviewUrl}
+          contact={{
+            contactName: prospect.contactName,
+            contactTitle: prospect.contactTitle,
+            contactPhone: prospect.phone,
+            contactEmail: prospect.contactEmail,
+          }}
+          onCapture={onRouteBusinessCardCapture}
+          onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
+          onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
+          showScanButton={false}
+        />
+        <div className="field-group">
+          <span className="field-label">{uiText.search.prospectCard.priority}</span>
+          <div className="segment-row">
+            {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                onClick={() => onUpdatePriority(prospect.id, option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field-group">
+          <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
+          <div className="route-outcome-grid">
+            {ROUTE_OUTCOME_OPTIONS.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`route-outcome-chip ${
+                  prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
+                }`}
+                onClick={() =>
+                  onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
+                }
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardMoreActions>
     </article>
   )
 }
 
 // (OptimizeRouteSheet removed — starting location is now a persistent field on Today’s Route.)
+
+function CardMoreActions({ children }: { children: ReactNode }) {
+  return (
+    <details className="card-more">
+      <summary className="card-more__trigger">{uiText.common.more}</summary>
+      <div className="card-more__panel">{children}</div>
+    </details>
+  )
+}
 
 function LiveSearchResultCard({
   prospect,
@@ -2337,30 +2211,19 @@ function LiveSearchResultCard({
     <article className="live-result-card">
       <div className="live-result-card__header">
         <div>
-          <div className="eyebrow eyebrow--tight">{uiText.search.card.badge}</div>
           <h3>{prospect.businessName}</h3>
-          <p>{prospect.category}</p>
+          <p>
+            {prospect.category} · {formatDistance(prospect.distance)}
+          </p>
         </div>
-        <div className="live-result-card__meta">
-          <span className="meta-pill">{`${formatDistance(prospect.distance)} away`}</span>
-          <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
-            {prospect.priority}
-          </span>
-          {prospect.rating !== null ? <span className="meta-pill">{prospect.rating.toFixed(1)} stars</span> : null}
-        </div>
+        <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
+          {prospect.priority}
+        </span>
       </div>
 
-      <div className="live-result-card__details">
-        <p>{prospect.address}</p>
-        {hasPhone ? <p>{prospect.phone}</p> : null}
-        {websiteHref ? (
-          <a href={websiteHref} target="_blank" rel="noreferrer">
-            {prospect.website}
-          </a>
-        ) : null}
-      </div>
+      <p className="live-result-card__address">{prospect.address}</p>
 
-      <div className="live-result-card__actions">
+      <div className="live-result-card__actions live-result-card__actions--primary">
         <button
           type="button"
           className={`button ${isSaved ? 'button--secondary' : ''}`}
@@ -2380,42 +2243,52 @@ function LiveSearchResultCard({
             {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
           </span>
         </button>
-        <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
-          <Navigation size={16} />
-          {travelMode === 'walking'
-            ? uiText.search.card.navigateWalk
-            : uiText.search.card.navigateDrive}
-        </button>
-        <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
-          <UtensilsCrossed size={16} />
-          {uiText.foodNearby.findFoodNearby}
-        </button>
-        {isInRoute || isSaved ? (
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={() => onRequestRemove(prospect.id)}
-          >
-            {uiText.search.card.removeProspect}
-          </button>
-        ) : null}
       </div>
 
-      <div className="field-group">
-        <span className="field-label">{uiText.search.prospectCard.priority}</span>
-        <div className="segment-row">
-          {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+      <CardMoreActions>
+        <div className="live-result-card__actions">
+          <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
+            <Navigation size={16} />
+            {travelMode === 'walking'
+              ? uiText.search.card.navigateWalk
+              : uiText.search.card.navigateDrive}
+          </button>
+          <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
+            <UtensilsCrossed size={16} />
+            {uiText.foodNearby.findFoodNearby}
+          </button>
+          {isInRoute || isSaved ? (
             <button
               type="button"
-              key={option}
-              className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-              onClick={() => onUpdatePriority(prospect.id, option)}
+              className="button button--ghost"
+              onClick={() => onRequestRemove(prospect.id)}
             >
-              {option}
+              {uiText.search.card.removeProspect}
             </button>
-          ))}
+          ) : null}
         </div>
-      </div>
+        {hasPhone ? <p>{prospect.phone}</p> : null}
+        {websiteHref ? (
+          <a href={websiteHref} target="_blank" rel="noreferrer">
+            {prospect.website}
+          </a>
+        ) : null}
+        <div className="field-group">
+          <span className="field-label">{uiText.search.prospectCard.priority}</span>
+          <div className="segment-row">
+            {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                onClick={() => onUpdatePriority(prospect.id, option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardMoreActions>
     </article>
   )
 }
@@ -2432,7 +2305,6 @@ function ProspectCard({
   onToggleExpanded,
   onUpdateNotes,
   onUpdatePriority,
-  onUpdateFollowUp,
 }: {
   prospect: Prospect
   isInRoute: boolean
@@ -2445,73 +2317,42 @@ function ProspectCard({
   onToggleExpanded: (prospectId: string) => void
   onUpdateNotes: (prospectId: string, notes: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
-  onUpdateFollowUp: (prospectId: string, followUpDate: string, followUpTime?: string, confirmSave?: boolean) => void
 }) {
-  const notesPreview = prospect.notes.trim() || prospect.visitNote.trim() || uiText.saved.notesPreviewEmpty
-  const followUpStatus = prospect.followUpDate
-    ? getFollowUpStatus(prospect.followUpDate)
-    : uiText.followUps.noDate
-  const routeStatus = isInRoute ? uiText.saved.routeStatusInRoute : uiText.saved.routeStatusNotInRoute
-  const lastVisited = prospect.visitCompletedAt
-    ? formatCalendarDate(prospect.visitCompletedAt)
-    : uiText.saved.lastVisitedEmpty
+  const notesPreview = prospect.notes.trim()
 
   return (
     <article className="prospect-card">
       <div className="prospect-card__header">
         <div>
-          <div className="eyebrow eyebrow--tight">{prospect.category}</div>
           <h3>{prospect.businessName}</h3>
-          <p className="prospect-card__city">{prospect.city}</p>
+          <p className="prospect-card__city">
+            {prospect.category} · {prospect.city}
+          </p>
         </div>
-        <span className="meta-pill meta-pill--accent">{uiText.search.card.saved}</span>
-      </div>
-
-      <div className="prospect-card__meta">
         <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
           {prospect.priority}
         </span>
-        <span className="meta-pill">{formatDistance(prospect.distance)}</span>
-        {prospect.isFoodStop ? (
-          <span className="meta-pill meta-pill--accent">{uiText.foodNearby.foodStopLabel}</span>
-        ) : null}
-        {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
-      <div className="prospect-card__notes-block">
-        <p className="prospect-card__footer-label">{uiText.saved.notesPreview}</p>
-        <p className="prospect-card__notes prospect-card__notes--preview">{notesPreview}</p>
-      </div>
-
-      <div className="prospect-card__status-grid">
-        <div className="prospect-card__status-item">
-          <p className="prospect-card__footer-label">{uiText.saved.followUpStatus}</p>
-          <p className="prospect-card__footer-copy">{followUpStatus}</p>
-        </div>
-        <div className="prospect-card__status-item">
-          <p className="prospect-card__footer-label">{uiText.saved.routeStatus}</p>
-          <p className="prospect-card__footer-copy">{routeStatus}</p>
-        </div>
-        <div className="prospect-card__status-item">
-          <p className="prospect-card__footer-label">{uiText.saved.lastVisited}</p>
-          <p className="prospect-card__footer-copy">{lastVisited}</p>
-        </div>
-      </div>
+      {notesPreview ? <p className="prospect-card__notes prospect-card__notes--preview">{notesPreview}</p> : null}
 
       <div className="prospect-card__footer">
+        <button
+          type="button"
+          className={`button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
+          onClick={() => onToggleRoute(prospect.id)}
+        >
+          <span className="route-toggle-button__icon" aria-hidden="true">
+            {isInRoute ? <Check size={16} /> : <Plus size={16} />}
+          </span>
+          <span className="route-toggle-button__label">
+            {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
+          </span>
+        </button>
+      </div>
+
+      <CardMoreActions>
         <div className="prospect-card__button-group prospect-card__button-group--saved">
-          <button
-            type="button"
-            className={`button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
-            onClick={() => onToggleRoute(prospect.id)}
-          >
-            <span className="route-toggle-button__icon" aria-hidden="true">
-              {isInRoute ? <Check size={16} /> : <Plus size={16} />}
-            </span>
-            <span className="route-toggle-button__label">
-              {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
-            </span>
-          </button>
           <button type="button" className="button button--ghost" onClick={() => onNavigate(prospect)}>
             {travelMode === 'walking'
               ? uiText.search.card.navigateWalk
@@ -2528,86 +2369,37 @@ function ProspectCard({
             {uiText.saved.remove}
           </button>
         </div>
-      </div>
-
-      {isExpanded ? (
-        <div className="prospect-editor">
-          <div className="field-group">
-            <span className="field-label">{uiText.search.prospectCard.priority}</span>
-            <div className="segment-row">
-              {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`segment ${
-                    prospect.priority === option ? 'segment--active' : ''
-                  }`}
-                  onClick={() => onUpdatePriority(prospect.id, option)}
-                >
-                  {option}
-                </button>
-              ))}
+        {isExpanded ? (
+          <div className="prospect-editor">
+            <div className="field-group">
+              <span className="field-label">{uiText.search.prospectCard.priority}</span>
+              <div className="segment-row">
+                {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={`segment ${
+                      prospect.priority === option ? 'segment--active' : ''
+                    }`}
+                    onClick={() => onUpdatePriority(prospect.id, option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
             </div>
+            <label className="field-group">
+              <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
+              <textarea
+                className="text-area"
+                rows={4}
+                value={prospect.notes}
+                onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
+              />
+            </label>
           </div>
-
-          <div className="field-group">
-            <div className="field-header">
-              <span className="field-label">{uiText.search.prospectCard.followUpDate}</span>
-              {prospect.followUpDate ? (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => onUpdateFollowUp(prospect.id, '')}
-                >
-                  {uiText.search.prospectCard.clear}
-                </button>
-              ) : null}
-            </div>
-            <input
-              className="text-input"
-              type="date"
-              value={prospect.followUpDate}
-              onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value, prospect.followUpTime)}
-            />
-          </div>
-
-          <div className="field-group">
-            <span className="field-label">{uiText.followUps.timeLabel}</span>
-            <input
-              className="text-input"
-              type="time"
-              value={prospect.followUpTime}
-              disabled={!prospect.followUpDate}
-              onChange={(event) =>
-                onUpdateFollowUp(prospect.id, prospect.followUpDate, event.target.value)
-              }
-            />
-          </div>
-
-          <button
-            type="button"
-            className="button button--ghost"
-            disabled={!prospect.followUpDate}
-            onClick={() =>
-              onUpdateFollowUp(prospect.id, prospect.followUpDate, prospect.followUpTime, true)
-            }
-          >
-            {uiText.followUps.saveFollowUp}
-          </button>
-
-          <label className="field-group">
-            <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
-            <textarea
-              className="text-area"
-              rows={4}
-              value={prospect.notes}
-              onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
-            />
-          </label>
-
-          <p className="editor-hint">{uiText.search.prospectCard.editorHint}</p>
-        </div>
-      ) : null}
+        ) : null}
+      </CardMoreActions>
     </article>
   )
 }
@@ -3010,7 +2802,6 @@ function App() {
   )
   const crmExportFormats = useMemo(() => getCrmExportFormats(), [])
   const crmExportScopes = useMemo(() => getCrmExportScopes(), [])
-  const futureCrmApiTargets = useMemo(() => getFutureCrmApiTargets(), [])
   const navigationItems = useMemo<
     Array<{ id: View; label: string; icon: typeof Route; badgeCount?: number }>
   >(
@@ -3342,20 +3133,6 @@ function App() {
     [followUpEntries],
   )
 
-  const followUpStats = useMemo(() => {
-    const todayKey = getLocalDateKey()
-    const pending = Object.values(followUpEntries).filter((entry) => !entry.completed)
-
-    return {
-      scheduled: pending.length,
-      dueNow: pending.filter((entry) => entry.followUpDate && entry.followUpDate <= todayKey).length,
-      thisWeek: pending.filter((entry) => {
-        const daysUntil = getDaysUntil(entry.followUpDate)
-        return daysUntil >= 0 && daysUntil <= 7
-      }).length,
-    }
-  }, [followUpEntries])
-
   const crmScopedProspects = useMemo(() => {
     const dedupe = (items: Prospect[]) =>
       Array.from(new globalThis.Map(items.map((prospect) => [prospect.id, prospect])).values())
@@ -3424,15 +3201,6 @@ function App() {
       ...buildCrmExportRows(records, crmExportFormat),
     }
   }, [crmExportFormat, crmScopedProspects, followUpEntries])
-
-  const hotTerritoryProspects = useMemo(
-    () =>
-      [...prospects]
-        .filter((prospect) => prospect.priority === 'Hot')
-        .sort((left, right) => left.distance - right.distance)
-        .slice(0, 3),
-    [prospects],
-  )
 
   const routeMiles = useMemo(
     () => {
@@ -3532,35 +3300,6 @@ function App() {
           : routeTrackerState === 'error'
             ? uiText.routes.currentStop.locationError
             : uiText.routes.currentStop.waiting
-  const nearbyRouteProspects = useMemo(() => {
-    if (routeProspects.length === 0) {
-      return []
-    }
-
-    const routeSet = new Set(routeIds)
-
-    return prospects
-      .filter((prospect) => !routeSet.has(prospect.id))
-      .map((prospect) => {
-        const nearestDistance = Math.min(
-          ...routeProspects.map((routeProspect) =>
-            calculateDistanceMiles(routeProspect.location, prospect.location),
-          ),
-        )
-
-        return {
-          prospect,
-          nearestDistance,
-        }
-      })
-      .filter((entry) => entry.nearestDistance <= 5)
-      .sort((left, right) => left.nearestDistance - right.nearestDistance)
-      .slice(0, 5)
-  }, [prospects, routeIds, routeProspects])
-
-  const upcomingThisWeek = followUpStats.thisWeek
-
-  const dueNowCount = followUpStats.dueNow
   const manualMarketLabel = manualMarket.trim()
   const routeOrigin = useMemo(() => {
     if (isFiniteLatLng(routeTrackerLocation)) {
@@ -3607,16 +3346,6 @@ function App() {
     [routeNavigationDirections, routeOrigin.source, routeProspects],
   )
   const effectiveRadiusMiles = getEffectiveRadiusMiles(searchRadiusChoice, customRadiusMiles)
-  const usesCurrentLocation = searchRadiusChoice === 'current-location' || !manualMarketLabel
-  const effectiveRadiusLabel = effectiveRadiusMiles
-    ? uiText.search.filters.radius(effectiveRadiusMiles)
-    : uiText.search.radiusOptionLabels.custom
-  const routeCalculationFilterSummary = summarizeSearchFilters({
-    selectedIndustries,
-    radiusLabel: effectiveRadiusLabel,
-    market: usesCurrentLocation ? '' : manualMarketLabel,
-    usesCurrentLocation,
-  })
   const notificationPermissionLabel =
     notificationPermission === 'granted'
       ? uiText.settings.notifications.permissionStatuses.granted
@@ -4580,18 +4309,6 @@ function App() {
     })
   }
 
-  function addNearbyProspect() {
-    const nextProspect = nearbyRouteProspects[0]?.prospect
-
-    if (!nextProspect) {
-      return
-    }
-
-    setRouteIds((current) =>
-      current.includes(nextProspect.id) ? current : [...current, nextProspect.id],
-    )
-  }
-
   function handleNavigateProspect(prospect: Prospect) {
     if (routeIds.includes(prospect.id)) {
       void startRouteNavigationForStop(prospect.id)
@@ -5211,25 +4928,6 @@ function App() {
     setRouteIds([])
   }
 
-  async function handleCalculateRoute() {
-    if (routeProspects.length === 0) {
-      return
-    }
-
-    setRouteCalculationContext({
-      filterSummary: routeCalculationFilterSummary,
-    })
-    pendingRouteScrollTargetRef.current = 'summary'
-    setActiveView('map')
-    setRouteNavigationOpen(false)
-
-    if (routeProspects.length > 1) {
-      await optimizeRoute()
-    }
-
-    await loadRouteNavigationDirections()
-  }
-
   function toggleExpandedProspect(prospectId: string) {
     setExpandedProspectId((current) => (current === prospectId ? null : prospectId))
   }
@@ -5802,231 +5500,7 @@ function App() {
     })
   }
 
-  function renderDashboard() {
-    const nextFollowUp = scheduledFollowUps[0]
-    const routeSnapshotSection = (
-      <section className="panel section-panel">
-        <div className="section-heading">
-          <div>
-            <div className="eyebrow eyebrow--tight">{uiText.routes.routeSnapshotEyebrow}</div>
-            <h2>{uiText.routes.routeSnapshotHeading}</h2>
-          </div>
-          <button type="button" className="link-button" onClick={() => setActiveView('map')}>
-            {uiText.routes.openRoute} <ChevronRight size={16} />
-          </button>
-        </div>
-
-        {routeProspects.length > 0 ? (
-          <div className="route-preview">
-            {routeProspects.slice(0, 3).map((prospect, index) => (
-              <div className="route-preview__item" key={prospect.id}>
-                <div className="route-preview__step">{index + 1}</div>
-                <div className="route-preview__content">
-                  <h3>{prospect.businessName}</h3>
-                  <p>
-                    {prospect.category} · {formatDistance(prospect.distance)}
-                  </p>
-                </div>
-                <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
-                  {prospect.priority}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title={uiText.emptyStates.noRouteLoadedTitle}
-            copy={uiText.emptyStates.noRouteLoadedCopy}
-            icon={Route}
-            actionLabel={uiText.onboarding.hotTargetsEmptyAction}
-            onAction={() => setActiveView('search')}
-          />
-        )}
-      </section>
-    )
-
-    return (
-      <>
-        <section className="panel hero-panel">
-          <div className="hero-panel__badge">
-            <Compass size={14} />
-            {uiText.onboarding.heroBadge}
-          </div>
-          <h1>{uiText.onboarding.heroHeading}</h1>
-          <p className="hero-panel__copy">{uiText.onboarding.heroDescription}</p>
-
-          <div className="hero-panel__metrics">
-            <div>
-              <span>{uiText.onboarding.metrics.savedProspects}</span>
-              <strong>{savedProspects.length}</strong>
-            </div>
-            <div>
-              <span>{uiText.onboarding.metrics.routeStops}</span>
-              <strong>{routeProspects.length}</strong>
-            </div>
-            <div>
-              <span>{uiText.onboarding.metrics.followUpsDue}</span>
-              <strong>{dueNowCount}</strong>
-            </div>
-          </div>
-
-          <div className="button-row">
-            <button type="button" className="button" onClick={() => setActiveView('search')}>
-              {uiText.onboarding.actions.findProspects}
-            </button>
-            <button type="button" className="button button--ghost" onClick={() => setActiveView('map')}>
-              {uiText.onboarding.actions.viewRoute}
-            </button>
-          </div>
-        </section>
-
-        <section className="panel section-panel prospect-cta-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.onboarding.startHereEyebrow}</div>
-              <h2>{uiText.search.heading}</h2>
-            </div>
-            <DataSourceBadge source={effectiveSearchStatus.source} />
-          </div>
-
-          <p className="section-copy">{uiText.search.prominentDescription}</p>
-
-          <div className="chip-row">
-            {SUGGESTED_SEARCH_INDUSTRIES.slice(0, 4).map((industry) => (
-              <button
-                type="button"
-                key={industry}
-                className={`chip ${selectedIndustries.includes(industry) ? 'chip--active' : ''}`}
-                onClick={() => {
-                  toggleIndustrySelection(industry)
-                  setActiveView('search')
-                }}
-              >
-                {industry}
-              </button>
-            ))}
-          </div>
-
-          <button type="button" className="button button--wide" onClick={() => setActiveView('search')}>
-            {uiText.routes.suggestedKeywordCta}
-          </button>
-        </section>
-
-        <section className="stat-grid">
-          <StatCard
-            label={uiText.onboarding.metrics.realProspectsLoaded}
-            value={`${prospects.length}`}
-            detail={uiText.onboarding.realProspectsDetail}
-            icon={Search}
-          />
-          <StatCard
-            label={uiText.routes.stats.routeStopsLabel}
-            value={`${routeProspects.length} stops`}
-            detail={uiText.routes.stats.routeStopsDetail(`${routeMiles.toFixed(1)} mi`)}
-            icon={Truck}
-          />
-          <StatCard
-            label={uiText.followUps.stats.scheduled}
-            value={`${scheduledFollowUps.length}`}
-            detail={uiText.onboarding.upcomingFollowUpsDetail(upcomingThisWeek)}
-            icon={CalendarClock}
-          />
-        </section>
-
-        <section className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.search.statusHeading}</div>
-              <h2>{uiText.search.catalogHeading}</h2>
-            </div>
-            <button type="button" className="link-button" onClick={() => setActiveView('settings')}>
-              {uiText.search.testButton} <ChevronRight size={16} />
-            </button>
-          </div>
-
-          {prospects.length > 0 ? (
-            <div className="saved-summary">
-              <div className="saved-summary__block">
-                <Search size={18} />
-                <div>
-                  <strong>{uiText.onboarding.storedProspectsSummary(prospects.length)}</strong>
-                  <p>{uiText.onboarding.catalogSummary}</p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              title={uiText.emptyStates.noRealProspectsTitle}
-              copy={uiText.emptyStates.noRealProspectsCopy}
-              icon={Search}
-              actionLabel={uiText.onboarding.hotTargetsEmptyAction}
-              onAction={() => setActiveView('search')}
-            />
-          )}
-        </section>
-
-        {routeProspects.length > 0 ? routeSnapshotSection : null}
-
-        <section className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.onboarding.hotTargetsEyebrow}</div>
-              <h2>{uiText.onboarding.hotTargetsHeading}</h2>
-            </div>
-          </div>
-
-          {hotTerritoryProspects.length > 0 ? (
-            <div className="stack">
-              {hotTerritoryProspects.map((prospect) => (
-                <ProspectCard
-                  key={prospect.id}
-                  prospect={prospect}
-                  isInRoute={routeIds.includes(prospect.id)}
-                  isExpanded={expandedProspectId === prospect.id}
-                  travelMode={travelMode}
-                  onNavigate={handleNavigateProspect}
-                  onFindFoodNearby={openFoodNearby}
-                  onRequestRemove={openRemoveProspectPrompt}
-                  onToggleRoute={toggleRoute}
-                  onToggleExpanded={toggleExpandedProspect}
-                  onUpdateNotes={updateProspectNotes}
-                  onUpdatePriority={updateProspectPriority}
-                  onUpdateFollowUp={updateProspectFollowUp}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title={uiText.emptyStates.noHotProspectsTitle}
-              copy={uiText.emptyStates.noHotProspectsCopy}
-              icon={Flame}
-              actionLabel={uiText.onboarding.hotTargetsEmptyAction}
-              onAction={() => setActiveView('search')}
-            />
-          )}
-
-          {nextFollowUp ? (
-            <div className="mini-callout">
-              <CalendarClock size={16} />
-              <div>
-                <strong>{uiText.onboarding.nextFollowUp}</strong>
-                <p>
-                  {nextFollowUp.businessName} on {formatFollowUpDate(nextFollowUp.followUpDate)}
-                </p>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        {routeProspects.length === 0 ? routeSnapshotSection : null}
-      </>
-    )
-  }
-
   function renderMapView() {
-    const selectedTravelModeLabel =
-      travelMode === 'walking' ? uiText.navigation.travelMode.walking : uiText.navigation.travelMode.driving
-
     if (routeNavigationOpen && routeProspects.length > 0) {
       return (
         <RouteNavigationView
@@ -6059,133 +5533,6 @@ function App() {
 
     return (
       <>
-        {routeCalculationContext && routeProspects.length > 0 ? (
-          <section ref={routeCalculationSummaryRef} className="panel section-panel route-build-card">
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow eyebrow--tight">{uiText.routes.calculation.eyebrow}</div>
-                <h2>{uiText.routes.calculation.summaryHeading}</h2>
-              </div>
-            </div>
-
-            <div className="route-build-card__summary">
-              <span className="meta-pill">{uiText.routes.calculation.stopCount(routeProspects.length)}</span>
-              <span className="meta-pill">
-                {uiText.routes.calculation.estimatedDrive(formatDriveTime(estimatedDriveMinutes))}
-              </span>
-              <span className="meta-pill">{uiText.routes.optimization.totalDistance(routeMiles.toFixed(1))}</span>
-              <span className="meta-pill">
-                {uiText.routes.calculation.travelMode(selectedTravelModeLabel)}
-              </span>
-              {routeCalculationContext.filterSummary ? (
-                <span className="meta-pill meta-pill--accent">
-                  {uiText.routes.calculation.filters(routeCalculationContext.filterSummary)}
-                </span>
-              ) : null}
-            </div>
-
-            <div
-              className={`status-banner ${
-                routeProspects.length === 1 ? 'status-banner--info' : 'status-banner--success'
-              }`}
-            >
-              <p>
-                {routeProspects.length === 1
-                  ? uiText.routes.calculation.singleStopHint
-                  : uiText.routes.calculation.multiStopHint}
-              </p>
-            </div>
-          </section>
-        ) : null}
-
-        {routeProspects.length > 0 ? (
-          <section className="panel section-panel route-overview-guidance">
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow eyebrow--tight">{uiText.routes.inAppNavigation.overviewEyebrow}</div>
-                <h2>{uiText.routes.inAppNavigation.overviewHeading}</h2>
-              </div>
-            </div>
-
-            <div className="route-overview-guidance__summary">
-              {currentRouteStop ? (
-                <div className="route-overview-guidance__block">
-                  <span className="field-label">{uiText.routes.inAppNavigation.currentStopLabel}</span>
-                  <strong>{currentRouteStop.businessName}</strong>
-                  <p>{currentRouteStop.address}</p>
-                </div>
-              ) : null}
-              {nextRouteStopAfterCurrent ? (
-                <div className="route-overview-guidance__block">
-                  <span className="field-label">{uiText.routes.inAppNavigation.nextStopLabel}</span>
-                  <strong>{nextRouteStopAfterCurrent.businessName}</strong>
-                  <p>{nextRouteStopAfterCurrent.address}</p>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="inline-summary">
-              {currentRouteStop ? (
-                <span className="meta-pill meta-pill--accent">
-                  {uiText.routes.inAppNavigation.stopOrder(
-                    routeProspects.findIndex((prospect) => prospect.id === currentRouteStop.id) + 1,
-                    routeProspects.length,
-                  )}
-                </span>
-              ) : null}
-              <span className="meta-pill">
-                {uiText.routes.inAppNavigation.distanceLabel}: {routeMiles.toFixed(1)} mi
-              </span>
-              <span className="meta-pill">
-                {uiText.routes.inAppNavigation.etaLabel}: {formatDriveTime(estimatedDriveMinutes)}
-              </span>
-              <span className="meta-pill">
-                {uiText.routes.inAppNavigation.completedCount(completedRouteStops)}
-              </span>
-              <span className="meta-pill">
-                {uiText.routes.inAppNavigation.remainingCount(remainingRouteStops)}
-              </span>
-              <span className="meta-pill">
-                {uiText.routes.inAppNavigation.percentComplete(completionPercentage)}
-              </span>
-            </div>
-
-            <div className="route-progress-track" aria-hidden="true">
-              <span
-                className="route-progress-track__fill"
-                style={{ width: `${completionPercentage}%` }}
-              />
-            </div>
-
-            {routeNavigationLoading ? (
-              <div className="status-banner status-banner--info">
-                <p>{uiText.routes.inAppNavigation.loadingRoute}</p>
-              </div>
-            ) : null}
-
-            {routeNavigationError ? (
-              <div className="status-banner status-banner--error">
-                <p>{routeNavigationError}</p>
-              </div>
-            ) : null}
-
-            <div className="button-row route-workflow-action-bar">
-              <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
-                <Navigation size={16} />
-                {uiText.routes.inAppNavigation.startRoute}
-              </button>
-              <button type="button" className="button button--ghost" onClick={handleOpenRouteInMaps}>
-                <ExternalLink size={16} />
-                {uiText.routes.inAppNavigation.openInMaps}
-              </button>
-              <BusinessCardScanButton
-                className="button button--ghost"
-                onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
-              />
-            </div>
-          </section>
-        ) : null}
-
         {showInvalidStopsPanel ? (
           <InvalidStopsPanel
             invalidStops={invalidStops}
@@ -6196,53 +5543,92 @@ function App() {
           />
         ) : null}
 
-        <section ref={routeMapSectionRef} className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.routes.routeMapEyebrow}</div>
-              <h2>{uiText.routes.routeMapHeading}</h2>
-            </div>
-            <DataSourceBadge source={effectiveSearchStatus.source} />
-          </div>
-          {routeProspects.length > 0 ? (
-            <div className="button-row route-map-actions">
-              <button type="button" className="button" onClick={() => void startRouteNavigation()}>
-                <Navigation size={16} />
-                {uiText.routes.inAppNavigation.startRoute}
-              </button>
-              <BusinessCardScanButton
-                className="button button--ghost"
-                onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
-              />
-              <button
-                type="button"
-                className="button button--ghost"
-                onClick={() => optimizeRoute()}
-                disabled={routeOptimization.status === 'loading' || routeProspects.length === 0}
-              >
-                <Route size={16} />
-                {routeOptimization.status === 'loading'
-                  ? uiText.routes.optimization.optimizing
-                  : uiText.routes.optimization.button}
-              </button>
-              <button type="button" className="button button--ghost" onClick={handleOpenRouteInMaps}>
-                <ExternalLink size={16} />
-                {uiText.routes.inAppNavigation.openInMaps}
-              </button>
-              <button
-                type="button"
-                className="button button--ghost"
-                onClick={clearRoute}
-              >
-                <Trash2 size={16} />
-                {uiText.routes.clearRoute}
-              </button>
-            </div>
-          ) : null}
-          <p className="section-copy map-panel__copy">
-            {uiText.routes.routeMapDescription}
-          </p>
+        {routeProspects.length > 0 ? (
+          <>
+            <section className="panel section-panel route-toolbar">
+              <div className="route-toolbar__focus">
+                {currentRouteStop ? (
+                  <div>
+                    <span className="field-label">{uiText.routes.inAppNavigation.currentStopLabel}</span>
+                    <strong>{currentRouteStop.businessName}</strong>
+                  </div>
+                ) : null}
+                {nextRouteStopAfterCurrent ? (
+                  <div>
+                    <span className="field-label">{uiText.routes.inAppNavigation.nextStopLabel}</span>
+                    <strong>{nextRouteStopAfterCurrent.businessName}</strong>
+                  </div>
+                ) : null}
+              </div>
 
+              <div className="route-progress-track" aria-hidden="true">
+                <span
+                  className="route-progress-track__fill"
+                  style={{ width: `${completionPercentage}%` }}
+                />
+              </div>
+
+              <div className="inline-summary inline-summary--compact">
+                <span className="meta-pill">
+                  {uiText.routes.inAppNavigation.completedCount(completedRouteStops)}
+                </span>
+                <span className="meta-pill">
+                  {uiText.routes.inAppNavigation.etaLabel}: {formatDriveTime(estimatedDriveMinutes)}
+                </span>
+                <span className="meta-pill">
+                  {uiText.routes.inAppNavigation.distanceLabel}: {routeMiles.toFixed(1)} mi
+                </span>
+              </div>
+
+              {routeNavigationLoading ? (
+                <div className="status-banner status-banner--info">
+                  <p>{uiText.routes.inAppNavigation.loadingRoute}</p>
+                </div>
+              ) : null}
+
+              {routeNavigationError ? (
+                <div className="status-banner status-banner--error">
+                  <p>{routeNavigationError}</p>
+                </div>
+              ) : null}
+
+              <div className="button-row route-toolbar__actions">
+                <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
+                  <Navigation size={16} />
+                  {uiText.routes.inAppNavigation.startRoute}
+                </button>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  onClick={() => optimizeRoute()}
+                  disabled={routeOptimization.status === 'loading'}
+                >
+                  <Route size={16} />
+                  {routeOptimization.status === 'loading'
+                    ? uiText.routes.optimization.optimizing
+                    : uiText.routes.optimization.button}
+                </button>
+                <BusinessCardScanButton
+                  className="button button--ghost"
+                  onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
+                />
+              </div>
+
+              <CardMoreActions>
+                <div className="button-row">
+                  <button type="button" className="button button--ghost" onClick={handleOpenRouteInMaps}>
+                    <ExternalLink size={16} />
+                    {uiText.routes.inAppNavigation.openInMaps}
+                  </button>
+                  <button type="button" className="button button--ghost" onClick={clearRoute}>
+                    <Trash2 size={16} />
+                    {uiText.routes.clearRoute}
+                  </button>
+                </div>
+              </CardMoreActions>
+            </section>
+
+            <section ref={routeMapSectionRef} className="panel section-panel section-panel--compact">
           {routeActionMessage ? (
             <div className={`status-banner status-banner--${routeActionMessage.tone}`}>
               <p>{routeActionMessage.text}</p>
@@ -6258,17 +5644,6 @@ function App() {
             </div>
           ) : null}
 
-          <div
-            className={`status-banner ${
-              effectiveSearchStatus.source === 'api-error'
-                ? 'status-banner--error'
-                : 'status-banner--info'
-            }`}
-          >
-            <p>{effectiveSearchStatus.message}</p>
-            {effectiveSearchStatus.details ? <p>{effectiveSearchStatus.details}</p> : null}
-          </div>
-
           <RepRouteMap
             markers={mapMarkers}
             directions={routeNavigationDirections}
@@ -6280,8 +5655,8 @@ function App() {
             onToggleRoute={toggleRoute}
           />
 
-          {routeProspects.length > 0 ? (
-            <details className="panel section-panel route-diagnostics" open>
+          {import.meta.env.DEV ? (
+            <details className="route-diagnostics">
               <summary className="filter-dropdown__trigger">
                 {uiText.routes.routeRender.diagnosticsHeading}
               </summary>
@@ -6344,81 +5719,6 @@ function App() {
               </div>
             </details>
           ) : null}
-
-          <div className="map-marker-summary">
-            <span className="map-marker-summary__item">
-              <span className="map-key map-key--search" />
-              {uiText.routes.mapSummary.searchResults(searchResultProspects.length)}
-            </span>
-            <span className="map-marker-summary__item">
-              <span className="map-key map-key--saved" />
-              {uiText.routes.mapSummary.savedProspects(savedProspects.length)}
-            </span>
-            <span className="map-marker-summary__item">
-              <span className="map-key map-key--route" />
-              {uiText.routes.mapSummary.routeStops(routeProspects.length)}
-            </span>
-          </div>
-
-          <div className="inline-summary">
-            <span>{uiText.routes.mapSummary.visiblePins(mapMarkers.length)}</span>
-            <span>{uiText.routes.todayListSummary(routeProspects.length)}</span>
-            <span>{uiText.routes.mapSummary.routeMiles(routeMiles.toFixed(1))}</span>
-            <span>{uiText.routes.mapSummary.nearbySuggestions(nearbyRouteProspects.length)}</span>
-          </div>
-        </section>
-
-        {searchResultProspects.length > 0 ? (
-          <section className="panel section-panel">
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow eyebrow--tight">{uiText.search.resultsEyebrow}</div>
-                <h2>{uiText.search.resultsHeading}</h2>
-              </div>
-              <DataSourceBadge source={effectiveSearchStatus.source} />
-            </div>
-
-            {effectiveSearchStatus.query ? (
-              <p className="section-copy" style={{ marginTop: 4 }}>
-                {effectiveSearchStatus.query}
-              </p>
-            ) : null}
-
-            <div className="live-results-stack">
-              {searchResultProspects.map((prospect) => (
-                <LiveSearchResultCard
-                  key={prospect.id}
-                  prospect={prospect}
-                  isSaved={savedIds.includes(prospect.id)}
-                  isInRoute={routeIds.includes(prospect.id)}
-                  travelMode={travelMode}
-                  onNavigate={handleNavigateProspect}
-                  onOpenSaved={openSavedProspect}
-                  onFindFoodNearby={openFoodNearby}
-                  onUpdatePriority={updateProspectPriority}
-                  onRequestRemove={openRemoveProspectPrompt}
-                  onToggleSaved={toggleSaved}
-                  onToggleRoute={toggleRoute}
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {routeProspects.length > 0 ? (
-          <>
-            <section className="panel section-panel route-workflow-action-bar">
-              <div className="section-heading">
-                <div>
-                  <div className="eyebrow eyebrow--tight">{uiText.routes.businessCard.routeActionBarLabel}</div>
-                  <h2>{uiText.routes.fieldWorkflowHeading}</h2>
-                </div>
-              </div>
-              <div className="route-action-row">
-                <BusinessCardScanButton
-                  onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
-                />
-              </div>
             </section>
 
             {currentStopProspect ? (
@@ -6452,46 +5752,7 @@ function App() {
               />
             ) : null}
 
-            <section className="stat-grid">
-              <StatCard
-                label={uiText.routes.stats.completedStops}
-                value={`${completedRouteStops}`}
-                detail={uiText.routes.stats.completedStopsDetail(remainingRouteStops)}
-                icon={CheckCircle2}
-              />
-              <StatCard
-                label={uiText.routes.stats.estimatedDriveTime}
-                value={formatDriveTime(estimatedDriveMinutes)}
-                detail={uiText.routes.stats.estimatedDriveTimeDetail(`${routeMiles.toFixed(1)} route miles`)}
-                icon={Clock3}
-              />
-              <StatCard
-                label={uiText.routes.stats.completion}
-                value={`${completionPercentage}%`}
-                detail={uiText.routes.stats.completionDetail}
-                icon={Target}
-              />
-              <StatCard
-                label={uiText.routes.stats.nearbyProspects}
-                value={`${nearbyRouteProspects.length}`}
-                detail={uiText.routes.stats.nearbyProspectsDetail}
-                icon={Truck}
-              />
-            </section>
-
-            <section className="panel section-panel">
-              <div className="section-heading">
-                <div>
-                  <div className="eyebrow eyebrow--tight">{uiText.routes.fieldWorkflowEyebrow}</div>
-                  <h2>{uiText.routes.fieldWorkflowHeading}</h2>
-                </div>
-                <span className="meta-pill">
-                  {currentRouteStop
-                    ? uiText.routes.nextStop(currentRouteStop.businessName)
-                    : uiText.routes.routeReady}
-                </span>
-              </div>
-
+            <section className="panel section-panel section-panel--compact">
               <label className="field-group">
                 <span className="field-label">{uiText.routes.optimization.startingLocationLabel}</span>
                 <div className="search-field">
@@ -6523,38 +5784,6 @@ function App() {
                   </button>
                 </div>
               </label>
-
-              {routeTrackerState === 'denied' && !routeStartLocation.trim() ? (
-                <div className="status-banner status-banner--info">
-                  <p>{uiText.routes.optimization.locationOffMessage}</p>
-                </div>
-              ) : null}
-
-              <div className="button-row">
-                <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
-                  <Navigation size={16} />
-                  {uiText.routes.inAppNavigation.startRoute}
-                </button>
-              </div>
-
-              <div className="route-progress-track" aria-hidden="true">
-                <span
-                  className="route-progress-track__fill"
-                  style={{ width: `${completionPercentage}%` }}
-                />
-              </div>
-
-              {currentRouteStop ? (
-                <div className="mini-callout">
-                  <Navigation size={16} />
-                  <div>
-                    <strong>{uiText.routes.currentFocusTitle}</strong>
-                    <p>
-                      {currentRouteStop.businessName} · {currentRouteStop.address}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
 
               <DndContext
                 sensors={routeSensors}
@@ -6597,62 +5826,6 @@ function App() {
                 </SortableContext>
               </DndContext>
             </section>
-
-            <section className="panel section-panel">
-              <div className="section-heading">
-                <div>
-                  <div className="eyebrow eyebrow--tight">{uiText.routes.nearbyEyebrow}</div>
-                  <h2>{uiText.routes.nearbyHeading}</h2>
-                </div>
-                <span className="meta-pill">{uiText.routes.withinFiveMiles}</span>
-              </div>
-
-              {nearbyRouteProspects.length > 0 ? (
-                <div className="nearby-prospect-stack">
-                  {nearbyRouteProspects.map(({ prospect, nearestDistance }) => (
-                    <article className="nearby-prospect-card" key={prospect.id}>
-                      <div>
-                        <h3>{prospect.businessName}</h3>
-                        <p>
-                          {prospect.category} · {uiText.routes.nearbyDistanceLabel(nearestDistance)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className={`button route-toggle-button ${
-                          routeIds.includes(prospect.id) ? 'button--danger-outline route-toggle-button--active' : ''
-                        }`}
-                        onClick={() =>
-                          toggleRoute(prospect.id)
-                        }
-                      >
-                        <span className="route-toggle-button__icon" aria-hidden="true">
-                          {routeIds.includes(prospect.id) ? <Check size={16} /> : <Plus size={16} />}
-                        </span>
-                        <span className="route-toggle-button__label">
-                          {routeIds.includes(prospect.id) ? uiText.search.card.removeRoute : uiText.routes.actions.addToRoute}
-                        </span>
-                      </button>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title={uiText.emptyStates.noNearbyTitle}
-                  copy={uiText.emptyStates.noNearbyCopy}
-                  icon={Search}
-                  actionLabel={uiText.saved.emptyAction}
-                  onAction={() => setActiveView('search')}
-                />
-              )}
-            </section>
-
-            {nearbyRouteProspects.length > 0 ? (
-              <button type="button" className="floating-route-fab" onClick={addNearbyProspect}>
-                <Plus size={18} />
-                {uiText.routes.actions.addNearbyProspect}
-              </button>
-            ) : null}
           </>
         ) : (
           <EmptyState
@@ -6668,65 +5841,34 @@ function App() {
   }
 
   function renderSearchView() {
+    const showLocationBanner =
+      searchLocationState === 'denied' || searchLocationState === 'unsupported'
+
     return (
       <>
-        <section className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.search.eyebrow}</div>
-              <h2>{uiText.search.heading}</h2>
+        <section className="panel section-panel section-panel--compact">
+          {showLocationBanner ? (
+            <div
+              className={`status-banner ${
+                searchLocationState === 'denied' ? 'status-banner--error' : 'status-banner--info'
+              }`}
+            >
+              <p>
+                {searchLocationState === 'denied'
+                  ? uiText.search.locationPanel.blocked
+                  : uiText.search.location.unsupported}
+              </p>
+              {searchLocationState === 'denied' ? (
+                <button type="button" className="text-button" onClick={requestSearchLocationAccess}>
+                  {uiText.search.locationPanel.turnOn}
+                </button>
+              ) : null}
             </div>
-            <DataSourceBadge source={effectiveSearchStatus.source} />
-          </div>
-
-          <div className="prominent-search-callout">
-            <strong>{uiText.search.prominentTitle}</strong>
-            <p>{uiText.search.prominentDescription}</p>
-          </div>
-
-          <section className="location-access-panel">
-            <div className="location-access-panel__header">
-              <strong>{uiText.search.locationPanel.heading}</strong>
-              <span
-                className={`meta-pill ${
-                  searchLocationState === 'granted'
-                    ? 'meta-pill--accent'
-                    : searchLocationState === 'denied'
-                      ? 'meta-pill--hot'
-                      : searchLocationState === 'unsupported'
-                        ? 'meta-pill--cold'
-                        : 'meta-pill--warm'
-                }`}
-              >
-                {searchLocationState === 'granted'
-                  ? uiText.search.locationPanel.statusOn
-                  : searchLocationState === 'denied'
-                    ? uiText.search.locationPanel.statusOff
-                    : searchLocationState === 'unsupported'
-                      ? uiText.search.locationPanel.statusUnavailable
-                      : uiText.search.locationPanel.statusNeeded}
-              </span>
-            </div>
-            <p className="section-copy">{uiText.search.locationPanel.helper}</p>
-
-            {searchLocationState === 'denied' ? (
-              <div className="status-banner status-banner--error">
-                <p>{uiText.search.locationPanel.blocked}</p>
-              </div>
-            ) : null}
-
-            {searchLocationState !== 'granted' && searchLocationState !== 'unsupported' ? (
-              <button type="button" className="button button--wide" onClick={requestSearchLocationAccess}>
-                {uiText.search.locationPanel.turnOn}
-              </button>
-            ) : null}
-
-            {searchLocationState === 'unsupported' ? (
-              <div className="status-banner status-banner--info">
-                <p>{uiText.search.location.unsupported}</p>
-              </div>
-            ) : null}
-          </section>
+          ) : searchLocationState !== 'granted' ? (
+            <button type="button" className="button button--ghost button--wide" onClick={requestSearchLocationAccess}>
+              {uiText.search.locationPanel.turnOn}
+            </button>
+          ) : null}
 
           <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">
@@ -6741,7 +5883,6 @@ function App() {
                   aria-label={uiText.search.marketLabel}
                 />
               </div>
-              <p className="editor-hint">{uiText.search.marketHelp}</p>
             </label>
 
             <label className="field-group">
@@ -6874,72 +6015,17 @@ function App() {
             </button>
           </form>
 
-          <div className="chip-row">
-            {SUGGESTED_SEARCH_INDUSTRIES.map((industry) => (
-              <button
-                type="button"
-                key={industry}
-                className={`chip ${selectedIndustries.includes(industry) ? 'chip--active' : ''}`}
-                onClick={() => toggleIndustrySelection(industry)}
-              >
-                {industry}
-              </button>
-            ))}
-          </div>
-
-          <div className="field-group">
-            <p className="field-label">{uiText.search.selectedFiltersLabel}</p>
-            <div className="chip-row">
-              <span className="chip chip--static">{effectiveRadiusLabel}</span>
-              {usesCurrentLocation ? (
-                <span className="chip chip--static">{uiText.search.filters.currentLocation}</span>
-              ) : null}
-              {selectedIndustries.length > 0 ? (
-                <span className="chip chip--static">
-                  {uiText.search.filters.industries(selectedIndustries)}
-                </span>
-              ) : null}
-              {manualMarket.trim() && !usesCurrentLocation ? (
-                <span className="chip chip--static">
-                  {uiText.search.filters.market(manualMarket.trim())}
-                </span>
-              ) : null}
+          {effectiveSearchStatus.source === 'api-error' ? (
+            <div className="status-banner status-banner--error">
+              <p>{effectiveSearchStatus.message}</p>
+              {effectiveSearchStatus.details ? <p>{effectiveSearchStatus.details}</p> : null}
             </div>
-          </div>
-
-          <div
-            className={`status-banner ${
-              effectiveSearchStatus.source === 'api-error'
-                ? 'status-banner--error'
-                : 'status-banner--info'
-            }`}
-          >
-            <p>{effectiveSearchStatus.message}</p>
-            {typeof effectiveSearchStatus.resultsCount === 'number' ? (
-              <p>{uiText.search.summary.resultsReturned(effectiveSearchStatus.resultsCount)}</p>
-            ) : null}
-            {effectiveSearchStatus.details ? <p>{effectiveSearchStatus.details}</p> : null}
-          </div>
-
-          <div className="inline-summary">
-            <span>
-              {effectiveSearchStatus.source === 'live'
-                ? uiText.search.summary.results(searchResultProspects.length)
-                : uiText.search.summary.error}
-            </span>
-            <button type="button" className="text-button" onClick={() => setActiveView('settings')}>
-              {uiText.search.openSettings}
-            </button>
-          </div>
+          ) : effectiveSearchStatus.source === 'live' && searchResultProspects.length > 0 ? (
+            <p className="inline-summary inline-summary--compact">
+              {uiText.search.summary.results(searchResultProspects.length)}
+            </p>
+          ) : null}
         </section>
-
-        <RouteCalculationCard
-          routeCount={routeProspects.length}
-          estimatedDriveMinutes={estimatedDriveMinutes}
-          travelMode={travelMode}
-          filterSummary={routeCalculationFilterSummary}
-          onCalculate={handleCalculateRoute}
-        />
 
         {searchResultProspects.length > 0 ? (
           <div className="live-results-stack">
@@ -6994,40 +6080,11 @@ function App() {
   function renderSavedView() {
     return (
       <>
-        <section className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.saved.eyebrow}</div>
-              <h2>{uiText.saved.heading}</h2>
-            </div>
-            <span className="meta-pill">{uiText.saved.countLabel(savedProspects.length)}</span>
-          </div>
-
-          <div className="saved-summary">
-            <div className="saved-summary__block">
-              <Bookmark size={18} />
-              <div>
-                <strong>{uiText.saved.summaryPrimaryTitle}</strong>
-                <p>{uiText.saved.summaryPrimaryDescription}</p>
-              </div>
-            </div>
-            <div className="saved-summary__block">
-              <NotebookPen size={18} />
-              <div>
-                <strong>{uiText.saved.summarySecondaryTitle}</strong>
-                <p>{uiText.saved.summarySecondaryDescription}</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <RouteCalculationCard
-          routeCount={routeProspects.length}
-          estimatedDriveMinutes={estimatedDriveMinutes}
-          travelMode={travelMode}
-          filterSummary={routeCalculationFilterSummary}
-          onCalculate={handleCalculateRoute}
-        />
+        {savedProspects.length > 0 ? (
+          <p className="inline-summary inline-summary--compact">
+            {uiText.saved.countLabel(savedProspects.length)}
+          </p>
+        ) : null}
 
         {savedProspects.length > 0 ? (
           <div className="stack">
@@ -7045,7 +6102,6 @@ function App() {
                 onToggleExpanded={toggleExpandedProspect}
                 onUpdateNotes={updateProspectNotes}
                 onUpdatePriority={updateProspectPriority}
-                onUpdateFollowUp={updateProspectFollowUp}
               />
             ))}
           </div>
@@ -7062,15 +6118,15 @@ function App() {
     )
   }
 
-  function renderFollowUpSection(section: keyof typeof followUpGroups, entries: FollowUpEntry[]) {
+  function renderFollowUpSection(title: string, sectionKey: string, entries: FollowUpEntry[]) {
     if (entries.length === 0) {
       return null
     }
 
     return (
-      <section className="follow-up-section stack" key={section}>
+      <section className="follow-up-section stack" key={sectionKey}>
         <div className="section-heading">
-          <h2>{uiText.followUps.sections[section]}</h2>
+          <h2>{title}</h2>
           <span className="meta-pill">{entries.length}</span>
         </div>
         {entries.map((entry) => (
@@ -7100,36 +6156,18 @@ function App() {
 
   function renderFollowUpsView() {
     const hasFollowUps = Object.keys(followUpEntries).length > 0
+    const pendingFollowUps = [
+      ...followUpGroups.overdue,
+      ...followUpGroups.today,
+      ...followUpGroups.upcoming,
+    ]
 
     return (
       <>
-        <section className="stat-grid">
-          <StatCard
-            label={uiText.followUps.stats.scheduled}
-            value={`${followUpStats.scheduled}`}
-            detail={uiText.followUps.stats.scheduledDetail}
-            icon={CalendarClock}
-          />
-          <StatCard
-            label={uiText.followUps.stats.dueNow}
-            value={`${dueNowCount}`}
-            detail={uiText.followUps.stats.dueNowDetail}
-            icon={Flame}
-          />
-          <StatCard
-            label={uiText.followUps.stats.thisWeek}
-            value={`${upcomingThisWeek}`}
-            detail={uiText.followUps.stats.thisWeekDetail}
-            icon={Users}
-          />
-        </section>
-
         {hasFollowUps ? (
           <div className="follow-up-sections stack">
-            {renderFollowUpSection('overdue', followUpGroups.overdue)}
-            {renderFollowUpSection('today', followUpGroups.today)}
-            {renderFollowUpSection('upcoming', followUpGroups.upcoming)}
-            {renderFollowUpSection('completed', followUpGroups.completed)}
+            {renderFollowUpSection(uiText.followUps.sections.pending, 'pending', pendingFollowUps)}
+            {renderFollowUpSection(uiText.followUps.sections.completed, 'completed', followUpGroups.completed)}
           </div>
         ) : (
           <EmptyState
@@ -7147,39 +6185,10 @@ function App() {
   function renderSettingsView() {
     return (
       <>
-        <section ref={settingsTopRef} className="panel section-panel">
-          <div className="profile-card">
-            <div className="profile-card__avatar">
-              <UserRound size={22} />
-            </div>
-            <div>
-              <h2>{uiText.navigation.accountMenu.workspaceTitle}</h2>
-              <p>{uiText.navigation.accountMenu.workspaceDescription}</p>
-            </div>
-          </div>
-
-          <div className="settings-stack">
-            <button
-              type="button"
-              className="setting-row"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              <div>
-                <strong>{uiText.settings.appearanceTitle}</strong>
-                <p>{uiText.settings.appearanceDescription}</p>
-              </div>
-              <span className="meta-pill">
-                {theme === 'dark' ? uiText.settings.darkMode : uiText.settings.lightMode}
-              </span>
-            </button>
-          </div>
-        </section>
-
-        <section className="panel section-panel">
+        <section ref={settingsTopRef} className="panel section-panel section-panel--compact">
           <div className="settings-stack">
             <label className="field-group">
               <span className="field-label">{uiText.settings.arrivalDetectionLabel}</span>
-              <span className="section-copy">{uiText.settings.arrivalDetectionDescription}</span>
               <select
                 className="text-input filter-select"
                 value={arrivalDetectionRadiusFeet}
@@ -7197,18 +6206,13 @@ function App() {
           </div>
         </section>
 
-        <section className="panel section-panel">
+        <section className="panel section-panel section-panel--compact">
           <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.settings.googlePlacesEyebrow}</div>
-              <h2>{uiText.settings.googlePlacesHeading}</h2>
-            </div>
+            <h2>{uiText.settings.googlePlacesHeading}</h2>
             <span className="meta-pill">
               {googleMapsApiKey ? uiText.settings.apiKeyDetected : uiText.settings.apiKeyMissing}
             </span>
           </div>
-
-          <p className="section-copy">{uiText.settings.googlePlacesDescription}</p>
 
           <button
             type="button"
@@ -7236,16 +6240,11 @@ function App() {
           </div>
         </section>
 
-        <section ref={notificationSectionRef} className="panel section-panel">
+        <section ref={notificationSectionRef} className="panel section-panel section-panel--compact">
           <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.settings.notifications.eyebrow}</div>
-              <h2>{uiText.settings.notifications.heading}</h2>
-            </div>
+            <h2>{uiText.settings.notifications.heading}</h2>
             <span className="meta-pill">{notificationPermissionLabel}</span>
           </div>
-
-          <p className="section-copy">{uiText.settings.notifications.description}</p>
 
           {notificationPermission === 'unsupported' ? (
             <div className="status-banner status-banner--error">
@@ -7413,21 +6412,13 @@ function App() {
             ) : null}
           </div>
 
-          <div className="inline-summary">
-            <span>{uiText.settings.notifications.localOnlyNote}</span>
-          </div>
         </section>
 
-        <section ref={crmExportSectionRef} className="panel section-panel">
+        <section ref={crmExportSectionRef} className="panel section-panel section-panel--compact">
           <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.crmExport.eyebrow}</div>
-              <h2>{uiText.crmExport.heading}</h2>
-            </div>
+            <h2>{uiText.crmExport.heading}</h2>
             <span className="meta-pill">{uiText.crmExport.rowsLabel(crmExportPreview.records.length)}</span>
           </div>
-
-          <p className="section-copy">{uiText.crmExport.description}</p>
 
           <div className="field-group">
             <span className="field-label">{uiText.crmExport.exportFormatLabel}</span>
@@ -7519,10 +6510,6 @@ function App() {
             )}
           </div>
 
-          <div className="inline-summary">
-            <span>{uiText.crmExport.futureIntegrationsLabel(futureCrmApiTargets)}</span>
-          </div>
-
           <button
             type="button"
             className="button"
@@ -7534,15 +6521,10 @@ function App() {
           </button>
         </section>
 
-        <section ref={backupSectionRef} className="panel section-panel">
+        <section ref={backupSectionRef} className="panel section-panel section-panel--compact">
           <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.settings.backupEyebrow}</div>
-              <h2>{uiText.settings.backupHeading}</h2>
-            </div>
+            <h2>{uiText.settings.backupHeading}</h2>
           </div>
-
-          <p className="section-copy">{uiText.settings.backupDescription}</p>
 
           <input
             ref={importFileInputRef}
@@ -7651,31 +6633,6 @@ function App() {
           ) : null}
         </section>
 
-        <section className="panel section-panel">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow eyebrow--tight">{uiText.settings.storageEyebrow}</div>
-              <h2>{uiText.settings.storageHeading}</h2>
-            </div>
-          </div>
-
-          <div className="saved-summary">
-            <div className="saved-summary__block">
-              <Star size={18} />
-              <div>
-                <strong>{uiText.settings.storageLocalTitle}</strong>
-                <p>{uiText.settings.storageLocalDescription}</p>
-              </div>
-            </div>
-            <div className="saved-summary__block">
-              <Route size={18} />
-              <div>
-                <strong>{uiText.settings.storageLiveTitle}</strong>
-                <p>{uiText.settings.storageLiveDescription}</p>
-              </div>
-            </div>
-          </div>
-        </section>
       </>
     )
   }
@@ -7683,7 +6640,7 @@ function App() {
   function renderActiveView() {
     switch (activeView) {
       case 'dashboard':
-        return renderDashboard()
+        return renderSearchView()
       case 'map':
         return renderMapView()
       case 'search':
@@ -7770,13 +6727,11 @@ function App() {
           </div>
         </header>
 
-        <section className="screen-intro">
-          <div className="eyebrow">{uiText.navigation.liveBadge}</div>
+        <section className="screen-intro screen-intro--compact">
           <h2>{displayMeta.title}</h2>
-          <p>{displayMeta.subtitle}</p>
         </section>
 
-        {(['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
+        {activeView === 'map' ? (
           <section className="travel-mode-toolbar">
             <span className="field-label">{uiText.navigation.travelMode.label}</span>
             <div className="chip-row">

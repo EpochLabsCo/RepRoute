@@ -1,4 +1,7 @@
 export const uiText = {
+  common: {
+    more: 'More',
+  },
   onboarding: {
     title: 'Get Started',
     description: 'Set up your workspace and start building a Prospect pipeline.',
@@ -31,7 +34,7 @@ export const uiText = {
   navigation: {
     appName: 'RepRoute',
     tagline: 'Field Sales Route Planner',
-    liveBadge: 'Live Search',
+    liveBadge: 'RepRoute',
     primaryNavAriaLabel: 'Primary',
     themeToggleAriaLabel: 'Toggle color theme',
     items: {
@@ -49,28 +52,24 @@ export const uiText = {
           'Search businesses with Prospect Search and keep your Route activity saved locally.',
       },
       map: {
-        title: 'Today’s Route',
-        subtitle:
-          'Review your stops, navigate the day, and work through Route activity from one screen.',
+        title: 'Route',
+        subtitle: 'Optimize, navigate, and work each stop.',
       },
       search: {
-        title: 'Prospect Search',
-        subtitle:
-          'Run a live Market Search by keyword and market, then save the best Prospects or add them to a Route.',
+        title: 'Search',
+        subtitle: 'Find businesses and add them to your route.',
       },
       saved: {
-        title: 'Saved Prospects',
-        subtitle:
-          'Keep high-fit Prospects ready for future Route days, follow-up work, and CRM export.',
+        title: 'Saved',
+        subtitle: 'Prospects you saved for later.',
       },
       'follow-ups': {
         title: 'Follow-Ups',
-        subtitle: 'Track every scheduled Follow-Up in one mobile-friendly workspace.',
+        subtitle: 'Pending and completed follow-ups.',
       },
       settings: {
         title: 'Settings',
-        subtitle:
-          'Manage notifications, Live Search, CRM Export, backups, and workspace preferences.',
+        subtitle: 'Backup, export, notifications, and location.',
       },
     },
     accountMenu: {
@@ -622,6 +621,7 @@ export const uiText = {
       thisWeekDetail: 'Follow-Ups due within the next seven days',
     },
     sections: {
+      pending: 'Pending',
       overdue: 'Overdue',
       today: 'Today',
       upcoming: 'Upcoming',

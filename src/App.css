@@ -365,6 +365,79 @@
   line-height: 1.05;
 }
 
+.screen-intro--compact {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.screen-intro--compact h2 {
+  font-size: 1.35rem;
+}
+
+.section-panel--compact {
+  gap: 12px;
+  padding: 14px;
+}
+
+.screen-content {
+  display: grid;
+  gap: 14px;
+}
+
+.card-more {
+  margin-top: 4px;
+}
+
+.card-more__trigger {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  list-style: none;
+}
+
+.card-more__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.card-more__panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.route-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.route-toolbar__focus {
+  display: grid;
+  gap: 10px;
+}
+
+.route-toolbar__actions {
+  flex-wrap: wrap;
+}
+
+.inline-summary--compact {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.live-result-card__address,
+.route-stop-card__address {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.live-result-card__actions--primary {
+  margin-top: 4px;
+}
+
 .screen-intro p,
 .hero-panel__copy,
 .prospect-card__notes,
