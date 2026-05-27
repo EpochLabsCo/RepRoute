@@ -2082,6 +2082,42 @@ function App() {
     )
   }, [])
 
+  function requestSearchLocationAccess() {
+    if (!navigator.geolocation) {
+      setSearchCenter(null)
+      setSearchLocationState('unsupported')
+      return
+    }
+
+    setSearchLocationState('requesting')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const next = { lat: position.coords.latitude, lng: position.coords.longitude }
+        setSearchCenter(next)
+        setSearchLocationState('granted')
+
+        // Keep route features in sync for this session.
+        setRouteTrackerLocation(next)
+        setRouteTrackerState('tracking')
+
+        const shouldAutoSearch =
+          selectedIndustries.length > 0 && (searchRadiusChoice === 'current-location' || !manualMarket.trim())
+        if (shouldAutoSearch) {
+          void runLiveSearch({ market: manualMarket, industries: selectedIndustries })
+        }
+      },
+      (error) => {
+        setSearchCenter(null)
+        setSearchLocationState(error.code === error.PERMISSION_DENIED ? 'denied' : 'unsupported')
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      },
+    )
+  }
+
   useEffect(() => {
     if (activeView !== 'map' || routeIds.length === 0) {
       return
@@ -2629,18 +2665,6 @@ function App() {
     market: usesCurrentLocation ? '' : manualMarketLabel,
     usesCurrentLocation,
   })
-  const searchLocationMessage =
-    manualMarketLabel && !usesCurrentLocation
-      ? uiText.search.location.marketOverride(manualMarketLabel)
-      : searchLocationState === 'requesting'
-      ? uiText.search.location.locating
-      : searchLocationState === 'granted'
-        ? uiText.search.location.ready
-        : searchLocationState === 'denied'
-          ? uiText.search.location.denied
-          : searchLocationState === 'unsupported'
-            ? uiText.search.location.unsupported
-            : uiText.search.marketHelp
   const notificationPermissionLabel =
     notificationPermission === 'granted'
       ? uiText.settings.notifications.permissionStatuses.granted
@@ -4234,16 +4258,49 @@ function App() {
             <p>{uiText.search.prominentDescription}</p>
           </div>
 
-          <div
-            className={`status-banner ${
-              !manualMarketLabel &&
-              (searchLocationState === 'denied' || searchLocationState === 'unsupported')
-                ? 'status-banner--error'
-                : 'status-banner--info'
-            }`}
-          >
-            <p>{searchLocationMessage}</p>
-          </div>
+          <section className="location-access-panel">
+            <div className="location-access-panel__header">
+              <strong>{uiText.search.locationPanel.heading}</strong>
+              <span
+                className={`meta-pill ${
+                  searchLocationState === 'granted'
+                    ? 'meta-pill--accent'
+                    : searchLocationState === 'denied'
+                      ? 'meta-pill--hot'
+                      : searchLocationState === 'unsupported'
+                        ? 'meta-pill--cold'
+                        : 'meta-pill--warm'
+                }`}
+              >
+                {searchLocationState === 'granted'
+                  ? uiText.search.locationPanel.statusOn
+                  : searchLocationState === 'denied'
+                    ? uiText.search.locationPanel.statusOff
+                    : searchLocationState === 'unsupported'
+                      ? uiText.search.locationPanel.statusUnavailable
+                      : uiText.search.locationPanel.statusNeeded}
+              </span>
+            </div>
+            <p className="section-copy">{uiText.search.locationPanel.helper}</p>
+
+            {searchLocationState === 'denied' ? (
+              <div className="status-banner status-banner--error">
+                <p>{uiText.search.locationPanel.blocked}</p>
+              </div>
+            ) : null}
+
+            {searchLocationState !== 'granted' && searchLocationState !== 'unsupported' ? (
+              <button type="button" className="button button--wide" onClick={requestSearchLocationAccess}>
+                {uiText.search.locationPanel.turnOn}
+              </button>
+            ) : null}
+
+            {searchLocationState === 'unsupported' ? (
+              <div className="status-banner status-banner--info">
+                <p>{uiText.search.location.unsupported}</p>
+              </div>
+            ) : null}
+          </section>
 
           <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">

@@ -1387,6 +1387,28 @@
   gap: 12px;
 }
 
+.location-access-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(74, 123, 255, 0.18);
+  background:
+    linear-gradient(160deg, rgba(74, 123, 255, 0.12), rgba(49, 196, 190, 0.08)),
+    var(--surface-soft);
+}
+
+.location-access-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.location-access-panel strong {
+  color: var(--text-primary);
+}
+
 .filter-dropdown {
   width: 100%;
 }
