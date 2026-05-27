@@ -123,6 +123,9 @@ type ProspectRecord = {
   contactEmail?: string
   contactPhone?: string
   contactWebsite?: string
+  addressOverride?: string
+  locationOverride?: { lat: number; lng: number }
+  googlePlaceIdOverride?: string
   lastContactDate?: string
   notes?: string
   priority?: AssignedPriority
@@ -920,6 +923,22 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
         nextRecord.contactWebsite = record.contactWebsite
       }
 
+      if (typeof record.addressOverride === 'string') {
+        nextRecord.addressOverride = record.addressOverride
+      }
+
+      if (isRecord(record.locationOverride)) {
+        const lat = record.locationOverride.lat
+        const lng = record.locationOverride.lng
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          nextRecord.locationOverride = { lat, lng }
+        }
+      }
+
+      if (typeof record.googlePlaceIdOverride === 'string') {
+        nextRecord.googlePlaceIdOverride = record.googlePlaceIdOverride
+      }
+
       if (record.lastContactDate === '' || isIsoDate(record.lastContactDate)) {
         nextRecord.lastContactDate = record.lastContactDate
       }
@@ -1344,6 +1363,134 @@ function FoodNearbySheet({
         <div className="modal-sheet__actions">
           <button type="button" className="button button--ghost" onClick={onClose}>
             {uiText.foodNearby.close}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InvalidStopsPanel({
+  invalidStops,
+  onRemoveStop,
+  onEditAddress,
+  onRemoveInvalidAndRecalculate,
+  onDismiss,
+}: {
+  invalidStops: Array<{
+    prospect: Prospect
+    missing: Array<'address' | 'coordinates' | 'placeId'>
+  }>
+  onRemoveStop: (prospectId: string) => void
+  onEditAddress: (prospectId: string) => void
+  onRemoveInvalidAndRecalculate: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <section className="panel section-panel invalid-stops-panel">
+      <div className="section-heading">
+        <div>
+          <div className="eyebrow eyebrow--tight">{uiText.routes.invalidStops.eyebrow}</div>
+          <h2>{uiText.routes.invalidStops.heading}</h2>
+        </div>
+        <button type="button" className="text-button" onClick={onDismiss}>
+          {uiText.routes.invalidStops.cancel}
+        </button>
+      </div>
+      <p className="section-copy">{uiText.routes.invalidStops.description}</p>
+
+      <div className="invalid-stop-stack">
+        {invalidStops.map(({ prospect, missing }) => (
+          <article key={prospect.id} className="invalid-stop-card">
+            <div className="invalid-stop-card__top">
+              <div>
+                <strong>{prospect.businessName}</strong>
+                <p className="section-copy">{prospect.address || 'Address unavailable'}</p>
+              </div>
+              <div className="invalid-stop-card__reasons">
+                {missing.map((reason) => (
+                  <span key={reason} className="meta-pill meta-pill--hot">
+                    {reason === 'address'
+                      ? uiText.routes.invalidStops.missingAddress
+                      : reason === 'coordinates'
+                        ? uiText.routes.invalidStops.missingCoordinates
+                        : uiText.routes.invalidStops.missingPlaceId}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="button-row">
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => onEditAddress(prospect.id)}
+              >
+                {uiText.routes.invalidStops.editAddress}
+              </button>
+              <button
+                type="button"
+                className="button button--danger-outline"
+                onClick={() => onRemoveStop(prospect.id)}
+              >
+                {uiText.routes.invalidStops.removeStop}
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="button-row" style={{ marginTop: 12 }}>
+        <button type="button" className="button button--wide" onClick={onRemoveInvalidAndRecalculate}>
+          {uiText.routes.invalidStops.removeAndRecalculate}
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function EditAddressSheet({
+  prospect,
+  onSave,
+  onCancel,
+}: {
+  prospect: Prospect
+  onSave: (nextAddress: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(prospect.address)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-address-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <div className="eyebrow eyebrow--tight">{uiText.routes.invalidStops.eyebrow}</div>
+        <h2 id="edit-address-title">{uiText.routes.invalidStops.editAddress}</h2>
+        <p className="section-copy">{prospect.businessName}</p>
+
+        <label className="field-group">
+          <span className="field-label">{uiText.routes.invalidStops.addressLabel}</span>
+          <input
+            className="text-input"
+            type="text"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={uiText.routes.invalidStops.addressPlaceholder}
+          />
+        </label>
+
+        <div className="modal-sheet__actions">
+          <button type="button" className="button" onClick={() => onSave(value)}>
+            {uiText.routes.invalidStops.saveAddress}
+          </button>
+          <button type="button" className="button button--ghost" onClick={onCancel}>
+            {uiText.routes.invalidStops.cancel}
           </button>
         </div>
       </div>
@@ -2344,6 +2491,8 @@ function App() {
   const [routeCalculationContext, setRouteCalculationContext] = useState<RouteCalculationContext | null>(
     null,
   )
+  const [invalidStopsDismissedForRouteKey, setInvalidStopsDismissedForRouteKey] = useState<string | null>(null)
+  const [editAddressProspectId, setEditAddressProspectId] = useState<string | null>(null)
   const [theme, setTheme] = usePersistentState<Theme>(STORAGE_KEYS.theme, 'dark')
   const [liveProspects, setLiveProspects] = usePersistentState<BaseProspect[]>(
     STORAGE_KEYS.liveProspects,
@@ -2723,6 +2872,7 @@ function App() {
         const record = prospectRecords[prospect.id]
         return {
           ...prospect,
+          googlePlaceId: record?.googlePlaceIdOverride ?? prospect.googlePlaceId,
           contactName: record?.contactName ?? prospect.contactName,
           contactTitle: record?.contactTitle ?? prospect.contactTitle,
           contactEmail: record?.contactEmail ?? prospect.contactEmail,
@@ -2733,6 +2883,8 @@ function App() {
             : prospect.lastContact,
           phone: record?.contactPhone ?? prospect.phone,
           website: record?.contactWebsite ?? prospect.website,
+          address: record?.addressOverride ?? prospect.address,
+          location: record?.locationOverride ?? prospect.location,
           lastContactDate: record?.lastContactDate ?? '',
           followUpDate: record?.followUpDate ?? '',
           routeCompleted: record?.routeCompleted ?? false,
@@ -2761,6 +2913,10 @@ function App() {
       foodNearbyOpenForProspectId ? prospectMap.get(foodNearbyOpenForProspectId) ?? null : null,
     [foodNearbyOpenForProspectId, prospectMap],
   )
+  const editAddressProspect = useMemo(
+    () => (editAddressProspectId ? prospectMap.get(editAddressProspectId) ?? null : null),
+    [editAddressProspectId, prospectMap],
+  )
   const foodNearbyResults = useMemo(
     () => foodNearbyResultIds.map((id) => prospectMap.get(id)).filter(Boolean) as Prospect[],
     [foodNearbyResultIds, prospectMap],
@@ -2781,10 +2937,34 @@ function App() {
         .filter((prospect): prospect is Prospect => Boolean(prospect)),
     [prospectMap, routeIds],
   )
+  const routeKey = useMemo(() => routeIds.join('|'), [routeIds])
   const foodStopIds = useMemo(
     () => new Set(routeProspects.filter((prospect) => prospect.isFoodStop).map((prospect) => prospect.id)),
     [routeProspects],
   )
+  const invalidStops = useMemo(() => {
+    return routeProspects
+      .map((prospect) => {
+        const missing: Array<'address' | 'coordinates' | 'placeId'> = []
+
+        if (!prospect.address?.trim()) {
+          missing.push('address')
+        }
+
+        if (!isFiniteLatLng(prospect.location)) {
+          missing.push('coordinates')
+        }
+
+        if (!prospect.googlePlaceId?.trim()) {
+          missing.push('placeId')
+        }
+
+        return { prospect, missing }
+      })
+      .filter((entry) => entry.missing.length > 0)
+  }, [routeProspects])
+  const showInvalidStopsPanel =
+    invalidStops.length > 0 && invalidStopsDismissedForRouteKey !== routeKey
 
   const liveSearchProspects = useMemo(
     () =>
@@ -3528,6 +3708,71 @@ function App() {
       isFoodStop: true,
     }))
     setActionToast({ type: 'success', text: uiText.foodNearby.addedFoodStopToast })
+  }
+
+  async function updateStopAddress(prospectId: string, address: string) {
+    const trimmed = address.trim()
+    if (!trimmed) {
+      return
+    }
+
+    const result = await searchGooglePlaces({
+      apiKey: googleMapsApiKey,
+      query: trimmed,
+      maxResultCount: 1,
+    })
+
+    if (!result.ok) {
+      setRouteActionMessage({ tone: 'error', text: result.error, persistent: true })
+      return
+    }
+
+    const placeWithLocation = result.places.find(
+      (place) =>
+        typeof place.location?.latitude === 'number' && typeof place.location?.longitude === 'number',
+    )
+
+    updateProspectRecord(prospectId, (current) => ({
+      ...current,
+      addressOverride: trimmed,
+      locationOverride:
+        placeWithLocation?.location &&
+        typeof placeWithLocation.location.latitude === 'number' &&
+        typeof placeWithLocation.location.longitude === 'number'
+          ? {
+              lat: placeWithLocation.location.latitude,
+              lng: placeWithLocation.location.longitude,
+            }
+          : current?.locationOverride,
+      googlePlaceIdOverride: placeWithLocation?.id?.trim() ? placeWithLocation.id.trim() : current?.googlePlaceIdOverride,
+    }))
+  }
+
+  function removeStopFromRoute(prospectId: string) {
+    setRouteIds((current) => current.filter((id) => id !== prospectId))
+  }
+
+  async function removeInvalidStopsAndRecalculate() {
+    const invalidIds = new Set(invalidStops.map((entry) => entry.prospect.id))
+    const validStops = routeProspects.filter((prospect) => !invalidIds.has(prospect.id))
+
+    if (validStops.length === 0) {
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.invalidStops.noValidStops, persistent: true })
+      return
+    }
+
+    setRouteIds(validStops.map((prospect) => prospect.id))
+    setInvalidStopsDismissedForRouteKey(null)
+
+    if (validStops.length > 1) {
+      await optimizeRoute()
+    }
+
+    await loadRouteNavigationDirections()
+  }
+
+  function dismissInvalidStopsForCurrentRoute() {
+    setInvalidStopsDismissedForRouteKey(routeKey)
   }
 
   function updateVisitNote(prospectId: string, visitNote: string) {
@@ -5068,6 +5313,16 @@ function App() {
               </button>
             </div>
           </section>
+        ) : null}
+
+        {showInvalidStopsPanel ? (
+          <InvalidStopsPanel
+            invalidStops={invalidStops}
+            onRemoveStop={removeStopFromRoute}
+            onEditAddress={(prospectId) => setEditAddressProspectId(prospectId)}
+            onRemoveInvalidAndRecalculate={() => void removeInvalidStopsAndRecalculate()}
+            onDismiss={dismissInvalidStopsForCurrentRoute}
+          />
         ) : null}
 
         <section ref={routeMapSectionRef} className="panel section-panel">
@@ -6648,6 +6903,18 @@ function App() {
             onNavigate={handleNavigateProspect}
             onSaveAsFoodStop={saveAsFoodStop}
             onClose={closeFoodNearby}
+          />
+        ) : null}
+
+        {editAddressProspect ? (
+          <EditAddressSheet
+            prospect={editAddressProspect}
+            onSave={(nextAddress) => {
+              void updateStopAddress(editAddressProspect.id, nextAddress).finally(() => {
+                setEditAddressProspectId(null)
+              })
+            }}
+            onCancel={() => setEditAddressProspectId(null)}
           />
         ) : null}
 

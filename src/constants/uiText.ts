@@ -453,6 +453,23 @@ export const uiText = {
       atStart: 'At route start',
       noTurnByTurn: 'Turn-by-turn voice guidance is not included in this version.',
     },
+    invalidStops: {
+      eyebrow: 'Route Check',
+      heading: 'Invalid Stops',
+      description:
+        'Some stops are missing info needed for route calculation. Remove or update them, then recalculate.',
+      removeAndRecalculate: 'Remove Invalid Stops and Recalculate',
+      noValidStops: 'No valid stops available for route calculation.',
+      missingAddress: 'Missing address',
+      missingCoordinates: 'Missing coordinates',
+      missingPlaceId: 'Missing place ID',
+      removeStop: 'Remove Stop',
+      editAddress: 'Edit Address',
+      addressLabel: 'Address',
+      addressPlaceholder: 'Enter a full address',
+      saveAddress: 'Save Address',
+      cancel: 'Cancel',
+    },
     mapSummary: {
       searchResults: (count: number) => `${count} search results`,
       savedProspects: (count: number) => `${count} Saved Prospects`,
