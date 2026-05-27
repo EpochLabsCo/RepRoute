@@ -422,6 +422,30 @@
   flex-wrap: wrap;
 }
 
+.route-map-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.route-map-external {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.route-map-external__button {
+  width: 100%;
+  justify-content: center;
+}
+
+.route-map-external__hint {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 .inline-summary--compact {
   margin: 0;
   font-size: 0.84rem;

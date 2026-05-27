@@ -434,6 +434,7 @@ export const uiText = {
       distanceLabel: 'Distance',
       startRoute: 'Start Route',
       openInMaps: 'Open in Maps',
+      openInMapsHint: 'Open the optimized route in your preferred maps app.',
       loadingRoute: 'Loading route line…',
       needOrigin: 'Add a starting location or enable location access to start route navigation.',
       routeLineError: 'Could not draw the route line. Stops and visit actions are still available.',

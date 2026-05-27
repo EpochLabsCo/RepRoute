@@ -5615,110 +5615,116 @@ function App() {
               </div>
 
               <CardMoreActions>
-                <div className="button-row">
-                  <button type="button" className="button button--ghost" onClick={handleOpenRouteInMaps}>
-                    <ExternalLink size={16} />
-                    {uiText.routes.inAppNavigation.openInMaps}
-                  </button>
-                  <button type="button" className="button button--ghost" onClick={clearRoute}>
-                    <Trash2 size={16} />
-                    {uiText.routes.clearRoute}
-                  </button>
-                </div>
+                <button type="button" className="button button--ghost" onClick={clearRoute}>
+                  <Trash2 size={16} />
+                  {uiText.routes.clearRoute}
+                </button>
               </CardMoreActions>
             </section>
 
-            <section ref={routeMapSectionRef} className="panel section-panel section-panel--compact">
-          {routeActionMessage ? (
-            <div className={`status-banner status-banner--${routeActionMessage.tone}`}>
-              <p>{routeActionMessage.text}</p>
-            </div>
-          ) : null}
+            <section ref={routeMapSectionRef} className="panel section-panel route-map-panel">
+              {routeActionMessage ? (
+                <div className={`status-banner status-banner--${routeActionMessage.tone}`}>
+                  <p>{routeActionMessage.text}</p>
+                </div>
+              ) : null}
 
-          {routeOptimization.status === 'success' && routeOptimization.forRouteKey === routeIds.join('|') ? (
-            <div className="status-banner status-banner--success">
-              <p>
-                {uiText.routes.optimization.totalDriveTime(formatDriveTime(routeOptimization.driveMinutes))} ·{' '}
-                {uiText.routes.optimization.totalDistance(routeOptimization.distanceMiles.toFixed(1))}
-              </p>
-            </div>
-          ) : null}
+              {routeOptimization.status === 'success' && routeOptimization.forRouteKey === routeIds.join('|') ? (
+                <div className="status-banner status-banner--success">
+                  <p>
+                    {uiText.routes.optimization.totalDriveTime(formatDriveTime(routeOptimization.driveMinutes))} ·{' '}
+                    {uiText.routes.optimization.totalDistance(routeOptimization.distanceMiles.toFixed(1))}
+                  </p>
+                </div>
+              ) : null}
 
-          <RepRouteMap
-            markers={mapMarkers}
-            directions={routeNavigationDirections}
-            directionsApiStatus={routeDirectionsApiStatus}
-            userLocation={routeTrackerLocation}
-            activeRouteStopId={currentRouteStop?.id ?? null}
-            onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
-            onToggleSaved={toggleSaved}
-            onToggleRoute={toggleRoute}
-          />
+              <RepRouteMap
+                markers={mapMarkers}
+                directions={routeNavigationDirections}
+                directionsApiStatus={routeDirectionsApiStatus}
+                userLocation={routeTrackerLocation}
+                activeRouteStopId={currentRouteStop?.id ?? null}
+                onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
+                onToggleSaved={toggleSaved}
+                onToggleRoute={toggleRoute}
+              />
 
-          {import.meta.env.DEV ? (
-            <details className="route-diagnostics">
-              <summary className="filter-dropdown__trigger">
-                {uiText.routes.routeRender.diagnosticsHeading}
-              </summary>
-              <div className="filter-dropdown__panel">
-                <div className="inline-summary">
-                  <span>{uiText.routes.routeRender.validStops(routeRenderDebug?.validStopCount ?? routeProspects.length)}</span>
-                  <span>
-                    {uiText.routes.routeRender.invalidRemoved(routeRenderDebug?.invalidRemovedCount ?? 0)}
-                  </span>
-                </div>
-                <div className="inline-summary">
-                  <span>
-                    {uiText.routes.routeRender.routeStatus}: {routeRenderDebug?.routeStatus ?? 'idle'}
-                  </span>
-                  <span>
-                    {routeRenderDebug?.mapReady
-                      ? uiText.routes.routeRender.mapReady
-                      : uiText.routes.routeRender.mapLoading}
-                  </span>
-                </div>
-                <div className="inline-summary">
-                  <span>
-                    {uiText.routes.routeRender.directionsStatus}: {routeDirectionsApiStatus ?? '—'}
-                  </span>
-                  <span>
-                    {uiText.routes.routeRender.rendererStatus}: {routeLineRenderStatus}
-                  </span>
-                </div>
-                {routeRenderDebug?.usedFallback ? (
-                  <div className="status-banner status-banner--info">
-                    <p>{uiText.routes.routeRender.usedFallback}</p>
-                  </div>
-                ) : null}
-                {routeRenderDebug?.autoRemovedStopNames.length ? (
-                  <div className="status-banner status-banner--info">
-                    <p>
-                      {uiText.routes.routeRender.autoRemoved}:{' '}
-                      {routeRenderDebug.autoRemovedStopNames.join(', ')}
-                    </p>
-                  </div>
-                ) : null}
-                <div className="inline-summary">
-                  <span>Last optimize: {routeOptimizationDebug?.status ?? 'idle'}</span>
-                  <span>
-                    {routeOptimizationDebug?.directionsStatus
-                      ? `Optimize API: ${routeOptimizationDebug.directionsStatus}`
-                      : ''}
-                  </span>
-                </div>
-                {routeOptimizationDebug?.message ? (
-                  <div className="status-banner status-banner--error">
-                    <p>{routeOptimizationDebug.message}</p>
-                  </div>
-                ) : null}
-                {import.meta.env.DEV ? (
-                  <pre className="editor-hint" style={{ whiteSpace: 'pre-wrap' }}>
-                    {JSON.stringify({ routeRenderDebug, routeOptimizationDebug }, null, 2)}
-                  </pre>
-                ) : null}
+              <div className="route-map-external">
+                <button
+                  type="button"
+                  className="button button--wide button--ghost route-map-external__button"
+                  onClick={handleOpenRouteInMaps}
+                >
+                  <ExternalLink size={16} />
+                  {uiText.routes.inAppNavigation.openInMaps}
+                </button>
+                <p className="route-map-external__hint">{uiText.routes.inAppNavigation.openInMapsHint}</p>
               </div>
-            </details>
-          ) : null}
+
+              {import.meta.env.DEV ? (
+                <details className="route-diagnostics">
+                  <summary className="filter-dropdown__trigger">
+                    {uiText.routes.routeRender.diagnosticsHeading}
+                  </summary>
+                  <div className="filter-dropdown__panel">
+                    <div className="inline-summary">
+                      <span>
+                        {uiText.routes.routeRender.validStops(routeRenderDebug?.validStopCount ?? routeProspects.length)}
+                      </span>
+                      <span>
+                        {uiText.routes.routeRender.invalidRemoved(routeRenderDebug?.invalidRemovedCount ?? 0)}
+                      </span>
+                    </div>
+                    <div className="inline-summary">
+                      <span>
+                        {uiText.routes.routeRender.routeStatus}: {routeRenderDebug?.routeStatus ?? 'idle'}
+                      </span>
+                      <span>
+                        {routeRenderDebug?.mapReady
+                          ? uiText.routes.routeRender.mapReady
+                          : uiText.routes.routeRender.mapLoading}
+                      </span>
+                    </div>
+                    <div className="inline-summary">
+                      <span>
+                        {uiText.routes.routeRender.directionsStatus}: {routeDirectionsApiStatus ?? '—'}
+                      </span>
+                      <span>
+                        {uiText.routes.routeRender.rendererStatus}: {routeLineRenderStatus}
+                      </span>
+                    </div>
+                    {routeRenderDebug?.usedFallback ? (
+                      <div className="status-banner status-banner--info">
+                        <p>{uiText.routes.routeRender.usedFallback}</p>
+                      </div>
+                    ) : null}
+                    {routeRenderDebug?.autoRemovedStopNames.length ? (
+                      <div className="status-banner status-banner--info">
+                        <p>
+                          {uiText.routes.routeRender.autoRemoved}:{' '}
+                          {routeRenderDebug.autoRemovedStopNames.join(', ')}
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="inline-summary">
+                      <span>Last optimize: {routeOptimizationDebug?.status ?? 'idle'}</span>
+                      <span>
+                        {routeOptimizationDebug?.directionsStatus
+                          ? `Optimize API: ${routeOptimizationDebug.directionsStatus}`
+                          : ''}
+                      </span>
+                    </div>
+                    {routeOptimizationDebug?.message ? (
+                      <div className="status-banner status-banner--error">
+                        <p>{routeOptimizationDebug.message}</p>
+                      </div>
+                    ) : null}
+                    <pre className="editor-hint" style={{ whiteSpace: 'pre-wrap' }}>
+                      {JSON.stringify({ routeRenderDebug, routeOptimizationDebug }, null, 2)}
+                    </pre>
+                  </div>
+                </details>
+              ) : null}
             </section>
 
             {currentStopProspect ? (
