@@ -324,7 +324,10 @@ export const uiText = {
   },
   foodNearby: {
     eyebrow: 'Quick Nearby',
-    heading: (name: string) => `Food nearby ${name}`,
+    heading: (name: string) => `Food Near ${name}`,
+    backToProspect: 'Back to Prospect',
+    closeFoodNearby: 'Close Food Nearby',
+    closeAriaLabel: 'Close Food Nearby',
     description:
       'Find restaurants, coffee, or catering nearby before your next visit. Results are filtered to your selected distance.',
     radiusLabel: 'Distance filter',

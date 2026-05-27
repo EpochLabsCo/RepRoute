@@ -16,6 +16,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   AlertTriangle,
+  ArrowLeft,
   BellRing,
   Bookmark,
   CalendarClock,
@@ -48,6 +49,7 @@ import {
   Upload,
   UserRound,
   Users,
+  X,
 } from 'lucide-react'
 import './App.css'
 import { uiText } from './constants/uiText'
@@ -89,6 +91,11 @@ type Priority = AssignedPriority | 'Unassigned'
 type Theme = 'dark' | 'light'
 type TravelMode = 'driving' | 'walking'
 type View = 'dashboard' | 'map' | 'search' | 'saved' | 'follow-ups' | 'settings'
+
+type FoodNearbySession = {
+  anchor: Prospect
+  returnView: View
+}
 type SearchDataSource = 'live' | 'api-error'
 type OutcomeTag =
   | 'No Answer'
@@ -1185,7 +1192,7 @@ function RemoveProspectSheet({
   )
 }
 
-function FoodNearbySheet({
+function FoodNearbyView({
   anchorProspect,
   radiusMiles,
   activeChip,
@@ -1197,6 +1204,7 @@ function FoodNearbySheet({
   onSelectChip,
   onNavigate,
   onSaveAsFoodStop,
+  onBack,
   onClose,
 }: {
   anchorProspect: Prospect
@@ -1210,21 +1218,33 @@ function FoodNearbySheet({
   onSelectChip: (chip: FoodQuickChip | null) => void
   onNavigate: (prospect: Prospect) => void
   onSaveAsFoodStop: (prospectId: string) => void
+  onBack: () => void
   onClose: () => void
 }) {
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="modal-sheet modal-sheet--food"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="food-nearby-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-sheet__handle" aria-hidden="true" />
+    <section className="food-nearby-view panel section-panel" aria-labelledby="food-nearby-title">
+      <header className="food-nearby-view__header">
+        <button type="button" className="button button--ghost food-nearby-view__back" onClick={onBack}>
+          <ArrowLeft size={18} />
+          {uiText.foodNearby.backToProspect}
+        </button>
+        <button
+          type="button"
+          className="icon-button food-nearby-view__close"
+          onClick={onClose}
+          aria-label={uiText.foodNearby.closeAriaLabel}
+        >
+          <X size={18} />
+        </button>
+      </header>
+
+      <div className="food-nearby-view__intro">
         <div className="eyebrow eyebrow--tight">{uiText.foodNearby.eyebrow}</div>
         <h2 id="food-nearby-title">{uiText.foodNearby.heading(anchorProspect.businessName)}</h2>
         <p className="section-copy">{uiText.foodNearby.description}</p>
+      </div>
+
+      <div className="food-nearby-view__body">
 
         <div className="field-group">
           <span className="field-label">{uiText.foodNearby.radiusLabel}</span>
@@ -1333,14 +1353,14 @@ function FoodNearbySheet({
             )
           })}
         </div>
-
-        <div className="modal-sheet__actions">
-          <button type="button" className="button button--ghost" onClick={onClose}>
-            {uiText.foodNearby.close}
-          </button>
-        </div>
       </div>
-    </div>
+
+      <div className="food-nearby-view__footer">
+        <button type="button" className="button button--ghost button--wide" onClick={onClose}>
+          {uiText.foodNearby.closeFoodNearby}
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -2456,7 +2476,7 @@ function App() {
   const [routeLineRenderStatus, setRouteLineRenderStatus] = useState<RouteLineRenderStatus>('idle')
   const [navigationActiveStopId, setNavigationActiveStopId] = useState<string | null>(null)
   const [navigationArrivedStopIds, setNavigationArrivedStopIds] = useState<Record<string, boolean>>({})
-  const [foodNearbyOpenForProspectId, setFoodNearbyOpenForProspectId] = useState<string | null>(null)
+  const [foodNearbySession, setFoodNearbySession] = useState<FoodNearbySession | null>(null)
   const [foodNearbyRadiusMiles, setFoodNearbyRadiusMiles] = useState<FoodRadiusMiles>(1)
   const [foodNearbyActiveChip, setFoodNearbyActiveChip] = useState<FoodQuickChip | null>(null)
   const [foodNearbyLoading, setFoodNearbyLoading] = useState(false)
@@ -2885,11 +2905,7 @@ function App() {
     () => (removeProspectPrompt ? prospectMap.get(removeProspectPrompt.prospectId) ?? null : null),
     [prospectMap, removeProspectPrompt],
   )
-  const foodNearbyAnchorProspect = useMemo(
-    () =>
-      foodNearbyOpenForProspectId ? prospectMap.get(foodNearbyOpenForProspectId) ?? null : null,
-    [foodNearbyOpenForProspectId, prospectMap],
-  )
+  const foodNearbyAnchorProspect = foodNearbySession?.anchor ?? null
   const editAddressProspect = useMemo(
     () => (editAddressProspectId ? prospectMap.get(editAddressProspectId) ?? null : null),
     [editAddressProspectId, prospectMap],
@@ -3633,8 +3649,35 @@ function App() {
     }
   }
 
+  function dismissFoodNearby(restorePreviousView = false) {
+    const returnView = foodNearbySession?.returnView
+
+    setFoodNearbySession(null)
+    setFoodNearbyError(null)
+    setFoodNearbyLoading(false)
+    setFoodNearbyResultIds([])
+    setFoodNearbyRadiusMiles(1)
+    setFoodNearbyActiveChip(null)
+
+    if (restorePreviousView && returnView) {
+      setActiveView(returnView)
+    }
+  }
+
   function openFoodNearby(prospectId: string) {
-    setFoodNearbyOpenForProspectId(prospectId)
+    const anchor = prospectMap.get(prospectId)
+
+    if (!anchor) {
+      return
+    }
+
+    setFoodNearbySession({
+      anchor: {
+        ...anchor,
+        location: { ...anchor.location },
+      },
+      returnView: activeView,
+    })
     setFoodNearbyRadiusMiles(1)
     setFoodNearbyActiveChip(null)
     setFoodNearbyError(null)
@@ -3642,10 +3685,7 @@ function App() {
   }
 
   function closeFoodNearby() {
-    setFoodNearbyOpenForProspectId(null)
-    setFoodNearbyError(null)
-    setFoodNearbyLoading(false)
-    setFoodNearbyResultIds([])
+    dismissFoodNearby(true)
   }
 
   function handleRemoveFromRoute(prospectId: string) {
@@ -3806,7 +3846,18 @@ function App() {
 
     void runFoodNearbySearch(foodNearbyAnchorProspect)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- use foodNearby state intentionally
-  }, [foodNearbyOpenForProspectId, foodNearbyRadiusMiles, foodNearbyActiveChip])
+  }, [foodNearbySession, foodNearbyRadiusMiles, foodNearbyActiveChip])
+
+  useEffect(() => {
+    if (!foodNearbySession) {
+      return
+    }
+
+    if (activeView !== foodNearbySession.returnView) {
+      dismissFoodNearby(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dismiss when user leaves the originating tab
+  }, [activeView, foodNearbySession])
 
   function handleRouteDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -6988,13 +7039,16 @@ function App() {
           </div>
         </header>
 
-        <section className="screen-intro">
-          <div className="eyebrow">{uiText.navigation.liveBadge}</div>
-          <h2>{displayMeta.title}</h2>
-          <p>{displayMeta.subtitle}</p>
-        </section>
+        {!foodNearbySession ? (
+          <section className="screen-intro">
+            <div className="eyebrow">{uiText.navigation.liveBadge}</div>
+            <h2>{displayMeta.title}</h2>
+            <p>{displayMeta.subtitle}</p>
+          </section>
+        ) : null}
 
-        {(['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
+        {!foodNearbySession &&
+        (['dashboard', 'map', 'search', 'saved'] as View[]).includes(activeView) ? (
           <section className="travel-mode-toolbar">
             <span className="field-label">{uiText.navigation.travelMode.label}</span>
             <div className="chip-row">
@@ -7020,7 +7074,27 @@ function App() {
           </section>
         ) : null}
 
-        <section className="screen-content">{renderActiveView()}</section>
+        <section className={`screen-content ${foodNearbySession ? 'screen-content--food-nearby' : ''}`}>
+          {foodNearbyAnchorProspect ? (
+            <FoodNearbyView
+              anchorProspect={foodNearbyAnchorProspect}
+              radiusMiles={foodNearbyRadiusMiles}
+              activeChip={foodNearbyActiveChip}
+              isLoading={foodNearbyLoading}
+              error={foodNearbyError}
+              results={foodNearbyResults}
+              savedAsFoodStopIds={foodStopIds}
+              onChangeRadius={(miles) => setFoodNearbyRadiusMiles(miles)}
+              onSelectChip={(chip) => setFoodNearbyActiveChip(chip)}
+              onNavigate={handleNavigateProspect}
+              onSaveAsFoodStop={saveAsFoodStop}
+              onBack={closeFoodNearby}
+              onClose={closeFoodNearby}
+            />
+          ) : (
+            renderActiveView()
+          )}
+        </section>
 
         {promptedProspect ? (
           <RemoveProspectSheet
@@ -7030,23 +7104,6 @@ function App() {
             onRemoveFromRoute={() => handleRemoveFromRoute(promptedProspect.id)}
             onRemoveFromSaved={() => handleRemoveFromSavedProspects(promptedProspect.id)}
             onCancel={closeRemoveProspectPrompt}
-          />
-        ) : null}
-
-        {foodNearbyAnchorProspect ? (
-          <FoodNearbySheet
-            anchorProspect={foodNearbyAnchorProspect}
-            radiusMiles={foodNearbyRadiusMiles}
-            activeChip={foodNearbyActiveChip}
-            isLoading={foodNearbyLoading}
-            error={foodNearbyError}
-            results={foodNearbyResults}
-            savedAsFoodStopIds={foodStopIds}
-            onChangeRadius={(miles) => setFoodNearbyRadiusMiles(miles)}
-            onSelectChip={(chip) => setFoodNearbyActiveChip(chip)}
-            onNavigate={handleNavigateProspect}
-            onSaveAsFoodStop={saveAsFoodStop}
-            onClose={closeFoodNearby}
           />
         ) : null}
 
@@ -7079,7 +7136,12 @@ function App() {
                 className={`bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''} ${
                   item.badgeCount ? 'bottom-nav__item--has-badge' : ''
                 }`}
-                onClick={() => setActiveView(item.id)}
+                onClick={() => {
+                  if (foodNearbySession) {
+                    dismissFoodNearby(false)
+                  }
+                  setActiveView(item.id)
+                }}
                 aria-current={isActive ? 'page' : undefined}
               >
                 <span className="bottom-nav__icon-wrap">
