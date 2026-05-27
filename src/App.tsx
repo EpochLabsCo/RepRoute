@@ -19,6 +19,7 @@ import {
   BellRing,
   Bookmark,
   CalendarClock,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -170,7 +171,19 @@ type RouteOptimizationState =
   | { status: 'success'; forRouteKey: string; distanceMiles: number; driveMinutes: number }
   | { status: 'error'; message: string }
 
-type RouteActionMessage = { tone: 'info' | 'error' | 'success'; text: string } | null
+type RouteActionMessage = { tone: 'info' | 'error' | 'success'; text: string; persistent?: boolean } | null
+
+type RouteOptimizationDebug = {
+  lastAttemptedAt: string
+  status: 'idle' | 'loading' | 'success' | 'error'
+  directionsStatus?: string
+  message?: string
+  origin?: unknown
+  destination?: unknown
+  waypointCount?: number
+  stopCount: number
+  missingCoordinatesCount: number
+} | null
 
 type ImportPreview = {
   fileName: string
@@ -476,6 +489,23 @@ function isFiniteLatLng(value: { lat: number; lng: number } | null | undefined) 
 
 function formatOriginParam(origin: string | { lat: number; lng: number }) {
   return typeof origin === 'string' ? origin : `${origin.lat},${origin.lng}`
+}
+
+function resolveDirectionsLocation(prospect: Prospect) {
+  if (isFiniteLatLng(prospect.location)) {
+    return prospect.location
+  }
+
+  const trimmed = prospect.address?.trim()
+  if (trimmed) {
+    return trimmed
+  }
+
+  return null
+}
+
+function getGoogleDirectionsTravelMode(mode: TravelMode) {
+  return mode === 'walking' ? google.maps.TravelMode.WALKING : google.maps.TravelMode.DRIVING
 }
 
 function createFallbackLiveProspectId(place: GooglePlacesApiPlace, query: string) {
@@ -1250,11 +1280,15 @@ function CurrentStopCard({
         </button>
         <button
           type="button"
-          className={`route-action-button ${isInRoute ? 'button--danger-outline' : ''}`}
+          className={`route-action-button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
           onClick={() => onToggleRoute(prospect.id)}
         >
-          <Trash2 size={16} />
-          {isInRoute ? uiText.search.card.removeRoute : uiText.search.card.addToRoute}
+          <span className="route-toggle-button__icon" aria-hidden="true">
+            {isInRoute ? <Check size={16} /> : <Plus size={16} />}
+          </span>
+          <span className="route-toggle-button__label">
+            {isInRoute ? uiText.search.card.removeRoute : uiText.search.card.addToRoute}
+          </span>
         </button>
       </div>
 
@@ -1630,8 +1664,10 @@ function RouteWorkflowStopCard({
           className="route-action-button button--danger-outline"
           onClick={() => onToggleRoute(prospect.id)}
         >
-          <Trash2 size={16} />
-          {uiText.search.card.removeRoute}
+          <span className="route-toggle-button__icon" aria-hidden="true">
+            <Check size={16} />
+          </span>
+          <span className="route-toggle-button__label">{uiText.search.card.removeRoute}</span>
         </button>
         <button
           type="button"
@@ -1764,10 +1800,15 @@ function LiveSearchResultCard({
         </button>
         <button
           type="button"
-          className={`button ${isInRoute ? 'button--danger-outline' : ''}`}
+          className={`button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
           onClick={() => onToggleRoute(prospect.id)}
         >
-          {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
+          <span className="route-toggle-button__icon" aria-hidden="true">
+            {isInRoute ? <Check size={16} /> : <Plus size={16} />}
+          </span>
+          <span className="route-toggle-button__label">
+            {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
+          </span>
         </button>
         <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
           <Navigation size={16} />
@@ -1882,10 +1923,15 @@ function ProspectCard({
         <div className="prospect-card__button-group prospect-card__button-group--saved">
           <button
             type="button"
-            className={`button ${isInRoute ? 'button--danger-outline' : ''}`}
+            className={`button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
             onClick={() => onToggleRoute(prospect.id)}
           >
-            {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
+            <span className="route-toggle-button__icon" aria-hidden="true">
+              {isInRoute ? <Check size={16} /> : <Plus size={16} />}
+            </span>
+            <span className="route-toggle-button__label">
+              {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
+            </span>
           </button>
           <button type="button" className="button button--ghost" onClick={() => onNavigate(prospect)}>
             {travelMode === 'walking'
@@ -1979,6 +2025,7 @@ function App() {
   const [actionToast, setActionToast] = useState<ToastMessage | null>(null)
   const [routeActionMessage, setRouteActionMessage] = useState<RouteActionMessage>(null)
   const [routeOptimization, setRouteOptimization] = useState<RouteOptimizationState>({ status: 'idle' })
+  const [routeOptimizationDebug, setRouteOptimizationDebug] = useState<RouteOptimizationDebug>(null)
   const [routeStartLocation, setRouteStartLocation] = useState('')
   const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
@@ -2269,6 +2316,10 @@ function App() {
 
   useEffect(() => {
     if (!routeActionMessage) {
+      return
+    }
+
+    if (routeActionMessage.persistent) {
       return
     }
 
@@ -2851,11 +2902,20 @@ function App() {
   }
 
   function toggleRoute(prospectId: string) {
+    const wasInRoute = routeIds.includes(prospectId)
+
     setRouteIds((current) =>
       current.includes(prospectId)
         ? current.filter((id) => id !== prospectId)
         : [...current, prospectId],
     )
+
+    if (!wasInRoute) {
+      setActionToast({
+        type: 'success',
+        text: uiText.routes.actions.addedToRouteToast,
+      })
+    }
   }
 
   function openRemoveProspectPrompt(prospectId: string) {
@@ -3007,98 +3067,249 @@ function App() {
   }
 
   async function optimizeRoute(originOverride?: string) {
-    if (routeProspects.length < 2) {
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops })
-      return
-    }
+    const attemptedAt = new Date().toISOString()
+    const stopCount = routeProspects.length
+    const missingCoordinatesCount = routeProspects.filter((stop) => !isFiniteLatLng(stop.location)).length
 
-    if (routeProspects.length > 25) {
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.routeTooLarge })
-      return
-    }
+    const logPrefix = '[RepRoute] Optimize Route'
 
-    if (!routeProspects.every((stop) => isFiniteLatLng(stop.location))) {
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.missingCoordinates })
-      return
-    }
-
-    if (typeof window === 'undefined' || !('google' in window) || !window.google?.maps) {
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error })
-      return
-    }
-
-    const destinationProspect = routeProspects[routeProspects.length - 1]
-    if (!destinationProspect) {
-      return
-    }
-
-    const origin =
+    const originCandidate =
       routeTrackerLocation ??
       (originOverride?.trim()
         ? originOverride.trim()
         : routeStartLocation.trim()
           ? routeStartLocation.trim()
-          : manualMarketLabel
-            ? manualMarketLabel
-            : routeProspects[0]?.location ?? null)
+          : null)
+
+    const originFromMarket = manualMarketLabel ? manualMarketLabel : null
+    const originResolved = originCandidate ?? originFromMarket ?? null
+
+    console.groupCollapsed(`${logPrefix} (${attemptedAt})`)
+    console.info('routeStopCount', stopCount)
+    console.info('routeTrackerLocation', routeTrackerLocation)
+    console.info('startingLocationField', routeStartLocation)
+    console.info('market', manualMarketLabel)
+    console.info('originResolved', originResolved)
+    console.table(
+      routeProspects.map((stop, index) => ({
+        index,
+        id: stop.id,
+        name: stop.businessName,
+        address: stop.address,
+        lat: stop.location?.lat,
+        lng: stop.location?.lng,
+        hasCoords: isFiniteLatLng(stop.location),
+      })),
+    )
+
+    if (stopCount === 0) {
+      console.warn('No route stops')
+      console.groupEnd()
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.noStops, persistent: true })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        message: uiText.routes.optimization.noStops,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      return
+    }
+
+    if (stopCount > 25) {
+      console.warn('Too many stops', stopCount)
+      console.groupEnd()
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.routeTooLarge, persistent: true })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        message: uiText.routes.optimization.routeTooLarge,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      return
+    }
+
+    const invalidStops = routeProspects
+      .map((stop) => ({ stop, location: resolveDirectionsLocation(stop) }))
+      .filter((entry) => !entry.location)
+
+    if (invalidStops.length > 0) {
+      const firstInvalid = invalidStops[0]?.stop
+      const message = firstInvalid ? uiText.routes.optimization.invalidStop(firstInvalid.businessName) : uiText.routes.optimization.error
+      console.warn('Invalid stops for directions', invalidStops.map((entry) => entry.stop.businessName))
+      console.groupEnd()
+      setRouteActionMessage({ tone: 'error', text: message, persistent: true })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        message,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      return
+    }
+
+    if (typeof window === 'undefined' || !('google' in window) || !window.google?.maps) {
+      console.warn('Google Maps JS not available')
+      console.groupEnd()
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        message: uiText.routes.optimization.error,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      return
+    }
+
+    const origin =
+      originResolved ??
+      (routeProspects[0] ? resolveDirectionsLocation(routeProspects[0]) : null)
+
+    if (!origin) {
+      console.warn('No origin available')
+      console.groupEnd()
+      setRouteActionMessage({
+        tone: 'error',
+        text: uiText.routes.optimization.error,
+        persistent: true,
+      })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        message: uiText.routes.optimization.error,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      return
+    }
 
     setRouteOptimization({ status: 'loading' })
     setRouteActionMessage(null)
+    setRouteOptimizationDebug({
+      lastAttemptedAt: attemptedAt,
+      status: 'loading',
+      stopCount,
+      missingCoordinatesCount,
+    })
 
-    const usesFirstStopOrigin = !routeTrackerLocation && !originOverride?.trim() && !routeStartLocation.trim() && !manualMarketLabel
-    const originStop = usesFirstStopOrigin ? routeProspects[0] ?? null : null
-    const waypointProspects = usesFirstStopOrigin ? routeProspects.slice(1, -1) : routeProspects.slice(0, -1)
-    const waypointIds = waypointProspects.map((prospect) => prospect.id)
+    const resolvedStops = routeProspects.map((stop) => ({
+      id: stop.id,
+      location: resolveDirectionsLocation(stop) as string | { lat: number; lng: number },
+    }))
+
+    const destination = resolvedStops[resolvedStops.length - 1]?.location
+    const waypointEntries = resolvedStops.slice(0, -1)
 
     const request: google.maps.DirectionsRequest = {
       origin,
-      destination: destinationProspect.location,
-      travelMode: google.maps.TravelMode.DRIVING,
-      optimizeWaypoints: true,
-      waypoints: waypointProspects.map((prospect) => ({
-        location: prospect.location,
-        stopover: true,
-      })),
+      destination,
+      travelMode: getGoogleDirectionsTravelMode(travelMode),
+      optimizeWaypoints: stopCount > 2,
+      waypoints:
+        waypointEntries.length > 0
+          ? waypointEntries.map((entry) => ({
+              location: entry.location,
+              stopover: true,
+            }))
+          : undefined,
     }
+
+    console.info('DirectionsService request', request)
 
     const service = new google.maps.DirectionsService()
 
-    const response = await new Promise<google.maps.DirectionsResult>((resolve, reject) => {
-      service.route(request, (result, status) => {
-        if (status !== google.maps.DirectionsStatus.OK || !result) {
-          reject(new Error(String(status)))
-          return
-        }
-        resolve(result)
+    const { result, status } = await new Promise<{ result: google.maps.DirectionsResult | null; status: string }>(
+      (resolve) => {
+        service.route(request, (response, responseStatus) => {
+          resolve({
+            result: response ?? null,
+            status: String(responseStatus),
+          })
+        })
+      },
+    )
+
+    console.info('DirectionsService status', status)
+    if (!result) {
+      console.warn('DirectionsService result missing', status)
+    }
+    console.info('DirectionsService result', result)
+    console.groupEnd()
+
+    if (!result?.routes?.[0] || status !== String(google.maps.DirectionsStatus.OK)) {
+      setRouteOptimization({ status: 'idle' })
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        directionsStatus: status,
+        message: uiText.routes.optimization.error,
+        origin,
+        destination,
+        waypointCount: waypointEntries.length,
+        stopCount,
+        missingCoordinatesCount,
       })
-    }).catch(() => null)
-
-    if (!response?.routes?.[0]) {
-      setRouteOptimization({ status: 'idle' })
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error })
       return
     }
 
-    const route = response.routes[0]
-    const waypointOrder = route.waypoint_order ?? []
-
-    if (waypointOrder.length !== waypointIds.length) {
-      setRouteOptimization({ status: 'idle' })
-      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error })
-      return
-    }
-
-    const optimizedWaypointIds = waypointOrder.map((index) => waypointIds[index]).filter(Boolean)
-    const optimizedIds = originStop
-      ? [originStop.id, ...optimizedWaypointIds, destinationProspect.id]
-      : [...optimizedWaypointIds, destinationProspect.id]
-    const optimizedKey = optimizedIds.join('|')
-
+    const route = result.routes[0]
     const legs = route.legs ?? []
     const distanceMeters = legs.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0)
     const durationSeconds = legs.reduce((sum, leg) => sum + (leg.duration?.value ?? 0), 0)
     const distanceMiles = metersToMiles(distanceMeters)
     const driveMinutes = secondsToMinutes(durationSeconds)
+
+    // 1–2 stops: no reorder needed, but still record metrics.
+    if (stopCount <= 2 || !(route.waypoint_order?.length)) {
+      const key = routeIds.join('|')
+      setRouteOptimization({
+        status: 'success',
+        forRouteKey: key,
+        distanceMiles,
+        driveMinutes,
+      })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'success',
+        directionsStatus: status,
+        origin,
+        destination,
+        waypointCount: waypointEntries.length,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      setActionToast({ type: 'success', text: uiText.routes.optimization.optimized })
+      return
+    }
+
+    const waypointOrder = route.waypoint_order ?? []
+    const waypointIds = waypointEntries.map((entry) => entry.id)
+
+    if (waypointOrder.length !== waypointIds.length) {
+      setRouteOptimization({ status: 'idle' })
+      setRouteActionMessage({ tone: 'error', text: uiText.routes.optimization.error, persistent: true })
+      setRouteOptimizationDebug({
+        lastAttemptedAt: attemptedAt,
+        status: 'error',
+        directionsStatus: status,
+        message: uiText.routes.optimization.error,
+        origin,
+        destination,
+        waypointCount: waypointEntries.length,
+        stopCount,
+        missingCoordinatesCount,
+      })
+      return
+    }
+
+    const optimizedWaypointIds = waypointOrder.map((index) => waypointIds[index]).filter(Boolean)
+    const destinationId = resolvedStops[resolvedStops.length - 1]?.id
+    const optimizedIds = [...optimizedWaypointIds, destinationId].filter(Boolean)
+    const optimizedKey = optimizedIds.join('|')
 
     setRouteIds(optimizedIds)
     setRouteOptimization({
@@ -3107,15 +3318,20 @@ function App() {
       distanceMiles,
       driveMinutes,
     })
-    setActionToast({
-      type: 'success',
-      text: uiText.routes.optimization.optimized,
+    setRouteOptimizationDebug({
+      lastAttemptedAt: attemptedAt,
+      status: 'success',
+      directionsStatus: status,
+      origin,
+      destination,
+      waypointCount: waypointEntries.length,
+      stopCount,
+      missingCoordinatesCount,
     })
+    setActionToast({ type: 'success', text: uiText.routes.optimization.optimized })
 
     if (routeCalculationContext) {
-      setRouteCalculationContext({
-        ...routeCalculationContext,
-      })
+      setRouteCalculationContext({ ...routeCalculationContext })
     }
   }
 
@@ -3933,7 +4149,7 @@ function App() {
                 type="button"
                 className="button"
                 onClick={() => optimizeRoute()}
-                disabled={routeOptimization.status === 'loading' || routeProspects.length < 2}
+                disabled={routeOptimization.status === 'loading' || routeProspects.length === 0}
               >
                 <Route size={16} />
                 {routeOptimization.status === 'loading'
@@ -3989,6 +4205,36 @@ function App() {
             onToggleSaved={toggleSaved}
             onToggleRoute={toggleRoute}
           />
+
+          {import.meta.env.DEV ? (
+            <details className="panel section-panel" style={{ marginTop: 12 }}>
+              <summary className="filter-dropdown__trigger">Route Diagnostics</summary>
+              <div className="filter-dropdown__panel">
+                <div className="inline-summary">
+                  <span>Location: {searchLocationState}</span>
+                  <span>Route tracker: {routeTrackerState}</span>
+                </div>
+                <div className="inline-summary">
+                  <span>Stops: {routeProspects.length}</span>
+                  <span>
+                    Missing coords: {routeProspects.filter((stop) => !isFiniteLatLng(stop.location)).length}
+                  </span>
+                </div>
+                <div className="inline-summary">
+                  <span>Last optimize: {routeOptimizationDebug?.status ?? 'idle'}</span>
+                  <span>{routeOptimizationDebug?.directionsStatus ? `Status: ${routeOptimizationDebug.directionsStatus}` : ''}</span>
+                </div>
+                {routeOptimizationDebug?.message ? (
+                  <div className="status-banner status-banner--error">
+                    <p>{routeOptimizationDebug.message}</p>
+                  </div>
+                ) : null}
+                <pre className="editor-hint" style={{ whiteSpace: 'pre-wrap' }}>
+{JSON.stringify(routeOptimizationDebug, null, 2)}
+                </pre>
+              </div>
+            </details>
+          ) : null}
 
           <div className="map-marker-summary">
             <span className="map-marker-summary__item">
@@ -4223,12 +4469,19 @@ function App() {
                       </div>
                       <button
                         type="button"
-                        className={`button ${routeIds.includes(prospect.id) ? 'button--danger-outline' : ''}`}
+                        className={`button route-toggle-button ${
+                          routeIds.includes(prospect.id) ? 'button--danger-outline route-toggle-button--active' : ''
+                        }`}
                         onClick={() =>
                           toggleRoute(prospect.id)
                         }
                       >
-                        {routeIds.includes(prospect.id) ? uiText.search.card.removeRoute : uiText.routes.actions.addToRoute}
+                        <span className="route-toggle-button__icon" aria-hidden="true">
+                          {routeIds.includes(prospect.id) ? <Check size={16} /> : <Plus size={16} />}
+                        </span>
+                        <span className="route-toggle-button__label">
+                          {routeIds.includes(prospect.id) ? uiText.search.card.removeRoute : uiText.routes.actions.addToRoute}
+                        </span>
                       </button>
                     </article>
                   ))}

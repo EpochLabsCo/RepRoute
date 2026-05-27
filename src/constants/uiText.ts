@@ -348,7 +348,7 @@ export const uiText = {
       button: 'Optimize Route',
       optimizing: 'Optimizing route…',
       optimized: 'Route optimized.',
-      error: 'Couldn’t optimize route. Check location access or try fewer stops.',
+      error: 'Route could not be optimized. Check that every stop has an address or location.',
       locationOffMessage: 'Location access is off. Enter a starting location to optimize or navigate.',
       startingLocationLabel: 'Starting location',
       startingLocationPlaceholder: 'Use current location or enter a starting address',
@@ -356,6 +356,7 @@ export const uiText = {
       routeTooLarge: 'Route is too large to optimize. Try fewer stops.',
       noStops: 'Add route stops before navigating.',
       missingCoordinates: 'One or more stops are missing coordinates. Try removing and re-adding them.',
+      invalidStop: (name: string) => `Missing address or location for: ${name}`,
       startPromptHeading: 'Choose a starting point',
       startPromptDescription:
         'Enter a starting address or landmark. RepRoute uses this as the route origin when current location is unavailable.',
@@ -470,6 +471,7 @@ export const uiText = {
       openSaved: 'Open Saved',
       addNearbyProspect: 'Add Nearby Prospect',
       addToRoute: 'Add to Route',
+      addedToRouteToast: 'Added to Today’s Route',
     },
     removal: {
       heading: 'Remove Prospect',
