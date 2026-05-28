@@ -122,12 +122,14 @@ export const uiText = {
     industriesSearchPlaceholder: 'Search industries',
     industriesSelectAll: 'Select All',
     industriesClearAll: 'Clear All',
+    industriesSelectAllInCategory: 'Select All in Category',
+    industriesClearCategory: 'Clear Category',
     industriesEmpty: 'No industries match your search.',
     industriesSectionSelected: (count: number) =>
       count === 0 ? 'No selections' : count === 1 ? '1 selected' : `${count} selected`,
     industriesSelected: (count: number) =>
       count === 0
-        ? 'Select industries'
+        ? 'No selections'
         : count === 1
           ? '1 industry selected'
           : `${count} industries selected`,
@@ -797,6 +799,7 @@ export const uiText = {
       salesforce: 'Salesforce-Ready CSV',
       zoho: 'Zoho-Ready CSV',
       pipedrive: 'Pipedrive-Ready CSV',
+      wpcrm: 'WPCRM-ready CSV',
     },
     futureTargets: {
       generic: 'Generic CSV importer',
@@ -804,6 +807,7 @@ export const uiText = {
       salesforce: 'Salesforce',
       zoho: 'Zoho',
       pipedrive: 'Pipedrive',
+      wpcrm: 'WPCRM (direct API sync planned)',
     },
     previewFallback: '—',
     scopes: {

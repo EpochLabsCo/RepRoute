@@ -2216,11 +2216,11 @@
 .filter-dropdown__panel {
   margin-top: 10px;
   display: grid;
-  gap: 10px;
-  max-height: min(52dvh, 420px);
+  gap: 8px;
+  max-height: min(48dvh, 380px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  padding: 10px;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: var(--surface-soft);
@@ -2238,19 +2238,24 @@
   min-height: 46px;
 }
 
-.filter-dropdown__groups,
-.filter-dropdown__group-options {
+.filter-dropdown__groups {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .filter-dropdown__group {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 16px;
+  gap: 0;
+  padding: 0;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.filter-dropdown__group--expanded {
+  gap: 6px;
+  padding-bottom: 8px;
 }
 
 .filter-dropdown__group-toggle {
@@ -2259,11 +2264,36 @@
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 0;
+  min-height: 48px;
+  padding: 10px 12px;
   text-align: left;
   background: transparent;
   border: none;
   color: var(--text-primary);
+  cursor: pointer;
+}
+
+.filter-dropdown__group-arrow {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.filter-dropdown__group-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 0 12px 2px;
+}
+
+.filter-dropdown__group-toolbar .text-button {
+  font-size: 0.78rem;
+}
+
+.filter-dropdown__group-options {
+  display: grid;
+  gap: 4px;
+  padding: 0 8px;
 }
 
 .filter-dropdown__group-copy {
@@ -2291,8 +2321,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
   color: var(--text-primary);
 }
@@ -2892,25 +2923,45 @@
   }
 
   .filter-dropdown__panel {
-    max-height: min(58dvh, 460px);
-    padding: 10px;
+    max-height: min(52dvh, 400px);
+    padding: 8px;
+    gap: 6px;
   }
 
   .filter-dropdown__toolbar {
-    gap: 8px;
+    gap: 6px;
   }
 
   .filter-dropdown__toolbar .text-button {
-    flex: 1 1 calc(50% - 4px);
+    flex: 1 1 calc(50% - 3px);
     justify-content: center;
-    min-height: 40px;
-    padding: 8px 10px;
+    min-height: 38px;
+    padding: 7px 8px;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.04);
   }
 
-  .filter-dropdown__group {
-    padding: 8px;
+  .filter-dropdown__groups {
+    gap: 5px;
+  }
+
+  .filter-dropdown__group-toggle {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+
+  .filter-dropdown__group-toolbar {
+    padding: 0 10px 2px;
+  }
+
+  .filter-dropdown__group-options {
+    padding: 0 6px;
+    gap: 3px;
+  }
+
+  .filter-dropdown__option {
+    min-height: 40px;
+    padding: 7px 8px;
   }
 
   .prospect-card__footer {

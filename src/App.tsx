@@ -2492,9 +2492,7 @@ function App() {
   const [selectedIndustries, setSelectedIndustries] = useState<SearchIndustry[]>([])
   const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false)
   const [industrySearchQuery, setIndustrySearchQuery] = useState('')
-  const [collapsedIndustryGroups, setCollapsedIndustryGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(SEARCH_INDUSTRY_GROUPS.map((group) => [group.label, false])),
-  )
+  const [expandedIndustryGroups, setExpandedIndustryGroups] = useState<Record<string, boolean>>({})
   const [searchLocationState, setSearchLocationState] = useState<SearchLocationState>(() => {
     if (typeof navigator === 'undefined') {
       return 'idle'
@@ -3177,6 +3175,7 @@ function App() {
         editedByRepRouteUser: prospect.editedByRepRouteUser,
         followUpDate: followUpEntry?.followUpDate ?? prospect.followUpDate,
         followUpTime: followUpEntry?.followUpTime ?? prospect.followUpTime,
+        followUpNotes: followUpEntry?.notes ?? '',
         followUpCompleted: followUpEntry?.completed,
         followUpRouteStatus: followUpEntry?.routeStatus,
         googlePlaceId: prospect.googlePlaceId,
@@ -4891,10 +4890,25 @@ function App() {
   }
 
   function toggleIndustryGroup(groupLabel: string) {
-    setCollapsedIndustryGroups((current) => ({
+    setExpandedIndustryGroups((current) => ({
       ...current,
       [groupLabel]: !current[groupLabel],
     }))
+  }
+
+  function selectAllInIndustryGroup(industries: SearchIndustry[]) {
+    setSelectedIndustries((current) => {
+      const next = new Set(current)
+      for (const industry of industries) {
+        next.add(industry)
+      }
+      return SEARCH_INDUSTRY_OPTIONS.filter((industry) => next.has(industry))
+    })
+  }
+
+  function clearIndustryGroup(industries: SearchIndustry[]) {
+    const removeSet = new Set(industries)
+    setSelectedIndustries((current) => current.filter((industry) => !removeSet.has(industry)))
   }
 
   function selectAllIndustries() {
@@ -5974,34 +5988,59 @@ function App() {
                         ).length
                         const isExpanded = normalizedIndustrySearchQuery
                           ? true
-                          : !(collapsedIndustryGroups[group.label] ?? false)
+                          : Boolean(expandedIndustryGroups[group.label])
 
                         return (
-                          <section key={group.label} className="filter-dropdown__group">
+                          <section
+                            key={group.label}
+                            className={`filter-dropdown__group ${isExpanded ? 'filter-dropdown__group--expanded' : ''}`}
+                          >
                             <button
                               type="button"
                               className="filter-dropdown__group-toggle"
+                              aria-expanded={isExpanded}
                               onClick={() => toggleIndustryGroup(group.label)}
                             >
                               <div className="filter-dropdown__group-copy">
                                 <strong>{group.label}</strong>
                                 <span>{uiText.search.industriesSectionSelected(selectedCount)}</span>
                               </div>
-                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              <span className="filter-dropdown__group-arrow" aria-hidden="true">
+                                {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              </span>
                             </button>
                             {isExpanded ? (
-                              <div className="filter-dropdown__group-options">
-                                {group.options.map((industry) => (
-                                  <label key={industry} className="filter-dropdown__option">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedIndustries.includes(industry)}
-                                      onChange={() => toggleIndustrySelection(industry)}
-                                    />
-                                    <span>{industry}</span>
-                                  </label>
-                                ))}
-                              </div>
+                              <>
+                                <div className="filter-dropdown__group-toolbar">
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    onClick={() => selectAllInIndustryGroup(group.options)}
+                                  >
+                                    {uiText.search.industriesSelectAllInCategory}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    onClick={() => clearIndustryGroup(group.options)}
+                                    disabled={selectedCount === 0}
+                                  >
+                                    {uiText.search.industriesClearCategory}
+                                  </button>
+                                </div>
+                                <div className="filter-dropdown__group-options">
+                                  {group.options.map((industry) => (
+                                    <label key={industry} className="filter-dropdown__option">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedIndustries.includes(industry)}
+                                        onChange={() => toggleIndustrySelection(industry)}
+                                      />
+                                      <span>{industry}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </>
                             ) : null}
                           </section>
                         )

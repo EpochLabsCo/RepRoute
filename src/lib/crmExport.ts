@@ -6,6 +6,7 @@ export type CrmExportFormat =
   | 'salesforce'
   | 'zoho'
   | 'pipedrive'
+  | 'wpcrm'
 
 export type CrmExportScope = 'saved' | 'route' | 'followups' | 'all'
 
@@ -28,6 +29,7 @@ export type CrmExportRecord = {
   visitCompletedDateTime: string
   followUpDate: string
   followUpTime: string
+  followUpNotes: string
   followUpCompleted: string
   followUpRouteStatus: string
   lastContactedDate: string
@@ -47,8 +49,61 @@ export type CrmExportProfile = {
   label: string
   fileStem: string
   futureApiTarget: string
+  fieldOrder: readonly CrmExportColumnKey[]
   columnMap: Record<CrmExportColumnKey, string>
 }
+
+const CRM_EXPORT_FIELD_ORDER = [
+  'businessName',
+  'contactName',
+  'contactTitle',
+  'phone',
+  'contactEmail',
+  'website',
+  'address',
+  'city',
+  'state',
+  'zip',
+  'industry',
+  'priority',
+  'notes',
+  'visitNotes',
+  'visitCompleted',
+  'visitCompletedDateTime',
+  'followUpDate',
+  'followUpTime',
+  'followUpNotes',
+  'followUpCompleted',
+  'followUpRouteStatus',
+  'lastContactedDate',
+  'routeOutcomeTag',
+  'googlePlaceId',
+  'editedByRepRouteUser',
+  'source',
+  'businessCardCaptured',
+  'businessCardCapturedAt',
+  'businessCardImageIncluded',
+] as const satisfies readonly CrmExportColumnKey[]
+
+const WPCRM_EXPORT_FIELD_ORDER = [
+  'businessName',
+  'contactName',
+  'contactTitle',
+  'phone',
+  'contactEmail',
+  'website',
+  'address',
+  'city',
+  'state',
+  'zip',
+  'industry',
+  'priority',
+  'routeOutcomeTag',
+  'visitNotes',
+  'followUpDate',
+  'followUpNotes',
+  'source',
+] as const satisfies readonly CrmExportColumnKey[]
 
 const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
   generic: {
@@ -56,6 +111,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     label: uiText.crmExport.formats.generic,
     fileStem: 'reproute-generic',
     futureApiTarget: uiText.crmExport.futureTargets.generic,
+    fieldOrder: CRM_EXPORT_FIELD_ORDER,
     columnMap: {
       businessName: 'Business Name',
       contactName: 'Contact Name',
@@ -75,6 +131,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompletedDateTime: 'Visit Completed Date/Time',
       followUpDate: 'Follow-Up Date',
       followUpTime: 'Follow-Up Time',
+      followUpNotes: 'Follow-Up Notes',
       followUpCompleted: 'Follow-Up Completed',
       followUpRouteStatus: 'Follow-Up Route Status',
       lastContactedDate: 'Last Contacted Date',
@@ -92,6 +149,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     label: uiText.crmExport.formats.hubspot,
     fileStem: 'reproute-hubspot',
     futureApiTarget: uiText.crmExport.futureTargets.hubspot,
+    fieldOrder: CRM_EXPORT_FIELD_ORDER,
     columnMap: {
       businessName: 'Company name',
       contactName: 'Contact name',
@@ -111,6 +169,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompletedDateTime: 'RepRoute visit completed at',
       followUpDate: 'Next activity date',
       followUpTime: 'RepRoute follow-up time',
+      followUpNotes: 'RepRoute follow-up notes',
       followUpCompleted: 'RepRoute follow-up completed',
       followUpRouteStatus: 'RepRoute follow-up route status',
       lastContactedDate: 'Last contacted',
@@ -128,6 +187,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     label: uiText.crmExport.formats.salesforce,
     fileStem: 'reproute-salesforce',
     futureApiTarget: uiText.crmExport.futureTargets.salesforce,
+    fieldOrder: CRM_EXPORT_FIELD_ORDER,
     columnMap: {
       businessName: 'Account Name',
       contactName: 'Contact Name',
@@ -147,6 +207,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompletedDateTime: 'Visit_Completed_At__c',
       followUpDate: 'Follow_Up_Date__c',
       followUpTime: 'Follow_Up_Time__c',
+      followUpNotes: 'Follow_Up_Notes__c',
       followUpCompleted: 'Follow_Up_Completed__c',
       followUpRouteStatus: 'Follow_Up_Route_Status__c',
       lastContactedDate: 'Last_Contacted_Date__c',
@@ -164,6 +225,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     label: uiText.crmExport.formats.zoho,
     fileStem: 'reproute-zoho',
     futureApiTarget: uiText.crmExport.futureTargets.zoho,
+    fieldOrder: CRM_EXPORT_FIELD_ORDER,
     columnMap: {
       businessName: 'Account Name',
       contactName: 'Contact Name',
@@ -183,6 +245,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompletedDateTime: 'Visit Completed Date/Time',
       followUpDate: 'Follow Up Date',
       followUpTime: 'Follow Up Time',
+      followUpNotes: 'Follow Up Notes',
       followUpCompleted: 'Follow Up Completed',
       followUpRouteStatus: 'Follow Up Route Status',
       lastContactedDate: 'Last Contacted Date',
@@ -200,6 +263,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
     label: uiText.crmExport.formats.pipedrive,
     fileStem: 'reproute-pipedrive',
     futureApiTarget: uiText.crmExport.futureTargets.pipedrive,
+    fieldOrder: CRM_EXPORT_FIELD_ORDER,
     columnMap: {
       businessName: 'Organization name',
       contactName: 'Person name',
@@ -219,6 +283,7 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       visitCompletedDateTime: 'Visit completed at',
       followUpDate: 'Follow-up date',
       followUpTime: 'Follow-up time',
+      followUpNotes: 'Follow-up notes',
       followUpCompleted: 'Follow-up completed',
       followUpRouteStatus: 'Follow-up route status',
       lastContactedDate: 'Last contacted date',
@@ -231,6 +296,44 @@ const CRM_EXPORT_PROFILES: Record<CrmExportFormat, CrmExportProfile> = {
       businessCardImageIncluded: 'Business card image included',
     },
   },
+  wpcrm: {
+    id: 'wpcrm',
+    label: uiText.crmExport.formats.wpcrm,
+    fileStem: 'reproute-wpcrm',
+    futureApiTarget: uiText.crmExport.futureTargets.wpcrm,
+    fieldOrder: WPCRM_EXPORT_FIELD_ORDER,
+    columnMap: {
+      businessName: 'Company Name',
+      contactName: 'Contact Name',
+      contactTitle: 'Contact Title',
+      phone: 'Phone',
+      contactEmail: 'Email',
+      website: 'Website',
+      address: 'Street Address',
+      city: 'City',
+      state: 'State',
+      zip: 'ZIP',
+      industry: 'Industry',
+      priority: 'Priority',
+      notes: '',
+      visitNotes: 'Visit Notes',
+      visitCompleted: '',
+      visitCompletedDateTime: '',
+      followUpDate: 'Follow-Up Date',
+      followUpTime: '',
+      followUpNotes: 'Follow-Up Notes',
+      followUpCompleted: '',
+      followUpRouteStatus: '',
+      lastContactedDate: '',
+      routeOutcomeTag: 'Visit Outcome',
+      googlePlaceId: '',
+      editedByRepRouteUser: '',
+      source: 'Source',
+      businessCardCaptured: '',
+      businessCardCapturedAt: '',
+      businessCardImageIncluded: '',
+    },
+  },
 }
 
 const FUTURE_CRM_API_TARGETS = [
@@ -238,40 +341,10 @@ const FUTURE_CRM_API_TARGETS = [
   'Salesforce',
   'Zoho',
   'Pipedrive',
+  'WPCRM',
   'Microsoft Dynamics',
   'Monday CRM',
 ] as const
-
-const CRM_EXPORT_FIELD_ORDER: CrmExportColumnKey[] = [
-  'businessName',
-  'contactName',
-  'contactTitle',
-  'phone',
-  'contactEmail',
-  'website',
-  'address',
-  'city',
-  'state',
-  'zip',
-  'industry',
-  'priority',
-  'notes',
-  'visitNotes',
-  'visitCompleted',
-  'visitCompletedDateTime',
-  'followUpDate',
-  'followUpTime',
-  'followUpCompleted',
-  'followUpRouteStatus',
-  'lastContactedDate',
-  'routeOutcomeTag',
-  'googlePlaceId',
-  'editedByRepRouteUser',
-  'source',
-  'businessCardCaptured',
-  'businessCardCapturedAt',
-  'businessCardImageIncluded',
-]
 
 function parseAddressParts(address: string) {
   const cleaned = address.replace(/\s+/g, ' ').trim()
@@ -344,10 +417,8 @@ export function buildCrmExportRows(
   format: CrmExportFormat,
 ) {
   const profile = getCrmExportProfile(format)
-  const columns = CRM_EXPORT_FIELD_ORDER.map((key) => profile.columnMap[key])
-  const rows = records.map((record) =>
-    CRM_EXPORT_FIELD_ORDER.map((key) => record[key]),
-  )
+  const columns = profile.fieldOrder.map((key) => profile.columnMap[key])
+  const rows = records.map((record) => profile.fieldOrder.map((key) => record[key]))
 
   return {
     profile,
@@ -375,6 +446,7 @@ export function buildCrmExportRecord(input: {
   editedByRepRouteUser?: boolean
   followUpDate?: string
   followUpTime?: string
+  followUpNotes?: string
   followUpCompleted?: boolean
   followUpRouteStatus?: string
   googlePlaceId?: string
@@ -412,6 +484,7 @@ export function buildCrmExportRecord(input: {
     visitCompletedDateTime: input.visitCompletedDateTime ?? '',
     followUpDate: input.followUpDate ?? '',
     followUpTime: input.followUpTime ?? '',
+    followUpNotes: input.followUpNotes?.trim() ?? '',
     followUpCompleted: input.followUpCompleted ? 'Yes' : '',
     followUpRouteStatus: input.followUpRouteStatus ?? '',
     lastContactedDate: input.lastContactedDate ?? '',
