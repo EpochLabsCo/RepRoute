@@ -105,6 +105,12 @@ export const uiText = {
     locationPanel: {
       heading: 'Location access',
       helper: 'Use your current location to search businesses within your selected mileage radius.',
+      useCurrentLocation: 'Use My Current Location',
+      recommendedHelper: 'Recommended for finding businesses near you.',
+      enabledHelper: 'Searching near your current location.',
+      locating: 'Locating…',
+      locationEnabled: 'Location Enabled',
+      locationUnavailable: 'Location Unavailable',
       statusOn: 'Location on',
       statusOff: 'Location off',
       statusNeeded: 'Permission needed',
@@ -113,6 +119,7 @@ export const uiText = {
       blocked:
         'Location access is blocked. Enable it in Safari or browser settings, or enter a market manually.',
     },
+    marketSecondaryLabel: 'City or market (optional)',
     radiusLabel: 'Mileage radius',
     radiusOptions: [5, 10, 15, 25, 50] as const,
     radiusOptionLabels: {

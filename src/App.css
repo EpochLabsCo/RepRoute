@@ -2181,6 +2181,104 @@
   color: var(--text-primary);
 }
 
+.search-location-primary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.search-location-button {
+  min-height: 54px;
+  padding: 14px 18px;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 0 0 1px rgba(74, 123, 255, 0.28),
+    0 14px 32px rgba(74, 123, 255, 0.28);
+}
+
+.search-location-button--pulse {
+  animation: search-location-pulse 2.5s ease-in-out infinite;
+}
+
+.search-location-button--enabled {
+  background: linear-gradient(135deg, #31c4be, #4a7bff);
+  box-shadow:
+    0 0 0 1px rgba(49, 196, 190, 0.35),
+    0 12px 28px rgba(49, 196, 190, 0.28);
+}
+
+.search-location-button--loading {
+  opacity: 0.92;
+  cursor: wait;
+}
+
+.search-location-button--unavailable {
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.search-location-button__spinner {
+  animation: search-location-spin 0.85s linear infinite;
+}
+
+.search-location-primary__helper {
+  margin: 0;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.search-location-primary__blocked {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.field-group--secondary .field-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.search-field--secondary {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+@keyframes search-location-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(74, 123, 255, 0.28),
+      0 14px 32px rgba(74, 123, 255, 0.22);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(74, 123, 255, 0.45),
+      0 16px 36px rgba(74, 123, 255, 0.38);
+  }
+}
+
+@keyframes search-location-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .search-field input::placeholder {
   color: var(--text-muted);
 }
@@ -2989,6 +3087,16 @@
   .filter-dropdown__option {
     min-height: 40px;
     padding: 7px 8px;
+  }
+
+  .search-location-button {
+    min-height: 52px;
+    padding: 13px 16px;
+    font-size: 0.96rem;
+  }
+
+  .search-location-primary__helper {
+    font-size: 0.84rem;
   }
 
   .prospect-card__footer {

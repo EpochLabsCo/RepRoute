@@ -28,9 +28,12 @@ import {
   BellRing,
   Bookmark,
   CalendarClock,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
+  Loader2,
+  LocateFixed,
   ExternalLink,
   UtensilsCrossed,
   GripVertical,
@@ -2601,6 +2604,27 @@ function App() {
     console.info('[RepRoute] VITE_GOOGLE_MAPS_API_KEY detected:', googleMapsApiKey.length > 0)
   }, [googleMapsApiKey])
 
+  function handleSearchLocationSuccess(next: { lat: number; lng: number }) {
+    setSearchCenter(next)
+    setSearchLocationState('granted')
+    setRouteTrackerLocation(next)
+    setRouteTrackerState('tracking')
+    setSearchRadiusChoice('current-location')
+
+    const shouldRefreshSearch =
+      selectedIndustries.length > 0 ||
+      companyNameQuery.trim().length > 0 ||
+      liveSearchIds.length > 0
+
+    if (shouldRefreshSearch) {
+      void runLiveSearch({
+        market: manualMarket,
+        industries: selectedIndustries,
+        companyName: companyNameQuery,
+      })
+    }
+  }
+
   useEffect(() => {
     if (!navigator.geolocation) {
       return
@@ -2608,11 +2632,10 @@ function App() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setSearchCenter({
+        handleSearchLocationSuccess({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         })
-        setSearchLocationState('granted')
       },
       () => {
         setSearchCenter(null)
@@ -2633,27 +2656,17 @@ function App() {
       return
     }
 
+    if (searchLocationState === 'granted') {
+      return
+    }
+
     setSearchLocationState('requesting')
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const next = { lat: position.coords.latitude, lng: position.coords.longitude }
-        setSearchCenter(next)
-        setSearchLocationState('granted')
-
-        // Keep route features in sync for this session.
-        setRouteTrackerLocation(next)
-        setRouteTrackerState('tracking')
-
-        const shouldAutoSearch =
-          (selectedIndustries.length > 0 || companyNameQuery.trim()) &&
-          (searchRadiusChoice === 'current-location' || !manualMarket.trim())
-        if (shouldAutoSearch) {
-          void runLiveSearch({
-            market: manualMarket,
-            industries: selectedIndustries,
-            companyName: companyNameQuery,
-          })
-        }
+        handleSearchLocationSuccess({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
       },
       (error) => {
         setSearchCenter(null)
@@ -5934,36 +5947,55 @@ function App() {
   }
 
   function renderSearchView() {
-    const showLocationBanner =
+    const locationUnavailable =
       searchLocationState === 'denied' || searchLocationState === 'unsupported'
+    const locationEnabled = searchLocationState === 'granted'
+    const locationLocating = searchLocationState === 'requesting'
+    const locationPulse = !locationEnabled && !locationLocating && !locationUnavailable
+
+    const locationButtonLabel = locationLocating
+      ? uiText.search.locationPanel.locating
+      : locationEnabled
+        ? uiText.search.locationPanel.locationEnabled
+        : locationUnavailable
+          ? uiText.search.locationPanel.locationUnavailable
+          : uiText.search.locationPanel.useCurrentLocation
 
     return (
       <>
         <section className="panel section-panel section-panel--compact">
-          {showLocationBanner ? (
-            <div
-              className={`status-banner ${
-                searchLocationState === 'denied' ? 'status-banner--error' : 'status-banner--info'
-              }`}
-            >
-              <p>
-                {searchLocationState === 'denied'
-                  ? uiText.search.locationPanel.blocked
-                  : uiText.search.location.unsupported}
+          <form className="live-search-form" onSubmit={handleLiveSearch}>
+            <div className="search-location-primary">
+              <button
+                type="button"
+                className={`button button--wide search-location-button ${
+                  locationEnabled ? 'search-location-button--enabled' : ''
+                } ${locationLocating ? 'search-location-button--loading' : ''} ${
+                  locationUnavailable ? 'search-location-button--unavailable' : ''
+                } ${locationPulse ? 'search-location-button--pulse' : ''}`}
+                onClick={requestSearchLocationAccess}
+                disabled={locationLocating || searchLocationState === 'unsupported'}
+                aria-live="polite"
+              >
+                {locationLocating ? (
+                  <Loader2 size={20} className="search-location-button__spinner" />
+                ) : locationEnabled ? (
+                  <CheckCircle2 size={20} />
+                ) : (
+                  <LocateFixed size={20} />
+                )}
+                <span>{locationButtonLabel}</span>
+              </button>
+              <p className="search-location-primary__helper">
+                {locationEnabled
+                  ? uiText.search.locationPanel.enabledHelper
+                  : uiText.search.locationPanel.recommendedHelper}
               </p>
               {searchLocationState === 'denied' ? (
-                <button type="button" className="text-button" onClick={requestSearchLocationAccess}>
-                  {uiText.search.locationPanel.turnOn}
-                </button>
+                <p className="search-location-primary__blocked">{uiText.search.locationPanel.blocked}</p>
               ) : null}
             </div>
-          ) : searchLocationState !== 'granted' ? (
-            <button type="button" className="button button--ghost button--wide" onClick={requestSearchLocationAccess}>
-              {uiText.search.locationPanel.turnOn}
-            </button>
-          ) : null}
 
-          <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">
               <span className="field-label">{uiText.search.companyNameLabel}</span>
               <div className="search-field search-field--with-clear">
@@ -5988,18 +6020,19 @@ function App() {
               </div>
             </label>
 
-            <label className="field-group">
-              <span className="field-label">{uiText.search.marketLabel}</span>
-              <div className="search-field">
+            <label className="field-group field-group--secondary">
+              <span className="field-label">{uiText.search.marketSecondaryLabel}</span>
+              <div className="search-field search-field--secondary">
                 <MapIcon size={18} />
                 <input
                   type="search"
                   value={manualMarket}
                   onChange={(event) => setManualMarket(event.target.value)}
                   placeholder={uiText.search.marketPlaceholder}
-                  aria-label={uiText.search.marketLabel}
+                  aria-label={uiText.search.marketSecondaryLabel}
                 />
               </div>
+              <p className="field-hint">{uiText.search.marketHelp}</p>
             </label>
 
             <label className="field-group">
