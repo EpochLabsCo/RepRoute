@@ -485,12 +485,110 @@
 
 .route-toolbar {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .route-toolbar__focus {
   display: grid;
+  gap: 8px;
+}
+
+.route-toolbar__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.route-focus-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.route-focus-card--current {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(74, 123, 255, 0.22);
+  background: rgba(74, 123, 255, 0.06);
+}
+
+.route-focus-card--next {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.route-focus-card--active {
+  padding: 0;
+}
+
+.route-focus-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.route-stop-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(74, 123, 255, 0.16);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.route-focus-card--current .route-stop-badge {
+  background: rgba(74, 123, 255, 0.24);
+}
+
+.route-focus-card__metrics {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.route-focus-card__sep {
+  opacity: 0.55;
+}
+
+.route-focus-card__name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.route-focus-card__address {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.route-focus-card__status {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #7ef0d8;
 }
 
 .route-toolbar__actions {
@@ -1023,8 +1121,8 @@
 
 .route-stop-card {
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   box-shadow: var(--shadow-soft);
   touch-action: pan-y;
 }
@@ -1053,23 +1151,22 @@
 }
 
 .route-stop-card__top,
-.route-stop-card__heading,
 .route-action-row,
 .route-stop-card__footer,
 .nearby-prospect-card {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
 .route-stop-card__top,
 .route-stop-card__footer,
 .nearby-prospect-card {
   justify-content: space-between;
+  align-items: flex-start;
 }
 
-.route-stop-card__heading {
+.route-stop-card__top .route-focus-card {
   flex: 1;
-  align-items: flex-start;
   min-width: 0;
 }
 
@@ -1110,22 +1207,7 @@
 
 .current-stop-card {
   display: grid;
-  gap: 14px;
-}
-
-.current-stop-card__summary {
-  display: grid;
   gap: 10px;
-}
-
-.current-stop-card__summary h3,
-.current-stop-card__summary p {
-  margin: 0;
-}
-
-.current-stop-card__summary p {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
 }
 
 .current-stop-card__quick-actions {
@@ -1477,9 +1559,24 @@
   padding-inline: 10px;
 }
 
-.route-navigation-view__summary,
+.route-navigation-view__heading h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.route-navigation-view__stats,
 .route-navigation-view__progress {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.route-navigation-view__progress {
+  margin: 0;
 }
 
 .route-navigation-view__map-panel {
@@ -1487,9 +1584,14 @@
   overflow: hidden;
 }
 
-.route-navigation-view__next-card h3 {
-  margin: 0;
-  color: var(--text-primary);
+.route-navigation-view__active-card {
+  padding: 12px;
+}
+
+.route-navigation-view__stops-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .route-navigation-stop-list {
@@ -1499,9 +1601,9 @@
 
 .route-navigation-stop-card {
   display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 18px;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   background: var(--surface-soft);
 }
@@ -1516,8 +1618,7 @@
 }
 
 .route-navigation-stop-card__select {
-  display: grid;
-  gap: 8px;
+  display: block;
   width: 100%;
   padding: 0;
   border: 0;
@@ -1525,34 +1626,6 @@
   text-align: left;
   color: inherit;
   cursor: pointer;
-}
-
-.route-navigation-stop-card__heading {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.route-navigation-stop-card__order {
-  display: inline-grid;
-  place-items: center;
-  min-width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: rgba(74, 123, 255, 0.16);
-  color: var(--text-primary);
-  font-weight: 700;
-  font-size: 0.82rem;
-}
-
-.route-navigation-stop-card__heading strong {
-  color: var(--text-primary);
-}
-
-.route-navigation-stop-card__heading p,
-.route-navigation-stop-card__meta,
-.route-navigation-stop-card__leg {
-  margin: 0;
 }
 
 .route-navigation-stop-card__actions {
@@ -3231,6 +3304,24 @@
   .filter-dropdown__option {
     min-height: 40px;
     padding: 7px 8px;
+  }
+
+  .route-toolbar__focus {
+    gap: 6px;
+  }
+
+  .route-focus-card__name {
+    font-size: 1rem;
+  }
+
+  .route-focus-card__address,
+  .route-focus-card__metrics {
+    font-size: 0.8rem;
+  }
+
+  .route-stop-card {
+    padding: 10px;
+    gap: 8px;
   }
 
   .search-location-cluster {

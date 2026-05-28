@@ -54,6 +54,7 @@ import { uiText } from './constants/uiText'
 import RepRouteMap, { type RepRouteMapMarker, type RouteLineRenderStatus } from './components/RepRouteMap'
 import type { RouteNavigationStop } from './components/RepRouteNavigationMap'
 import AccountSettingsSection from './components/AccountSettingsSection'
+import RouteFocusCard from './components/RouteFocusCard'
 import RouteNavigationView, { type RouteNavigationLegSummary } from './components/RouteNavigationView'
 import {
   buildCrmExportRecord,
@@ -507,25 +508,6 @@ function formatDistanceFeet(feet: number) {
   }
 
   return `${Math.round(feet)} ft`
-}
-
-function formatDateTime(value: string) {
-  if (!value) {
-    return ''
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
 }
 
 function metersToMiles(meters: number) {
@@ -1596,9 +1578,10 @@ function EditAddressSheet({
 
 function CurrentStopCard({
   prospect,
+  stopNumber,
+  leg,
   isOnLocation,
   distanceFeet,
-  trackingMessage,
   isSaved,
   isInRoute,
   travelMode,
@@ -1620,9 +1603,10 @@ function CurrentStopCard({
   onRouteBusinessCardCapture,
 }: {
   prospect: Prospect
+  stopNumber: number
+  leg: RouteNavigationLegSummary | null
   isOnLocation: boolean
   distanceFeet: number | null
-  trackingMessage: string
   isSaved: boolean
   isInRoute: boolean
   travelMode: TravelMode
@@ -1665,53 +1649,29 @@ function CurrentStopCard({
     }))
   }
 
+  const liveDistance =
+    distanceFeet !== null ? formatDistanceFeet(distanceFeet) : null
+  const statusNote = isOnLocation
+    ? uiText.routes.currentStop.onLocation
+    : prospect.isFoodStop
+      ? uiText.foodNearby.foodStopLabel
+      : null
+
   return (
     <section
       className={`panel section-panel current-stop-card ${
         isOnLocation ? 'current-stop-card--on-location' : ''
       }`}
     >
-      <div className="section-heading">
-        <div>
-          <div className="eyebrow eyebrow--tight">{uiText.routes.currentStop.eyebrow}</div>
-          <h2>{uiText.routes.currentStop.heading}</h2>
-        </div>
-        <span className="meta-pill meta-pill--accent">
-          {isOnLocation ? uiText.routes.currentStop.onLocation : uiText.routes.currentStop.enRoute}
-        </span>
-      </div>
-
-      <div
-        className={`status-banner ${
-          isOnLocation ? 'status-banner--success' : 'status-banner--info'
-        }`}
-      >
-        <p>{trackingMessage}</p>
-        {distanceFeet !== null ? (
-          <p>{uiText.routes.currentStop.distanceAway(formatDistanceFeet(distanceFeet))}</p>
-        ) : null}
-      </div>
-
-      <div className="current-stop-card__summary">
-        <div>
-          <h3>{prospect.businessName}</h3>
-          <p>
-            {prospect.category} · {prospect.address}
-          </p>
-        </div>
-        <div className="route-stop-card__meta">
-          <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
-            {prospect.priority}
-          </span>
-        {prospect.isFoodStop ? (
-          <span className="meta-pill meta-pill--accent">{uiText.foodNearby.foodStopLabel}</span>
-        ) : null}
-          {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
-          {prospect.visitCompletedAt ? (
-            <span className="meta-pill">{formatDateTime(prospect.visitCompletedAt)}</span>
-          ) : null}
-        </div>
-      </div>
+      <RouteFocusCard
+        stopNumber={stopNumber}
+        businessName={prospect.businessName}
+        address={prospect.address}
+        leg={leg}
+        distanceOverride={liveDistance}
+        variant="current"
+        statusNote={statusNote}
+      />
 
       <ProspectPrimaryActions
         callHref={callHref}
@@ -1926,7 +1886,7 @@ function CurrentStopCard({
 function RouteWorkflowStopCard({
   index,
   prospect,
-  isCurrentStop,
+  leg,
   isOnLocation,
   isSaved,
   travelMode,
@@ -1947,7 +1907,7 @@ function RouteWorkflowStopCard({
 }: {
   index: number
   prospect: Prospect
-  isCurrentStop: boolean
+  leg: RouteNavigationLegSummary | null
   isOnLocation: boolean
   isSaved: boolean
   travelMode: TravelMode
@@ -2031,9 +1991,7 @@ function RouteWorkflowStopCard({
       ref={setNodeRef}
       className={`route-stop-card ${prospect.routeCompleted ? 'route-stop-card--completed' : ''} ${
         isDragging ? 'route-stop-card--dragging' : ''
-      } ${isCurrentStop ? 'route-stop-card--current' : ''} ${
-        isOnLocation ? 'route-stop-card--on-location' : ''
-      }`}
+      } ${isOnLocation ? 'route-stop-card--on-location' : ''}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -2042,15 +2000,22 @@ function RouteWorkflowStopCard({
       onTouchEnd={handleTouchEnd}
     >
       <div className="route-stop-card__top">
-        <div className="route-stop-card__heading">
-          <div className="route-stop-card__title-block">
-            <div className="route-stop-card__eyebrow">{uiText.routes.stopLabel(index)}</div>
-            <h3>{prospect.businessName}</h3>
-            <p>
-              {prospect.category} · {formatDistance(prospect.distance)}
-            </p>
-          </div>
-        </div>
+        <RouteFocusCard
+          stopNumber={index + 1}
+          businessName={prospect.businessName}
+          address={prospect.address}
+          leg={leg}
+          variant="active"
+          statusNote={
+            prospect.routeCompleted
+              ? uiText.routes.completed
+              : isOnLocation
+                ? uiText.routes.currentStop.onLocation
+                : prospect.isFoodStop
+                  ? uiText.foodNearby.foodStopLabel
+                  : null
+          }
+        />
 
         <button
           type="button"
@@ -2061,25 +2026,6 @@ function RouteWorkflowStopCard({
         >
           <GripVertical size={20} />
         </button>
-      </div>
-
-      <div className="route-stop-card__meta">
-        {isOnLocation ? (
-          <span className="meta-pill meta-pill--accent">{uiText.routes.currentStop.onLocation}</span>
-        ) : null}
-        {!isOnLocation && isCurrentStop ? (
-          <span className="meta-pill">{uiText.routes.currentStop.label}</span>
-        ) : null}
-        <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
-          {prospect.priority}
-        </span>
-        {prospect.visitOutcome ? (
-          <span className="meta-pill meta-pill--accent">{prospect.visitOutcome}</span>
-        ) : null}
-        {prospect.isFoodStop ? (
-          <span className="meta-pill meta-pill--accent">{uiText.foodNearby.foodStopLabel}</span>
-        ) : null}
-        {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
       <ProspectPrimaryActions
@@ -2105,8 +2051,6 @@ function RouteWorkflowStopCard({
         onCapture={onRouteBusinessCardCapture}
         onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
       />
-
-      <p className="route-stop-card__address">{prospect.address}</p>
 
       <CardMoreActions>
         {websiteHref ? (
@@ -3349,26 +3293,6 @@ function App() {
   const currentStopProspect =
     onLocationRouteStop?.prospect ?? closestTrackedRouteStop?.prospect ?? currentRouteStop
   const currentStopDistanceFeet = onLocationRouteStop?.distanceFeet ?? closestTrackedRouteStop?.distanceFeet ?? null
-  const routeTrackerMessage =
-    routeTrackerState === 'tracking'
-      ? onLocationRouteStop
-        ? uiText.routes.currentStop.onLocationMessage(
-            onLocationRouteStop.prospect.businessName,
-            formatDistanceFeet(onLocationRouteStop.distanceFeet),
-          )
-        : routeStopDistances[0]
-          ? uiText.routes.currentStop.nearestMessage(
-              routeStopDistances[0].prospect.businessName,
-              formatDistanceFeet(routeStopDistances[0].distanceFeet),
-            )
-          : uiText.routes.currentStop.tracking
-      : routeTrackerState === 'denied'
-        ? uiText.routes.currentStop.locationDenied
-        : routeTrackerState === 'unsupported'
-          ? uiText.routes.currentStop.locationUnsupported
-          : routeTrackerState === 'error'
-            ? uiText.routes.currentStop.locationError
-            : uiText.routes.currentStop.waiting
   const manualMarketLabel = manualMarket.trim()
   const routeOrigin = useMemo(() => {
     if (isFiniteLatLng(routeTrackerLocation)) {
@@ -5625,20 +5549,32 @@ function App() {
             ) : null}
 
             <section className="panel section-panel route-toolbar">
-              <div className="route-toolbar__focus">
-                {currentRouteStop ? (
-                  <div>
-                    <span className="field-label">{uiText.routes.inAppNavigation.currentStopLabel}</span>
-                    <strong>{currentRouteStop.businessName}</strong>
-                  </div>
-                ) : null}
-                {nextRouteStopAfterCurrent ? (
-                  <div>
-                    <span className="field-label">{uiText.routes.inAppNavigation.nextStopLabel}</span>
-                    <strong>{nextRouteStopAfterCurrent.businessName}</strong>
-                  </div>
-                ) : null}
-              </div>
+              {currentRouteStop ? (
+                <div className="route-toolbar__focus">
+                  <RouteFocusCard
+                    stopNumber={
+                      routeProspects.findIndex((prospect) => prospect.id === currentRouteStop.id) + 1
+                    }
+                    businessName={currentRouteStop.businessName}
+                    address={currentRouteStop.address}
+                    leg={navigationLegByStopId[currentRouteStop.id]}
+                    variant="current"
+                  />
+                  {nextRouteStopAfterCurrent ? (
+                    <RouteFocusCard
+                      stopNumber={
+                        routeProspects.findIndex(
+                          (prospect) => prospect.id === nextRouteStopAfterCurrent.id,
+                        ) + 1
+                      }
+                      businessName={nextRouteStopAfterCurrent.businessName}
+                      address={nextRouteStopAfterCurrent.address}
+                      leg={navigationLegByStopId[nextRouteStopAfterCurrent.id]}
+                      variant="next"
+                    />
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="route-progress-track" aria-hidden="true">
                 <span
@@ -5647,17 +5583,15 @@ function App() {
                 />
               </div>
 
-              <div className="inline-summary inline-summary--compact">
-                <span className="meta-pill">
-                  {uiText.routes.inAppNavigation.completedCount(completedRouteStops)}
-                </span>
-                <span className="meta-pill">
-                  {uiText.routes.inAppNavigation.etaLabel}: {formatDriveTime(estimatedDriveMinutes)}
-                </span>
-                <span className="meta-pill">
-                  {uiText.routes.inAppNavigation.distanceLabel}: {routeMiles.toFixed(1)} mi
-                </span>
-              </div>
+              <p className="route-toolbar__stats">
+                <span>{uiText.routes.inAppNavigation.completedCount(completedRouteStops)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{uiText.routes.inAppNavigation.remainingCount(remainingRouteStops)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{routeMiles.toFixed(1)} mi</span>
+                <span aria-hidden="true">·</span>
+                <span>{formatDriveTime(estimatedDriveMinutes)}</span>
+              </p>
 
               {routeNavigationLoading ? (
                 <div className="status-banner status-banner--info">
@@ -5740,29 +5674,6 @@ function App() {
                 <p className="route-map-external__hint">{uiText.routes.inAppNavigation.openInMapsHint}</p>
               </div>
 
-              <div className="route-diagnostics-summary inline-summary inline-summary--compact">
-                <span className="meta-pill">
-                  {uiText.routes.routeRender.stopCount(routeProspects.length)}
-                </span>
-                <span className="meta-pill">
-                  {uiText.routes.routeRender.optimizedCount(
-                    routeOptimization.status === 'success'
-                      ? routeOptimization.optimizedCount
-                      : routeOptimizationDebug?.optimizedCount ?? routeProspects.length,
-                  )}
-                </span>
-                <span className="meta-pill">
-                  {uiText.routes.routeRender.skippedCount(
-                    routeOptimization.status === 'success'
-                      ? routeOptimization.skippedCount
-                      : routeOptimizationDebug?.skippedCount ?? 0,
-                  )}
-                </span>
-                <span className="meta-pill">
-                  {uiText.routes.routeRender.apiStatus(routeDirectionsApiStatus ?? '—')}
-                </span>
-              </div>
-
               {import.meta.env.DEV ? (
                 <details className="route-diagnostics">
                   <summary className="filter-dropdown__trigger">
@@ -5839,9 +5750,12 @@ function App() {
               <CurrentStopCard
                 key={currentStopProspect.id}
                 prospect={currentStopProspect}
+                stopNumber={
+                  routeProspects.findIndex((prospect) => prospect.id === currentStopProspect.id) + 1
+                }
+                leg={navigationLegByStopId[currentStopProspect.id] ?? null}
                 isOnLocation={Boolean(onLocationRouteStop)}
                 distanceFeet={currentStopDistanceFeet}
-                trackingMessage={routeTrackerMessage}
                 isSaved={savedIds.includes(currentStopProspect.id)}
                 isInRoute={routeIds.includes(currentStopProspect.id)}
                 travelMode={travelMode}
@@ -5909,12 +5823,17 @@ function App() {
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="route-workflow-stack">
-                    {routeProspects.map((prospect, index) => (
+                    {routeProspects.map((prospect, index) => {
+                      if (currentStopProspect?.id === prospect.id) {
+                        return null
+                      }
+
+                      return (
                       <RouteWorkflowStopCard
                         key={prospect.id}
                         index={index}
                         prospect={prospect}
-                        isCurrentStop={currentStopProspect?.id === prospect.id}
+                        leg={navigationLegByStopId[prospect.id] ?? null}
                         isOnLocation={onLocationRouteStop?.prospect.id === prospect.id}
                         isSaved={savedIds.includes(prospect.id)}
                         travelMode={travelMode}
@@ -5935,7 +5854,8 @@ function App() {
                         }
                         onUpdateContactDetails={updateContactDetails}
                       />
-                    ))}
+                      )
+                    })}
                   </div>
                 </SortableContext>
               </DndContext>
