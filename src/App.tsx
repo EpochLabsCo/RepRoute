@@ -77,6 +77,7 @@ import {
   type NotificationReminderLog,
 } from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
+import { resolveAreaLabelFromCoordinates } from './lib/reverseGeocode'
 import {
   CardMoreActions,
   CardMoreMenuButton,
@@ -292,7 +293,7 @@ type ConnectionTestState = {
 
 type SearchLocationState = 'idle' | 'requesting' | 'granted' | 'denied' | 'unsupported'
 type SearchRadiusMiles = (typeof uiText.search.radiusOptions)[number]
-type SearchRadiusChoice = 'current-location' | SearchRadiusMiles | 'custom'
+type SearchRadiusChoice = SearchRadiusMiles | 'custom'
 type SearchIndustryGroup = (typeof uiText.search.industryGroups)[number]
 type SearchIndustry = SearchIndustryGroup['options'][number]
 type ArrivalDetectionRadiusFeet = 150 | 300 | 500 | 1320
@@ -1109,10 +1110,6 @@ function getEffectiveRadiusMiles(radiusChoice: SearchRadiusChoice, customRadiusM
   if (radiusChoice === 'custom') {
     const parsedRadius = Number(customRadiusMiles)
     return Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : null
-  }
-
-  if (radiusChoice === 'current-location') {
-    return 10
   }
 
   return radiusChoice
@@ -2539,7 +2536,8 @@ function App() {
     usePersistentState<ArrivalDetectionRadiusFeet>(STORAGE_KEYS.arrivalDetectionRadiusFeet, 300)
   const [companyNameQuery, setCompanyNameQuery] = useState('')
   const [manualMarket, setManualMarket] = useState('')
-  const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>('current-location')
+  const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>(10)
+  const [searchLocationArea, setSearchLocationArea] = useState<string | null>(null)
   const [customRadiusMiles, setCustomRadiusMiles] = useState('35')
   const [selectedIndustries, setSelectedIndustries] = useState<SearchIndustry[]>([])
   const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false)
@@ -2611,7 +2609,10 @@ function App() {
     setSearchLocationState('granted')
     setRouteTrackerLocation(next)
     setRouteTrackerState('tracking')
-    setSearchRadiusChoice('current-location')
+
+    void resolveAreaLabelFromCoordinates(next.lat, next.lng, googleMapsApiKey).then((label) => {
+      setSearchLocationArea(label)
+    })
 
     const shouldRefreshSearch =
       selectedIndustries.length > 0 ||
@@ -2641,6 +2642,7 @@ function App() {
       },
       () => {
         setSearchCenter(null)
+        setSearchLocationArea(null)
         setSearchLocationState('denied')
       },
       {
@@ -2668,6 +2670,7 @@ function App() {
       },
       (error) => {
         setSearchCenter(null)
+        setSearchLocationArea(null)
         setSearchLocationState(error.code === error.PERMISSION_DENIED ? 'denied' : 'unsupported')
       },
       {
@@ -4932,7 +4935,7 @@ function App() {
         ? uiText.search.filters.radius(effectiveRadiusMiles)
         : uiText.search.filters.radius(10),
       market: manualMarket,
-      usesCurrentLocation: searchRadiusChoice === 'current-location',
+      usesCurrentLocation: !manualMarket.trim() && searchLocationState === 'granted',
     })
 
     setInvalidStopsDismissedForRouteKey(null)
@@ -5053,7 +5056,7 @@ function App() {
       return
     }
 
-    const shouldUseCurrentLocation = searchRadiusChoice === 'current-location' || !trimmedMarket
+    const shouldUseCurrentLocation = !trimmedMarket
     let activeSearchCenter: { lat: number; lng: number } | null = null
     let fallbackLocationLabel = trimmedMarket || uiText.routes.currentLocation
 
@@ -5945,33 +5948,9 @@ function App() {
   }
 
   function renderSearchView() {
-    const locationUnavailable =
-      searchLocationState === 'denied' || searchLocationState === 'unsupported'
     const locationEnabled = searchLocationState === 'granted'
     const locationLocating = searchLocationState === 'requesting'
-    const locationPulse = !locationEnabled && !locationLocating && !locationUnavailable
-
-    const locationStatusText = locationLocating
-      ? uiText.search.locationPanel.locating
-      : locationEnabled
-        ? uiText.search.locationPanel.locationEnabled
-        : locationUnavailable
-          ? uiText.search.locationPanel.locationUnavailable
-          : uiText.search.locationPanel.statusIdle
-
-    const locationActionLabel = locationLocating
-      ? uiText.search.locationPanel.locating
-      : locationEnabled || locationUnavailable
-        ? uiText.search.locationPanel.retryLocation
-        : uiText.search.locationPanel.useCurrentLocation
-
-    const locationStatusVariant = locationLocating
-      ? 'locating'
-      : locationEnabled
-        ? 'enabled'
-        : locationUnavailable
-          ? 'unavailable'
-          : 'idle'
+    const locationPulse = !locationEnabled && !locationLocating
 
     return (
       <>
@@ -6017,63 +5996,68 @@ function App() {
             </label>
 
             <div className="search-location-cluster">
-              <div
-                className={`search-location-status search-location-status--${locationStatusVariant}`}
-                role="status"
-                aria-live="polite"
-              >
-                <span className="search-location-status__icon" aria-hidden="true">
-                  {locationLocating ? (
-                    <Loader2 size={22} className="search-location-status__spinner" />
-                  ) : locationEnabled ? (
-                    <CheckCircle2 size={22} />
-                  ) : (
-                    <LocateFixed size={22} />
-                  )}
-                </span>
-                <div className="search-location-status__copy">
-                  <span className="search-location-status__eyebrow">
-                    {uiText.search.locationPanel.statusHeading}
-                  </span>
-                  <strong>{locationStatusText}</strong>
+              {locationEnabled ? (
+                <div className="search-location-enabled" role="status" aria-live="polite">
+                  <div className="search-location-enabled__main">
+                    <span className="search-location-enabled__icon" aria-hidden="true">
+                      {locationLocating ? (
+                        <Loader2 size={20} className="search-location-spin" />
+                      ) : (
+                        <CheckCircle2 size={20} />
+                      )}
+                    </span>
+                    <div className="search-location-enabled__copy">
+                      <strong>{uiText.search.locationPanel.locationEnabled}</strong>
+                      {searchLocationArea ? (
+                        <p className="search-location-enabled__area">{searchLocationArea}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="search-location-refresh"
+                    onClick={requestSearchLocationAccess}
+                    disabled={locationLocating}
+                  >
+                    {locationLocating
+                      ? uiText.search.locationPanel.locating
+                      : uiText.search.locationPanel.refreshLocation}
+                  </button>
                 </div>
-              </div>
-
-              <button
-                type="button"
-                className={`search-location-action ${
-                  locationEnabled ? 'search-location-action--enabled' : ''
-                } ${locationLocating ? 'search-location-action--loading' : ''} ${
-                  locationUnavailable ? 'search-location-action--retry' : ''
-                } ${locationPulse ? 'search-location-action--pulse' : ''}`}
-                onClick={requestSearchLocationAccess}
-                disabled={locationLocating || searchLocationState === 'unsupported'}
-                aria-label={locationActionLabel}
-              >
-                <span className="search-location-action__lead">
-                  <span className="search-location-action__icon" aria-hidden="true">
-                    {locationLocating ? (
-                      <Loader2 size={22} className="search-location-action__spinner" />
-                    ) : (
-                      <LocateFixed size={22} />
-                    )}
-                  </span>
-                  <span className="search-location-action__label">{locationActionLabel}</span>
-                </span>
-                <ChevronRight size={22} className="search-location-action__chevron" aria-hidden="true" />
-              </button>
-
-              <p className="search-location-cluster__helper">
-                {locationEnabled
-                  ? uiText.search.locationPanel.enabledHelper
-                  : uiText.search.locationPanel.recommendedHelper}
-              </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`search-location-primary ${
+                      locationLocating ? 'search-location-primary--loading' : ''
+                    } ${locationPulse ? 'search-location-primary--pulse' : ''}`}
+                    onClick={requestSearchLocationAccess}
+                    disabled={locationLocating || searchLocationState === 'unsupported'}
+                  >
+                    <span className="search-location-primary__icon" aria-hidden="true">
+                      {locationLocating ? (
+                        <Loader2 size={20} className="search-location-spin" />
+                      ) : (
+                        <LocateFixed size={20} />
+                      )}
+                    </span>
+                    <span>
+                      {locationLocating
+                        ? uiText.search.locationPanel.locating
+                        : uiText.search.locationPanel.useCurrentLocation}
+                    </span>
+                  </button>
+                  <p className="search-location-cluster__helper">
+                    {uiText.search.locationPanel.recommendedHelper}
+                  </p>
+                </>
+              )}
               {searchLocationState === 'denied' ? (
                 <p className="search-location-cluster__blocked">{uiText.search.locationPanel.blocked}</p>
               ) : null}
             </div>
 
-            <label className="field-group search-location-cluster__radius">
+            <label className="field-group">
               <span className="field-label">{uiText.search.radiusLabel}</span>
               <select
                 className="text-input filter-select"
@@ -6081,7 +6065,7 @@ function App() {
                 onChange={(event) => {
                   const nextValue = event.target.value
 
-                  if (nextValue === 'current-location' || nextValue === 'custom') {
+                  if (nextValue === 'custom') {
                     setSearchRadiusChoice(nextValue)
                     return
                   }
@@ -6089,7 +6073,6 @@ function App() {
                   setSearchRadiusChoice(Number(nextValue) as SearchRadiusMiles)
                 }}
               >
-                <option value="current-location">{uiText.search.radiusOptionLabels.currentLocation}</option>
                 {SEARCH_RADIUS_OPTIONS.map((radius) => (
                   <option key={radius} value={radius}>
                     {uiText.search.filters.radius(radius)}
