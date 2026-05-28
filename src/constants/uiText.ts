@@ -404,6 +404,7 @@ export const uiText = {
       summaryHeading: 'Route Summary',
       emptyState: 'Add prospects to build a route.',
       singleStopHint: 'Add more stops to optimize a multi-stop route.',
+      readyToOptimize: 'Ready to optimize your route.',
       multiStopHint: 'Route ready in RepRoute. Review your stops, then start route guidance here.',
       stopCount: (count: number) => `${count} stop${count === 1 ? '' : 's'}`,
       estimatedDrive: (time: string) => `Est. drive time: ${time}`,

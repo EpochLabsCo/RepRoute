@@ -3028,6 +3028,7 @@ function App() {
   }, [routeProspects])
   const showInvalidStopsPanel =
     invalidStops.length > 0 && invalidStopsDismissedForRouteKey !== routeKey
+  const validRouteStopCount = routeProspects.length - invalidStops.length
 
   const liveSearchProspects = useMemo(
     () =>
@@ -4871,6 +4872,26 @@ function App() {
     setRouteIds([])
   }
 
+  function handleCalculateRouteFromSearch() {
+    if (routeIds.length === 0) {
+      return
+    }
+
+    const filterSummary = summarizeSearchFilters({
+      selectedIndustries,
+      radiusLabel: effectiveRadiusMiles
+        ? uiText.search.filters.radius(effectiveRadiusMiles)
+        : uiText.search.filters.radius(10),
+      market: manualMarket,
+      usesCurrentLocation: searchRadiusChoice === 'current-location',
+    })
+
+    setInvalidStopsDismissedForRouteKey(null)
+    setRouteCalculationContext({ filterSummary })
+    pendingRouteScrollTargetRef.current = 'summary'
+    setActiveView('map')
+  }
+
   function toggleExpandedProspect(prospectId: string) {
     setExpandedProspectId((current) => (current === prospectId ? null : prospectId))
   }
@@ -5488,6 +5509,25 @@ function App() {
 
         {routeProspects.length > 0 ? (
           <>
+            {routeCalculationContext ? (
+              <section
+                ref={routeCalculationSummaryRef}
+                className="panel section-panel route-calculation-summary"
+              >
+                <div className="eyebrow eyebrow--tight">{uiText.routes.calculation.eyebrow}</div>
+                <h2 className="section-heading">{uiText.routes.calculation.summaryHeading}</h2>
+                <p className="section-copy">{uiText.routes.calculation.stopCount(routeProspects.length)}</p>
+                <p className="editor-hint">{uiText.routes.calculation.filters(routeCalculationContext.filterSummary)}</p>
+                {validRouteStopCount >= 2 ? (
+                  <div className="status-banner status-banner--info route-calculation-summary__prompt">
+                    <p>{uiText.routes.calculation.readyToOptimize}</p>
+                  </div>
+                ) : (
+                  <p className="section-copy">{uiText.routes.calculation.singleStopHint}</p>
+                )}
+              </section>
+            ) : null}
+
             <section className="panel section-panel route-toolbar">
               <div className="route-toolbar__focus">
                 {currentRouteStop ? (
@@ -6003,6 +6043,23 @@ function App() {
               {uiText.search.summary.results(searchResultProspects.length)}
             </p>
           ) : null}
+        </section>
+
+        <section className="panel section-panel search-route-calculate">
+          <button
+            type="button"
+            className="button button--wide search-route-calculate__button"
+            disabled={routeIds.length === 0}
+            onClick={handleCalculateRouteFromSearch}
+          >
+            <Route size={18} />
+            {uiText.routes.calculation.button}
+          </button>
+          <p className="search-route-calculate__hint">
+            {routeIds.length === 0
+              ? uiText.routes.calculation.emptyState
+              : uiText.routes.calculation.stopCount(routeIds.length)}
+          </p>
         </section>
 
         {searchResultProspects.length > 0 ? (
