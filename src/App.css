@@ -2797,6 +2797,71 @@
   font-weight: 700;
 }
 
+.account-settings__actions {
+  display: grid;
+  gap: 10px;
+}
+
+.account-settings__sign-out {
+  border-color: rgba(255, 107, 107, 0.28);
+}
+
+.account-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.account-status-banner p {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.account-status-banner--guest {
+  border-color: rgba(74, 123, 255, 0.2);
+}
+
+.account-status-banner--signed-in {
+  border-color: rgba(49, 196, 190, 0.32);
+  background: rgba(49, 196, 190, 0.1);
+  color: #7ef0d8;
+}
+
+.account-status-banner--sync-pending {
+  border-color: rgba(74, 123, 255, 0.32);
+  background: rgba(74, 123, 255, 0.1);
+}
+
+.account-status-pill--guest {
+  color: var(--text-secondary);
+}
+
+.account-status-pill--signed-in {
+  color: #7ef0d8;
+}
+
+.account-status-pill--sync-pending {
+  color: var(--accent-soft);
+}
+
+.account-sync-spinner {
+  animation: search-location-spin 0.85s linear infinite;
+}
+
+.account-settings__footnote,
+.account-settings__todo {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 .settings-stack {
   gap: 10px;
 }

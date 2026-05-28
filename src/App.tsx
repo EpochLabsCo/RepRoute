@@ -53,6 +53,7 @@ import './App.css'
 import { uiText } from './constants/uiText'
 import RepRouteMap, { type RepRouteMapMarker, type RouteLineRenderStatus } from './components/RepRouteMap'
 import type { RouteNavigationStop } from './components/RepRouteNavigationMap'
+import AccountSettingsSection from './components/AccountSettingsSection'
 import RouteNavigationView, { type RouteNavigationLegSummary } from './components/RouteNavigationView'
 import {
   buildCrmExportRecord,
@@ -316,6 +317,7 @@ const SEARCH_INDUSTRY_GROUPS = uiText.search.industryGroups.map((group) => ({
 const SEARCH_INDUSTRY_OPTIONS = SEARCH_INDUSTRY_GROUPS.flatMap((group) => group.options)
 const ARRIVAL_RADIUS_OPTIONS: ArrivalDetectionRadiusFeet[] = [150, 300, 500, 1320]
 
+/** Local-first persistence (Guest Mode). TODO(sync): mirror to Supabase via `UserDataSyncPayload`. */
 const STORAGE_KEYS = {
   liveProspects: 'reproute:live-prospects',
   savedProspects: 'reproute:saved-prospects',
@@ -6415,6 +6417,8 @@ function App() {
   function renderSettingsView() {
     return (
       <>
+        <AccountSettingsSection />
+
         <section ref={settingsTopRef} className="panel section-panel section-panel--compact">
           <div className="settings-stack">
             <label className="field-group">

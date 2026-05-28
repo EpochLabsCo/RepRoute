@@ -678,6 +678,28 @@ export const uiText = {
     },
   },
   settings: {
+    account: {
+      heading: 'Account',
+      description:
+        'RepRoute runs in Guest Mode today with local device storage. Supabase Auth and cloud sync are planned next.',
+      signIn: 'Sign In',
+      createAccount: 'Create Account',
+      signOut: 'Sign Out',
+      syncData: 'Sync Data',
+      guestDetail: 'All prospects, routes, and notes stay on this device only.',
+      signedInDetail: (email: string) =>
+        email ? `Signed in as ${email}. Local data is still stored on this device.` : 'Signed in. Local data remains on this device.',
+      syncPendingDetail: 'Preparing to sync your RepRoute data to the cloud…',
+      localFirstNote:
+        'Guest Mode keeps every feature working offline. Cloud sync will upload prospects, routes, follow-ups, visit notes, business cards, and CRM exports when Supabase is connected.',
+      supabaseNotConfigured:
+        'Supabase is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY when ready.',
+      status: {
+        guest: 'Guest Mode',
+        'signed-in': 'Signed In',
+        'sync-pending': 'Sync Pending',
+      },
+    },
     appearanceTitle: 'Appearance',
     appearanceDescription: 'Switch between dark and light workspace themes.',
     darkMode: 'Dark mode',
