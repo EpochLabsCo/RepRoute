@@ -5,7 +5,6 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
-  type TouchEvent,
 } from 'react'
 import {
   closestCenter,
@@ -18,10 +17,8 @@ import {
 import {
   SortableContext,
   arrayMove,
-  useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -36,7 +33,6 @@ import {
   LocateFixed,
   ExternalLink,
   UtensilsCrossed,
-  GripVertical,
   Map as MapIcon,
   Navigation,
   MoonStar,
@@ -54,8 +50,11 @@ import { uiText } from './constants/uiText'
 import RepRouteMap, { type RepRouteMapMarker, type RouteLineRenderStatus } from './components/RepRouteMap'
 import type { RouteNavigationStop } from './components/RepRouteNavigationMap'
 import AccountSettingsSection from './components/AccountSettingsSection'
-import RouteFocusCard from './components/RouteFocusCard'
+import RouteCurrentStopCard from './components/RouteCurrentStopCard'
+import RouteDiagnosticsSheet from './components/RouteDiagnosticsSheet'
 import RouteNavigationView, { type RouteNavigationLegSummary } from './components/RouteNavigationView'
+import RouteRemainingStopCard from './components/RouteRemainingStopCard'
+import VisitWorkflowDrawer from './components/VisitWorkflowDrawer'
 import {
   buildCrmExportRecord,
   buildCrmExportRows,
@@ -91,9 +90,6 @@ import {
   ProspectPrimaryActions,
 } from './components/ProspectCardActions'
 import BusinessCardAttachStopSheet from './components/BusinessCardAttachStopSheet'
-import BusinessCardPreviewStrip from './components/BusinessCardPreviewStrip'
-import BusinessCardScanButton from './components/BusinessCardScanButton'
-import BusinessCardSection from './components/BusinessCardSection'
 import FollowUpCard from './components/FollowUpCard'
 import {
   buildFollowUpSnapshot,
@@ -1576,592 +1572,6 @@ function EditAddressSheet({
   )
 }
 
-function CurrentStopCard({
-  prospect,
-  stopNumber,
-  leg,
-  isOnLocation,
-  distanceFeet,
-  isSaved,
-  isInRoute,
-  travelMode,
-  onNavigate,
-  onOpenSaved,
-  onFindFoodNearby,
-  onRequestRemove,
-  onToggleCompleted,
-  onToggleSaved,
-  onToggleRoute,
-  onUpdateContactDetails,
-  onUpdateNotes,
-  onUpdateVisitNote,
-  onUpdateFollowUp,
-  onUpdatePriority,
-  onUpdateOutcome,
-  cardPreviewUrl,
-  onRemoveBusinessCard,
-  onRouteBusinessCardCapture,
-}: {
-  prospect: Prospect
-  stopNumber: number
-  leg: RouteNavigationLegSummary | null
-  isOnLocation: boolean
-  distanceFeet: number | null
-  isSaved: boolean
-  isInRoute: boolean
-  travelMode: TravelMode
-  onNavigate: (prospect: Prospect) => void
-  onOpenSaved: (prospectId: string) => void
-  onFindFoodNearby: (prospectId: string) => void
-  onRequestRemove: (prospectId: string) => void
-  onToggleCompleted: (prospectId: string) => void
-  onToggleSaved: (prospectId: string) => void
-  onToggleRoute: (prospectId: string) => void
-  onUpdateContactDetails: (
-    prospectId: string,
-    fields: Partial<
-      Pick<ProspectRecord, 'contactName' | 'contactTitle' | 'contactEmail' | 'contactPhone' | 'contactWebsite'>
-    >,
-  ) => void
-  onUpdateNotes: (prospectId: string, notes: string) => void
-  onUpdateVisitNote: (prospectId: string, note: string) => void
-  onUpdateFollowUp: (prospectId: string, followUpDate: string, followUpTime?: string, confirmSave?: boolean) => void
-  onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
-  onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
-  cardPreviewUrl: string | null
-  onRemoveBusinessCard: (prospectId: string) => void
-  onRouteBusinessCardCapture: (file: File) => void
-}) {
-  const [openPanels, setOpenPanels] = useState({
-    contact: true,
-    visit: true,
-    followUp: true,
-    priority: false,
-    outcome: true,
-  })
-  const websiteHref = normalizeWebsiteUrl(prospect.website)
-  const callHref = createCallHref(prospect.phone)
-
-  function togglePanel(panel: keyof typeof openPanels) {
-    setOpenPanels((current) => ({
-      ...current,
-      [panel]: !current[panel],
-    }))
-  }
-
-  const liveDistance =
-    distanceFeet !== null ? formatDistanceFeet(distanceFeet) : null
-  const statusNote = isOnLocation
-    ? uiText.routes.currentStop.onLocation
-    : prospect.isFoodStop
-      ? uiText.foodNearby.foodStopLabel
-      : null
-
-  return (
-    <section
-      className={`panel section-panel current-stop-card ${
-        isOnLocation ? 'current-stop-card--on-location' : ''
-      }`}
-    >
-      <RouteFocusCard
-        stopNumber={stopNumber}
-        businessName={prospect.businessName}
-        address={prospect.address}
-        leg={leg}
-        distanceOverride={liveDistance}
-        variant="current"
-        statusNote={statusNote}
-      />
-
-      <ProspectPrimaryActions
-        callHref={callHref}
-        onNavigate={() => onNavigate(prospect)}
-        navigateLabel={
-          travelMode === 'walking'
-            ? uiText.routes.actions.navigateWalk
-            : uiText.routes.actions.navigateDrive
-        }
-        isInRoute={isInRoute}
-        onToggleRoute={() => onToggleRoute(prospect.id)}
-        addRouteLabel={uiText.search.card.addToRoute}
-        removeRouteLabel={uiText.search.card.removeRoute}
-        showMarkCompleted
-        routeCompleted={Boolean(prospect.routeCompleted)}
-        onToggleCompleted={() => onToggleCompleted(prospect.id)}
-      />
-
-      <BusinessCardPreviewStrip
-        prospectId={prospect.id}
-        previewUrl={cardPreviewUrl}
-        onCapture={onRouteBusinessCardCapture}
-        onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
-      />
-
-      <CardMoreActions>
-        {websiteHref ? (
-          <CardMoreMenuLink href={websiteHref}>
-            <ExternalLink size={16} />
-            {uiText.routes.actions.openWebsite}
-          </CardMoreMenuLink>
-        ) : null}
-        <CardMoreMenuButton onClick={() => onFindFoodNearby(prospect.id)}>
-          <UtensilsCrossed size={16} />
-          {uiText.foodNearby.findFoodNearby}
-        </CardMoreMenuButton>
-        <BusinessCardScanButton
-          className="card-more__action"
-          onFileSelected={onRouteBusinessCardCapture}
-        />
-        <CardMoreMenuButton onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}>
-          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
-          {isSaved
-            ? uiText.routes.currentStop.quickActions.openSaved
-            : uiText.routes.currentStop.quickActions.saveProspect}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('contact')}>
-          {uiText.routes.currentStop.quickActions.editContactInfo}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('visit')}>
-          {uiText.routes.currentStop.quickActions.addVisitNotes}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('followUp')}>
-          {uiText.routes.currentStop.quickActions.setFollowUp}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('priority')}>
-          {uiText.routes.currentStop.quickActions.changePriority}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('outcome')}>
-          {uiText.routes.currentStop.quickActions.addOutcomeTag}
-        </CardMoreMenuButton>
-        {prospect.routeCompleted ? (
-          <CardMoreMenuButton onClick={() => onToggleCompleted(prospect.id)}>
-            {uiText.routes.currentStop.quickActions.markIncomplete}
-          </CardMoreMenuButton>
-        ) : null}
-        <CardMoreMenuButton onClick={() => onRequestRemove(prospect.id)}>
-          {uiText.routes.actions.removeProspect}
-        </CardMoreMenuButton>
-      </CardMoreActions>
-
-      {openPanels.contact ? (
-        <div className="current-stop-card__panel">
-          <BusinessCardSection
-            prospectId={prospect.id}
-            previewUrl={cardPreviewUrl}
-            contact={{
-              contactName: prospect.contactName,
-              contactTitle: prospect.contactTitle,
-              contactPhone: prospect.phone,
-              contactEmail: prospect.contactEmail,
-            }}
-            onCapture={onRouteBusinessCardCapture}
-            onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
-            onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
-            showScanButton={false}
-          />
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.website}</span>
-            <input
-              className="text-input"
-              type="url"
-              value={prospect.website}
-              onChange={(event) =>
-                onUpdateContactDetails(prospect.id, { contactWebsite: event.target.value })
-              }
-            />
-          </div>
-          <label className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.notes}</span>
-            <textarea
-              className="text-area text-area--compact"
-              rows={3}
-              value={prospect.notes}
-              onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
-            />
-          </label>
-        </div>
-      ) : null}
-
-      {openPanels.visit ? (
-        <label className="field-group current-stop-card__panel">
-          <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-          <textarea
-            className="text-area text-area--compact"
-            rows={4}
-            value={prospect.visitNote}
-            onChange={(event) => onUpdateVisitNote(prospect.id, event.target.value)}
-            placeholder={uiText.routes.quickNotePlaceholder}
-          />
-        </label>
-      ) : null}
-
-      {openPanels.followUp ? (
-        <div className="field-group current-stop-card__panel">
-          <div className="field-header">
-            <span className="field-label">{uiText.search.prospectCard.followUpDate}</span>
-            {prospect.followUpDate ? (
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => onUpdateFollowUp(prospect.id, '')}
-              >
-                {uiText.search.prospectCard.clear}
-              </button>
-            ) : null}
-          </div>
-          <input
-            className="text-input"
-            type="date"
-            value={prospect.followUpDate}
-            onChange={(event) => onUpdateFollowUp(prospect.id, event.target.value, prospect.followUpTime)}
-          />
-          <div className="field-group">
-            <span className="field-label">{uiText.followUps.timeLabel}</span>
-            <input
-              className="text-input"
-              type="time"
-              value={prospect.followUpTime}
-              disabled={!prospect.followUpDate}
-              onChange={(event) =>
-                onUpdateFollowUp(prospect.id, prospect.followUpDate, event.target.value)
-              }
-            />
-          </div>
-          <button
-            type="button"
-            className="button button--ghost"
-            disabled={!prospect.followUpDate}
-            onClick={() =>
-              onUpdateFollowUp(prospect.id, prospect.followUpDate, prospect.followUpTime, true)
-            }
-          >
-            {uiText.followUps.saveFollowUp}
-          </button>
-        </div>
-      ) : null}
-
-      {openPanels.priority ? (
-        <div className="field-group current-stop-card__panel">
-          <span className="field-label">{uiText.search.prospectCard.priority}</span>
-          <div className="segment-row">
-            {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-                onClick={() => onUpdatePriority(prospect.id, option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {openPanels.outcome ? (
-        <div className="field-group current-stop-card__panel">
-          <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-          <div className="route-outcome-grid">
-            {ROUTE_OUTCOME_OPTIONS.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`route-outcome-chip ${
-                  prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-                }`}
-                onClick={() =>
-                  onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
-                }
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
-function RouteWorkflowStopCard({
-  index,
-  prospect,
-  leg,
-  isOnLocation,
-  isSaved,
-  travelMode,
-  onNavigate,
-  onOpenSaved,
-  onFindFoodNearby,
-  onToggleCompleted,
-  onToggleSaved,
-  onToggleRoute,
-  onUpdatePriority,
-  onUpdateVisitNote,
-  onUpdateOutcome,
-  onRemove,
-  cardPreviewUrl,
-  onRemoveBusinessCard,
-  onRouteBusinessCardCapture,
-  onUpdateContactDetails,
-}: {
-  index: number
-  prospect: Prospect
-  leg: RouteNavigationLegSummary | null
-  isOnLocation: boolean
-  isSaved: boolean
-  travelMode: TravelMode
-  onNavigate: (prospect: Prospect) => void
-  onOpenSaved: (prospectId: string) => void
-  onFindFoodNearby: (prospectId: string) => void
-  onToggleCompleted: (prospectId: string) => void
-  onToggleSaved: (prospectId: string) => void
-  onToggleRoute: (prospectId: string) => void
-  onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
-  onUpdateVisitNote: (prospectId: string, note: string) => void
-  onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
-  onRemove: (prospectId: string) => void
-  cardPreviewUrl: string | null
-  onRemoveBusinessCard: (prospectId: string) => void
-  onRouteBusinessCardCapture: (file: File) => void
-  onUpdateContactDetails: (
-    prospectId: string,
-    fields: Partial<
-      Pick<ProspectRecord, 'contactName' | 'contactTitle' | 'contactEmail' | 'contactPhone' | 'contactWebsite'>
-    >,
-  ) => void
-}) {
-  const [openPanels, setOpenPanels] = useState({
-    contact: false,
-    visit: false,
-    priority: false,
-    outcome: false,
-  })
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
-
-  function togglePanel(panel: keyof typeof openPanels) {
-    setOpenPanels((current) => ({
-      ...current,
-      [panel]: !current[panel],
-    }))
-  }
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: prospect.id })
-  const callHref = createCallHref(prospect.phone)
-  const websiteHref = normalizeWebsiteUrl(prospect.website)
-
-  function handleTouchStart(event: TouchEvent<HTMLElement>) {
-    const touch = event.touches[0]
-
-    if (!touch) {
-      return
-    }
-
-    touchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-    }
-  }
-
-  function handleTouchEnd(event: TouchEvent<HTMLElement>) {
-    const start = touchStartRef.current
-    const touch = event.changedTouches[0]
-    touchStartRef.current = null
-
-    if (!start || !touch) {
-      return
-    }
-
-    const deltaX = touch.clientX - start.x
-    const deltaY = touch.clientY - start.y
-
-    if (deltaX <= -72 && Math.abs(deltaX) > Math.abs(deltaY) + 18) {
-      onRemove(prospect.id)
-    }
-  }
-
-  return (
-    <article
-      ref={setNodeRef}
-      className={`route-stop-card ${prospect.routeCompleted ? 'route-stop-card--completed' : ''} ${
-        isDragging ? 'route-stop-card--dragging' : ''
-      } ${isOnLocation ? 'route-stop-card--on-location' : ''}`}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      <div className="route-stop-card__top">
-        <RouteFocusCard
-          stopNumber={index + 1}
-          businessName={prospect.businessName}
-          address={prospect.address}
-          leg={leg}
-          variant="active"
-          statusNote={
-            prospect.routeCompleted
-              ? uiText.routes.completed
-              : isOnLocation
-                ? uiText.routes.currentStop.onLocation
-                : prospect.isFoodStop
-                  ? uiText.foodNearby.foodStopLabel
-                  : null
-          }
-        />
-
-        <button
-          type="button"
-          className="drag-handle"
-          aria-label={uiText.routes.reorderStopAria}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical size={20} />
-        </button>
-      </div>
-
-      <ProspectPrimaryActions
-        callHref={callHref}
-        onNavigate={() => onNavigate(prospect)}
-        navigateLabel={
-          travelMode === 'walking'
-            ? uiText.routes.actions.navigateWalk
-            : uiText.routes.actions.navigateDrive
-        }
-        isInRoute
-        onToggleRoute={() => onToggleRoute(prospect.id)}
-        addRouteLabel={uiText.search.card.addToRoute}
-        removeRouteLabel={uiText.search.card.removeRoute}
-        showMarkCompleted
-        routeCompleted={Boolean(prospect.routeCompleted)}
-        onToggleCompleted={() => onToggleCompleted(prospect.id)}
-      />
-
-      <BusinessCardPreviewStrip
-        prospectId={prospect.id}
-        previewUrl={cardPreviewUrl}
-        onCapture={onRouteBusinessCardCapture}
-        onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
-      />
-
-      <CardMoreActions>
-        {websiteHref ? (
-          <CardMoreMenuLink href={websiteHref}>
-            <ExternalLink size={16} />
-            {uiText.routes.actions.openWebsite}
-          </CardMoreMenuLink>
-        ) : null}
-        <CardMoreMenuButton onClick={() => onFindFoodNearby(prospect.id)}>
-          <UtensilsCrossed size={16} />
-          {uiText.foodNearby.findFoodNearby}
-        </CardMoreMenuButton>
-        <BusinessCardScanButton
-          className="card-more__action"
-          onFileSelected={onRouteBusinessCardCapture}
-        />
-        <CardMoreMenuButton onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}>
-          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
-          {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('contact')}>
-          {uiText.routes.currentStop.quickActions.editContactInfo}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('visit')}>
-          {uiText.routes.currentStop.quickActions.addVisitNotes}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('priority')}>
-          {uiText.routes.currentStop.quickActions.changePriority}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => togglePanel('outcome')}>
-          {uiText.routes.currentStop.quickActions.addOutcomeTag}
-        </CardMoreMenuButton>
-        {prospect.routeCompleted ? (
-          <CardMoreMenuButton onClick={() => onToggleCompleted(prospect.id)}>
-            {uiText.routes.currentStop.quickActions.markIncomplete}
-          </CardMoreMenuButton>
-        ) : null}
-        <CardMoreMenuButton onClick={() => onRemove(prospect.id)}>
-          {uiText.routes.actions.removeProspect}
-        </CardMoreMenuButton>
-        {openPanels.contact ? (
-          <BusinessCardSection
-            prospectId={prospect.id}
-            previewUrl={cardPreviewUrl}
-            contact={{
-              contactName: prospect.contactName,
-              contactTitle: prospect.contactTitle,
-              contactPhone: prospect.phone,
-              contactEmail: prospect.contactEmail,
-            }}
-            onCapture={onRouteBusinessCardCapture}
-            onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
-            onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
-            showScanButton={false}
-          />
-        ) : null}
-        {openPanels.visit ? (
-          <label className="field-group">
-            <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-            <textarea
-              className="text-area text-area--compact"
-              rows={3}
-              value={prospect.visitNote}
-              onChange={(event) => onUpdateVisitNote(prospect.id, event.target.value)}
-              placeholder={uiText.routes.quickNotePlaceholder}
-            />
-          </label>
-        ) : null}
-        {openPanels.priority ? (
-          <div className="field-group">
-            <span className="field-label">{uiText.search.prospectCard.priority}</span>
-            <div className="segment-row">
-              {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-                  onClick={() => onUpdatePriority(prospect.id, option)}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {openPanels.outcome ? (
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-            <div className="route-outcome-grid">
-              {ROUTE_OUTCOME_OPTIONS.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`route-outcome-chip ${
-                    prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-                  }`}
-                  onClick={() =>
-                    onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
-                  }
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </CardMoreActions>
-    </article>
-  )
-}
-
 // (OptimizeRouteSheet removed — starting location is now a persistent field on Today’s Route.)
 
 function LiveSearchResultCard({
@@ -2511,6 +1921,12 @@ function App() {
     null,
   )
   const [travelMode, setTravelMode] = useState<TravelMode>('driving')
+  const [remainingStopsExpanded, setRemainingStopsExpanded] = useState(false)
+  const [routeDiagnosticsOpen, setRouteDiagnosticsOpen] = useState(false)
+  const [visitWorkflow, setVisitWorkflow] = useState<{
+    prospectId: string
+    intent: 'complete' | 'notes'
+  } | null>(null)
   const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
   const [crmExportScope, setCrmExportScope] = useState<CrmExportScope>('all')
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
@@ -3022,7 +2438,6 @@ function App() {
   }, [routeProspects])
   const showInvalidStopsPanel =
     invalidStops.length > 0 && invalidStopsDismissedForRouteKey !== routeKey
-  const validRouteStopCount = routeProspects.length - invalidStops.length
 
   const liveSearchProspects = useMemo(
     () =>
@@ -3248,20 +2663,6 @@ function App() {
     () => routeProspects.find((prospect) => !prospect.routeCompleted) ?? routeProspects[0] ?? null,
     [routeProspects],
   )
-  const nextRouteStopAfterCurrent = useMemo(() => {
-    if (!currentRouteStop) {
-      return null
-    }
-
-    const currentIndex = routeProspects.findIndex((prospect) => prospect.id === currentRouteStop.id)
-    return (
-      routeProspects.slice(currentIndex + 1).find((prospect) => !prospect.routeCompleted) ??
-      routeProspects.find(
-        (prospect) => !prospect.routeCompleted && prospect.id !== currentRouteStop.id,
-      ) ??
-      null
-    )
-  }, [currentRouteStop, routeProspects])
   const arrivalDetectionRadiusMiles = feetToMiles(arrivalDetectionRadiusFeet)
   const routeStopDistances = useMemo(() => {
     if (!routeTrackerLocation) {
@@ -3293,6 +2694,11 @@ function App() {
   const currentStopProspect =
     onLocationRouteStop?.prospect ?? closestTrackedRouteStop?.prospect ?? currentRouteStop
   const currentStopDistanceFeet = onLocationRouteStop?.distanceFeet ?? closestTrackedRouteStop?.distanceFeet ?? null
+  const remainingRouteProspects = useMemo(
+    () => routeProspects.filter((prospect) => prospect.id !== currentStopProspect?.id),
+    [currentStopProspect?.id, routeProspects],
+  )
+  const visitWorkflowProspect = visitWorkflow ? prospectMap.get(visitWorkflow.prospectId) ?? null : null
   const manualMarketLabel = manualMarket.trim()
   const routeOrigin = useMemo(() => {
     if (isFiniteLatLng(routeTrackerLocation)) {
@@ -4854,6 +4260,97 @@ function App() {
     setRouteIds([])
   }
 
+  function resetRouteCompletedStops() {
+    routeIds.forEach((prospectId) => {
+      updateProspectRecord(prospectId, (current) => ({
+        ...current,
+        routeCompleted: false,
+        visitCompletedAt: '',
+      }))
+    })
+    setActionToast({ type: 'success', text: uiText.routes.tab.resetCompletedSuccess })
+  }
+
+  function handleExportRoute() {
+    const records = routeProspects.map((prospect) => {
+      const followUpEntry = followUpEntries[prospect.id]
+
+      return buildCrmExportRecord({
+        address: prospect.address,
+        businessName: prospect.businessName,
+        category: prospect.category,
+        contactName: prospect.contactName,
+        contactEmail: prospect.contactEmail,
+        contactTitle: prospect.contactTitle,
+        editedByRepRouteUser: prospect.editedByRepRouteUser,
+        followUpDate: followUpEntry?.followUpDate ?? prospect.followUpDate,
+        followUpTime: followUpEntry?.followUpTime ?? prospect.followUpTime,
+        followUpNotes: followUpEntry?.notes ?? '',
+        followUpCompleted: followUpEntry?.completed,
+        followUpRouteStatus: followUpEntry?.routeStatus,
+        googlePlaceId: prospect.googlePlaceId,
+        lastContactedDate:
+          prospect.lastContactDate ||
+          (prospect.lastContact === 'Not contacted yet' ? '' : prospect.lastContact),
+        notes: prospect.notes,
+        phone: prospect.phone,
+        priority: prospect.priority,
+        routeOutcomeTag: prospect.visitOutcome,
+        visitCompleted: prospect.routeCompleted,
+        visitCompletedDateTime: prospect.visitCompletedAt,
+        visitNotes: prospect.visitNote,
+        website: prospect.website,
+        businessCardCapturedAt: prospect.businessCardCapturedAt,
+      })
+    })
+
+    if (records.length === 0) {
+      setActionToast({ type: 'error', text: uiText.errors.noCrmDataForScope })
+      return
+    }
+
+    try {
+      const exportRows = buildCrmExportRows(records, crmExportFormat)
+      const csv = buildCsvContent(exportRows.columns, exportRows.rows)
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const dateStamp = new Date().toISOString().slice(0, 10)
+
+      link.href = url
+      link.download = `${exportRows.profile.fileStem}-route-${dateStamp}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 0)
+      setActionToast({
+        type: 'success',
+        text: uiText.crmExport.successMessage(records.length, exportRows.profile.label),
+      })
+    } catch {
+      setActionToast({ type: 'error', text: uiText.errors.crmExportFailed })
+    }
+  }
+
+  function openVisitWorkflow(prospectId: string, intent: 'complete' | 'notes') {
+    setVisitWorkflow({ prospectId, intent })
+  }
+
+  function closeVisitWorkflow() {
+    setVisitWorkflow(null)
+  }
+
+  function handleVisitWorkflowDone() {
+    if (visitWorkflow?.intent === 'complete') {
+      const prospect = prospectMap.get(visitWorkflow.prospectId)
+      if (prospect && !prospect.routeCompleted) {
+        toggleRouteCompleted(visitWorkflow.prospectId)
+      }
+    }
+
+    closeVisitWorkflow()
+  }
+
   function handleCalculateRouteFromSearch() {
     if (routeIds.length === 0) {
       return
@@ -5529,139 +5026,112 @@ function App() {
 
         {routeProspects.length > 0 ? (
           <>
-            {routeCalculationContext ? (
-              <section
-                ref={routeCalculationSummaryRef}
-                className="panel section-panel route-calculation-summary"
-              >
-                <div className="eyebrow eyebrow--tight">{uiText.routes.calculation.eyebrow}</div>
-                <h2 className="section-heading">{uiText.routes.calculation.summaryHeading}</h2>
-                <p className="section-copy">{uiText.routes.calculation.stopCount(routeProspects.length)}</p>
-                <p className="editor-hint">{uiText.routes.calculation.filters(routeCalculationContext.filterSummary)}</p>
-                {validRouteStopCount >= 2 ? (
-                  <div className="status-banner status-banner--info route-calculation-summary__prompt">
-                    <p>{uiText.routes.calculation.readyToOptimize}</p>
-                  </div>
-                ) : (
-                  <p className="section-copy">{uiText.routes.calculation.singleStopHint}</p>
-                )}
-              </section>
-            ) : null}
-
-            <section className="panel section-panel route-toolbar">
-              {currentRouteStop ? (
-                <div className="route-toolbar__focus">
-                  <RouteFocusCard
-                    stopNumber={
-                      routeProspects.findIndex((prospect) => prospect.id === currentRouteStop.id) + 1
-                    }
-                    businessName={currentRouteStop.businessName}
-                    address={currentRouteStop.address}
-                    leg={navigationLegByStopId[currentRouteStop.id]}
-                    variant="current"
-                  />
-                  {nextRouteStopAfterCurrent ? (
-                    <RouteFocusCard
-                      stopNumber={
-                        routeProspects.findIndex(
-                          (prospect) => prospect.id === nextRouteStopAfterCurrent.id,
-                        ) + 1
-                      }
-                      businessName={nextRouteStopAfterCurrent.businessName}
-                      address={nextRouteStopAfterCurrent.address}
-                      leg={navigationLegByStopId[nextRouteStopAfterCurrent.id]}
-                      variant="next"
-                    />
-                  ) : null}
+            <header className="route-operational-header">
+              <div className="route-operational-header__title-row">
+                <h2 className="route-operational-header__title">{uiText.routes.tab.title}</h2>
+                <div className="chip-row route-operational-header__mode">
+                  {(['driving', 'walking'] as TravelMode[]).map((mode) => (
+                    <button
+                      type="button"
+                      key={mode}
+                      className={`chip ${travelMode === mode ? 'chip--active' : ''}`}
+                      onClick={() => setTravelMode(mode)}
+                    >
+                      {mode === 'driving'
+                        ? uiText.navigation.travelMode.driving
+                        : uiText.navigation.travelMode.walking}
+                    </button>
+                  ))}
                 </div>
-              ) : null}
-
+              </div>
+              <p className="route-operational-header__stats">
+                <span>{uiText.routes.tab.stops(routeProspects.length)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{uiText.routes.tab.totalDistance(routeMiles.toFixed(1))}</span>
+                <span aria-hidden="true">·</span>
+                <span>{uiText.routes.tab.totalEta(formatDriveTime(estimatedDriveMinutes))}</span>
+              </p>
               <div className="route-progress-track" aria-hidden="true">
                 <span
                   className="route-progress-track__fill"
                   style={{ width: `${completionPercentage}%` }}
                 />
               </div>
+            </header>
 
-              <p className="route-toolbar__stats">
-                <span>{uiText.routes.inAppNavigation.completedCount(completedRouteStops)}</span>
-                <span aria-hidden="true">·</span>
-                <span>{uiText.routes.inAppNavigation.remainingCount(remainingRouteStops)}</span>
-                <span aria-hidden="true">·</span>
-                <span>{routeMiles.toFixed(1)} mi</span>
-                <span aria-hidden="true">·</span>
-                <span>{formatDriveTime(estimatedDriveMinutes)}</span>
+            {routeCalculationContext ? (
+              <p className="route-builder-hint editor-hint">
+                {uiText.routes.calculation.filters(routeCalculationContext.filterSummary)}
               </p>
+            ) : null}
 
-              {routeNavigationLoading ? (
-                <div className="status-banner status-banner--info">
-                  <p>{uiText.routes.inAppNavigation.loadingRoute}</p>
-                </div>
-              ) : null}
-
-              {routeNavigationError ? (
-                <div className="status-banner status-banner--error">
-                  <p>{routeNavigationError}</p>
-                </div>
-              ) : null}
-
-              <div className="button-row route-toolbar__actions">
-                <button type="button" className="button button--wide" onClick={() => void startRouteNavigation()}>
-                  <Navigation size={16} />
-                  {uiText.routes.inAppNavigation.startRoute}
-                </button>
-                <button
-                  type="button"
-                  className="button button--ghost"
-                  onClick={() => scheduleOptimizeRoute()}
-                  disabled={routeOptimization.status === 'loading'}
-                >
-                  <Route size={16} />
-                  {routeOptimization.status === 'loading'
-                    ? uiText.routes.optimization.optimizing
-                    : uiText.routes.optimization.button}
-                </button>
-                <BusinessCardScanButton
-                  className="button button--ghost"
-                  onFileSelected={(file) => handleRouteBusinessCardCapture(undefined, file)}
-                />
+            {routeNavigationLoading ? (
+              <div className="status-banner status-banner--info">
+                <p>{uiText.routes.inAppNavigation.loadingRoute}</p>
               </div>
+            ) : null}
 
+            {routeNavigationError ? (
+              <div className="status-banner status-banner--error">
+                <p>{routeNavigationError}</p>
+              </div>
+            ) : null}
+
+            {routeActionMessage ? (
+              <div className={`status-banner status-banner--${routeActionMessage.tone}`}>
+                <p>{routeActionMessage.text}</p>
+              </div>
+            ) : null}
+
+            <section className="route-actions-bar">
+              <button type="button" className="button button--wide route-actions-bar__primary" onClick={() => void startRouteNavigation()}>
+                <Navigation size={18} />
+                {uiText.routes.inAppNavigation.startRoute}
+              </button>
+              <button
+                type="button"
+                className="button button--wide route-actions-bar__secondary"
+                onClick={() => scheduleOptimizeRoute()}
+                disabled={routeOptimization.status === 'loading'}
+              >
+                <Route size={18} />
+                {routeOptimization.status === 'loading'
+                  ? uiText.routes.optimization.optimizing
+                  : uiText.routes.optimization.button}
+              </button>
+              <button type="button" className="button button--wide button--ghost route-actions-bar__clear" onClick={clearRoute}>
+                <Trash2 size={18} />
+                {uiText.routes.clearRoute}
+              </button>
               <CardMoreActions>
-                <button type="button" className="button button--ghost" onClick={clearRoute}>
-                  <Trash2 size={16} />
-                  {uiText.routes.clearRoute}
-                </button>
+                <CardMoreMenuButton onClick={handleExportRoute}>
+                  <Download size={16} />
+                  {uiText.routes.tab.exportRoute}
+                </CardMoreMenuButton>
+                <CardMoreMenuButton onClick={handleOpenRouteInMaps}>
+                  <ExternalLink size={16} />
+                  {uiText.routes.inAppNavigation.openInMaps}
+                </CardMoreMenuButton>
+                <CardMoreMenuButton onClick={() => setRouteDiagnosticsOpen(true)}>
+                  {uiText.routes.routeRender.diagnosticsHeading}
+                </CardMoreMenuButton>
+                <CardMoreMenuButton onClick={resetRouteCompletedStops}>
+                  {uiText.routes.tab.resetCompleted}
+                </CardMoreMenuButton>
               </CardMoreActions>
             </section>
 
-            <section ref={routeMapSectionRef} className="panel section-panel route-map-panel">
-              {routeActionMessage ? (
-                <div className={`status-banner status-banner--${routeActionMessage.tone}`}>
-                  <p>{routeActionMessage.text}</p>
-                </div>
-              ) : null}
-
-              {routeOptimization.status === 'success' && routeOptimization.forRouteKey === routeIds.join('|') ? (
-                <div className="status-banner status-banner--success">
-                  <p>
-                    {uiText.routes.optimization.totalDriveTime(formatDriveTime(routeOptimization.driveMinutes))} ·{' '}
-                    {uiText.routes.optimization.totalDistance(routeOptimization.distanceMiles.toFixed(1))}
-                  </p>
-                </div>
-              ) : null}
-
+            <section ref={routeMapSectionRef} className="panel section-panel route-map-panel route-map-panel--primary">
               <RepRouteMap
                 markers={mapMarkers}
                 directions={routeNavigationDirections}
                 directionsApiStatus={routeDirectionsApiStatus}
                 userLocation={routeTrackerLocation}
-                activeRouteStopId={currentRouteStop?.id ?? null}
+                activeRouteStopId={currentStopProspect?.id ?? null}
                 onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
               />
-
               <div className="route-map-external">
                 <button
                   type="button"
@@ -5673,193 +5143,92 @@ function App() {
                 </button>
                 <p className="route-map-external__hint">{uiText.routes.inAppNavigation.openInMapsHint}</p>
               </div>
-
-              {import.meta.env.DEV ? (
-                <details className="route-diagnostics">
-                  <summary className="filter-dropdown__trigger">
-                    {uiText.routes.routeRender.diagnosticsHeading}
-                  </summary>
-                  <div className="filter-dropdown__panel">
-                    <div className="inline-summary">
-                      <span>
-                        {uiText.routes.routeRender.validStops(routeRenderDebug?.validStopCount ?? routeProspects.length)}
-                      </span>
-                      <span>
-                        {uiText.routes.routeRender.invalidRemoved(routeRenderDebug?.invalidRemovedCount ?? 0)}
-                      </span>
-                    </div>
-                    <div className="inline-summary">
-                      <span>
-                        {uiText.routes.routeRender.routeStatus}: {routeRenderDebug?.routeStatus ?? 'idle'}
-                      </span>
-                      <span>
-                        {routeRenderDebug?.mapReady
-                          ? uiText.routes.routeRender.mapReady
-                          : uiText.routes.routeRender.mapLoading}
-                      </span>
-                    </div>
-                    <div className="inline-summary">
-                      <span>
-                        {uiText.routes.routeRender.directionsStatus}: {routeDirectionsApiStatus ?? '—'}
-                      </span>
-                      <span>
-                        {uiText.routes.routeRender.rendererStatus}: {routeLineRenderStatus}
-                      </span>
-                    </div>
-                    {routeRenderDebug?.usedFallback ? (
-                      <div className="status-banner status-banner--info">
-                        <p>{uiText.routes.routeRender.usedFallback}</p>
-                      </div>
-                    ) : null}
-                    {routeRenderDebug?.autoRemovedStopNames.length ? (
-                      <div className="status-banner status-banner--info">
-                        <p>
-                          {uiText.routes.routeRender.autoRemoved}:{' '}
-                          {routeRenderDebug.autoRemovedStopNames.join(', ')}
-                        </p>
-                      </div>
-                    ) : null}
-                    <div className="inline-summary">
-                      <span>
-                        {uiText.routes.routeRender.optimizedCount(routeOptimizationDebug?.optimizedCount ?? 0)}
-                      </span>
-                      <span>
-                        {uiText.routes.routeRender.skippedCount(routeOptimizationDebug?.skippedCount ?? 0)}
-                      </span>
-                      <span>Last optimize: {routeOptimizationDebug?.status ?? 'idle'}</span>
-                      <span>
-                        {routeOptimizationDebug?.directionsStatus
-                          ? `Optimize API: ${routeOptimizationDebug.directionsStatus}`
-                          : ''}
-                      </span>
-                    </div>
-                    {routeOptimizationDebug?.message ? (
-                      <div className="status-banner status-banner--error">
-                        <p>{routeOptimizationDebug.message}</p>
-                      </div>
-                    ) : null}
-                    <pre className="editor-hint" style={{ whiteSpace: 'pre-wrap' }}>
-                      {JSON.stringify({ routeRenderDebug, routeOptimizationDebug }, null, 2)}
-                    </pre>
-                  </div>
-                </details>
-              ) : null}
             </section>
 
             {currentStopProspect ? (
-              <CurrentStopCard
-                key={currentStopProspect.id}
-                prospect={currentStopProspect}
+              <RouteCurrentStopCard
+                businessName={currentStopProspect.businessName}
+                address={currentStopProspect.address}
                 stopNumber={
                   routeProspects.findIndex((prospect) => prospect.id === currentStopProspect.id) + 1
                 }
                 leg={navigationLegByStopId[currentStopProspect.id] ?? null}
-                isOnLocation={Boolean(onLocationRouteStop)}
-                distanceFeet={currentStopDistanceFeet}
-                isSaved={savedIds.includes(currentStopProspect.id)}
-                isInRoute={routeIds.includes(currentStopProspect.id)}
-                travelMode={travelMode}
-                onNavigate={handleNavigateProspect}
-                onOpenSaved={openSavedProspect}
-                onFindFoodNearby={openFoodNearby}
-                onRequestRemove={openRemoveProspectPrompt}
-                onToggleCompleted={toggleRouteCompleted}
-                onToggleSaved={toggleSaved}
-                onToggleRoute={toggleRoute}
-                onUpdateContactDetails={updateContactDetails}
-                onUpdateNotes={updateProspectNotes}
-                onUpdateVisitNote={updateVisitNote}
-                onUpdateFollowUp={updateProspectFollowUp}
-                onUpdatePriority={updateProspectPriority}
-                onUpdateOutcome={updateVisitOutcome}
-                cardPreviewUrl={businessCardPreviewUrls[currentStopProspect.id] ?? null}
-                onRemoveBusinessCard={removeBusinessCard}
-                onRouteBusinessCardCapture={(file) =>
-                  handleRouteBusinessCardCapture(currentStopProspect.id, file)
+                distanceOverride={
+                  currentStopDistanceFeet !== null ? formatDistanceFeet(currentStopDistanceFeet) : null
                 }
+                statusNote={
+                  onLocationRouteStop
+                    ? uiText.routes.currentStop.onLocation
+                    : currentStopProspect.isFoodStop
+                      ? uiText.foodNearby.foodStopLabel
+                      : null
+                }
+                callHref={createCallHref(currentStopProspect.phone)}
+                websiteHref={normalizeWebsiteUrl(currentStopProspect.website)}
+                navigateLabel={
+                  travelMode === 'walking'
+                    ? uiText.routes.actions.navigateWalk
+                    : uiText.routes.actions.navigateDrive
+                }
+                isSaved={savedIds.includes(currentStopProspect.id)}
+                routeCompleted={Boolean(currentStopProspect.routeCompleted)}
+                onNavigate={() => handleNavigateProspect(currentStopProspect)}
+                onToggleCompleted={() => toggleRouteCompleted(currentStopProspect.id)}
+                onOpenVisitWorkflow={(intent) => openVisitWorkflow(currentStopProspect.id, intent)}
+                onOpenSaved={() => openSavedProspect(currentStopProspect.id)}
+                onToggleSaved={() => toggleSaved(currentStopProspect.id)}
+                onFindFoodNearby={() => openFoodNearby(currentStopProspect.id)}
+                onRequestRemove={() => openRemoveProspectPrompt(currentStopProspect.id)}
+                onScanBusinessCard={(file) => handleRouteBusinessCardCapture(currentStopProspect.id, file)}
               />
             ) : null}
 
-            <section className="panel section-panel section-panel--compact">
-              <label className="field-group">
-                <span className="field-label">{uiText.routes.optimization.startingLocationLabel}</span>
-                <div className="search-field">
-                  <MapIcon size={18} />
-                  <input
-                    type="search"
-                    value={routeStartLocation}
-                    onChange={(event) => setRouteStartLocation(event.target.value)}
-                    placeholder={uiText.routes.optimization.startingLocationPlaceholder}
-                    aria-label={uiText.routes.optimization.startingLocationLabel}
-                  />
-                </div>
-                <div className="button-row">
-                  <button
-                    type="button"
-                    className="button button--ghost"
-                    onClick={() => {
-                      if (isFiniteLatLng(routeTrackerLocation)) {
-                        const currentLocation = routeTrackerLocation as { lat: number; lng: number }
-                        setRouteStartLocation(`${currentLocation.lat},${currentLocation.lng}`)
-                        setRouteActionMessage(null)
-                        return
-                      }
-
-                      setRouteActionMessage({ tone: 'info', text: uiText.routes.optimization.locationOffMessage })
-                    }}
-                  >
-                    {uiText.routes.optimization.useCurrentLocation}
-                  </button>
-                </div>
-              </label>
-
-              <DndContext
-                sensors={routeSensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleRouteDragEnd}
-              >
-                <SortableContext
-                  items={routeProspects.map((prospect) => prospect.id)}
-                  strategy={verticalListSortingStrategy}
+            {remainingRouteProspects.length > 0 ? (
+              <section className="route-remaining-stops">
+                <button
+                  type="button"
+                  className="route-remaining-stops__toggle"
+                  aria-expanded={remainingStopsExpanded}
+                  onClick={() => setRemainingStopsExpanded((current) => !current)}
                 >
-                  <div className="route-workflow-stack">
-                    {routeProspects.map((prospect, index) => {
-                      if (currentStopProspect?.id === prospect.id) {
-                        return null
-                      }
+                  <span>{uiText.routes.tab.remainingStops(remainingRouteProspects.length)}</span>
+                  <ChevronDown
+                    size={18}
+                    className={remainingStopsExpanded ? 'route-remaining-stops__chevron--open' : ''}
+                  />
+                </button>
+                {remainingStopsExpanded ? (
+                  <DndContext
+                    sensors={routeSensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleRouteDragEnd}
+                  >
+                    <SortableContext
+                      items={routeProspects.map((prospect) => prospect.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="route-remaining-stops__list">
+                        {remainingRouteProspects.map((prospect) => {
+                          const stopNumber =
+                            routeProspects.findIndex((entry) => entry.id === prospect.id) + 1
 
-                      return (
-                      <RouteWorkflowStopCard
-                        key={prospect.id}
-                        index={index}
-                        prospect={prospect}
-                        leg={navigationLegByStopId[prospect.id] ?? null}
-                        isOnLocation={onLocationRouteStop?.prospect.id === prospect.id}
-                        isSaved={savedIds.includes(prospect.id)}
-                        travelMode={travelMode}
-                        onNavigate={handleNavigateProspect}
-                        onOpenSaved={openSavedProspect}
-                        onFindFoodNearby={openFoodNearby}
-                        onToggleCompleted={toggleRouteCompleted}
-                        onToggleSaved={toggleSaved}
-                        onToggleRoute={toggleRoute}
-                        onUpdatePriority={updateProspectPriority}
-                        onUpdateVisitNote={updateVisitNote}
-                        onUpdateOutcome={updateVisitOutcome}
-                        onRemove={openRemoveProspectPrompt}
-                        cardPreviewUrl={businessCardPreviewUrls[prospect.id] ?? null}
-                        onRemoveBusinessCard={removeBusinessCard}
-                        onRouteBusinessCardCapture={(file) =>
-                          handleRouteBusinessCardCapture(prospect.id, file)
-                        }
-                        onUpdateContactDetails={updateContactDetails}
-                      />
-                      )
-                    })}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            </section>
+                          return (
+                            <RouteRemainingStopCard
+                              key={prospect.id}
+                              id={prospect.id}
+                              stopNumber={stopNumber}
+                              businessName={prospect.businessName}
+                              leg={navigationLegByStopId[prospect.id] ?? null}
+                              completed={Boolean(prospect.routeCompleted)}
+                            />
+                          )
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                ) : null}
+              </section>
+            ) : null}
           </>
         ) : (
           <EmptyState
@@ -6873,27 +6242,9 @@ function App() {
           </div>
         </header>
 
-        <section className="screen-intro screen-intro--compact">
-          <h2>{displayMeta.title}</h2>
-        </section>
-
-        {activeView === 'map' ? (
-          <section className="travel-mode-toolbar">
-            <span className="field-label">{uiText.navigation.travelMode.label}</span>
-            <div className="chip-row">
-              {(['driving', 'walking'] as TravelMode[]).map((mode) => (
-                <button
-                  type="button"
-                  key={mode}
-                  className={`chip ${travelMode === mode ? 'chip--active' : ''}`}
-                  onClick={() => setTravelMode(mode)}
-                >
-                  {mode === 'driving'
-                    ? uiText.navigation.travelMode.driving
-                    : uiText.navigation.travelMode.walking}
-                </button>
-              ))}
-            </div>
+        {activeView !== 'map' || routeProspects.length === 0 ? (
+          <section className="screen-intro screen-intro--compact">
+            <h2>{displayMeta.title}</h2>
           </section>
         ) : null}
 
@@ -6904,6 +6255,54 @@ function App() {
         ) : null}
 
         <section className="screen-content">{renderActiveView()}</section>
+
+        {visitWorkflowProspect && visitWorkflow ? (
+          <VisitWorkflowDrawer
+            prospect={visitWorkflowProspect}
+            cardPreviewUrl={businessCardPreviewUrls[visitWorkflowProspect.id] ?? null}
+            outcomeOptions={ROUTE_OUTCOME_OPTIONS}
+            priorityOptions={ASSIGNED_PRIORITY_OPTIONS}
+            onClose={closeVisitWorkflow}
+            onDone={handleVisitWorkflowDone}
+            onUpdateContactDetails={(fields) => updateContactDetails(visitWorkflowProspect.id, fields)}
+            onUpdateNotes={(notes) => updateProspectNotes(visitWorkflowProspect.id, notes)}
+            onUpdateVisitNote={(note) => updateVisitNote(visitWorkflowProspect.id, note)}
+            onUpdateFollowUp={(followUpDate, followUpTime, confirmSave) =>
+              updateProspectFollowUp(visitWorkflowProspect.id, followUpDate, followUpTime, confirmSave)
+            }
+            onUpdatePriority={(priority) =>
+              updateProspectPriority(visitWorkflowProspect.id, priority as AssignedPriority)
+            }
+            onUpdateOutcome={(outcome) => updateVisitOutcome(visitWorkflowProspect.id, outcome)}
+            onRouteBusinessCardCapture={(file) =>
+              handleRouteBusinessCardCapture(visitWorkflowProspect.id, file)
+            }
+            onRemoveBusinessCard={() => removeBusinessCard(visitWorkflowProspect.id)}
+          />
+        ) : null}
+
+        {routeDiagnosticsOpen ? (
+          <RouteDiagnosticsSheet
+            routeStartLocation={routeStartLocation}
+            onRouteStartLocationChange={setRouteStartLocation}
+            onUseCurrentLocation={() => {
+              if (isFiniteLatLng(routeTrackerLocation)) {
+                const currentLocation = routeTrackerLocation as { lat: number; lng: number }
+                setRouteStartLocation(`${currentLocation.lat},${currentLocation.lng}`)
+                setRouteActionMessage(null)
+                return
+              }
+
+              setRouteActionMessage({ tone: 'info', text: uiText.routes.optimization.locationOffMessage })
+            }}
+            routeProspectCount={routeProspects.length}
+            routeDirectionsApiStatus={routeDirectionsApiStatus}
+            routeLineRenderStatus={routeLineRenderStatus}
+            routeOptimizationStatus={routeOptimization.status}
+            devDiagnostics={{ routeRenderDebug, routeOptimizationDebug }}
+            onClose={() => setRouteDiagnosticsOpen(false)}
+          />
+        ) : null}
 
         {promptedProspect ? (
           <RemoveProspectSheet

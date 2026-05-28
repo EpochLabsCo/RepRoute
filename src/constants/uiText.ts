@@ -430,6 +430,22 @@ export const uiText = {
     todayListSummary: (count: number) => `${count} stops in today’s list`,
     navigateEntireRoute: 'Open in Maps',
     clearRoute: 'Clear Route',
+    tab: {
+      title: 'Route',
+      stops: (count: number) => `${count} stop${count === 1 ? '' : 's'}`,
+      totalDistance: (miles: string) => `${miles} mi`,
+      totalEta: (time: string) => time,
+      more: 'More',
+      exportRoute: 'Export Route',
+      resetCompleted: 'Reset Completed Stops',
+      resetCompletedSuccess: 'Completed stops were reset.',
+      remainingStops: (count: number) => `Remaining Stops (${count})`,
+    },
+    visitWorkflow: {
+      heading: 'Visit details',
+      close: 'Close',
+      done: 'Save & continue',
+    },
     inAppNavigation: {
       eyebrow: 'Route Navigation',
       heading: 'Following Today’s Route',
