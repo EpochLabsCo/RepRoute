@@ -1,3 +1,5 @@
+import { clampPlacesRadiusMeters } from './placesRadius'
+
 const GOOGLE_PLACES_TEXT_SEARCH_ENDPOINT = 'https://places.googleapis.com/v1/places:searchText'
 const GOOGLE_PLACES_FIELD_MASK = [
   'places.id',
@@ -104,7 +106,7 @@ export async function searchGooglePlaces({
                     latitude: locationBias.latitude,
                     longitude: locationBias.longitude,
                   },
-                  radius: locationBias.radiusMeters,
+                  radius: clampPlacesRadiusMeters(locationBias.radiusMeters),
                 },
               },
             }
@@ -132,9 +134,11 @@ export async function searchGooglePlaces({
 
       console.error('[RepRoute] Google Places full API error response:', details)
 
+      const apiMessage = data?.error?.message ?? `Live Search request failed (${response.status})`
+
       return {
         ok: false,
-        error: data?.error?.message ?? `Live Search request failed (${response.status})`,
+        error: apiMessage,
         details,
         query: normalizedQuery,
         status: response.status,

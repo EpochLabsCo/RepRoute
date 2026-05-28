@@ -114,11 +114,12 @@ export const uiText = {
     },
     marketSecondaryLabel: 'City or market (optional)',
     radiusLabel: 'Mileage radius',
-    radiusOptions: [5, 10, 15, 25, 50] as const,
+    radiusOptions: [5, 10, 15, 25, 30] as const,
     radiusOptionLabels: {
       custom: 'Custom radius',
     },
     customRadiusLabel: 'Custom mileage radius',
+    customRadiusMaxHint: 'Maximum 30 miles for Live Search.',
     industriesLabel: 'Target industries (optional)',
     industriesPlaceholder: 'Select industries',
     industriesSearchPlaceholder: 'Search industries',
@@ -287,6 +288,8 @@ export const uiText = {
       noLiveResults: (summary: string) => `No business results found for ${summary}.`,
       noLiveResultsWithinRadius:
         'No businesses found within this radius. Try increasing the mileage radius.',
+      someTermsIncomplete:
+        'Some industry searches did not complete. Results shown are from successful searches only.',
     },
     radiusHardFilterSummary: (miles: number, centerLabel: string) =>
       `Showing businesses within ${miles} miles of ${centerLabel}.`,
@@ -848,6 +851,7 @@ export const uiText = {
     searchMissingFieldsDetail:
       'Live Search needs a company name or at least one target industry to return business results.',
     searchFailedDetail: 'Live Search failed. Review the response and try again.',
+    searchRadiusTooLarge: 'Search radius too large. Please reduce the mileage radius.',
     connectGooglePlaces: 'Enable Live Search to find businesses.',
     connectGooglePlacesDetail: 'Add a valid search API key to load live business results.',
     locationRequired: 'Enable location access or enter a market manually.',

@@ -79,6 +79,11 @@ import {
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
 import { resolveAreaLabelFromCoordinates } from './lib/reverseGeocode'
 import {
+  capSearchRadiusMiles,
+  resolvePlacesSearchRadius,
+  resolveLiveSearchFailureMessage,
+} from './lib/placesRadius'
+import {
   CardMoreActions,
   CardMoreMenuButton,
   CardMoreMenuLink,
@@ -1102,14 +1107,14 @@ function formatProspectNames(prospects: Prospect[], limit = 3) {
   return [...names, `+${prospects.length - limit} more`]
 }
 
-function milesToMeters(miles: number) {
-  return Math.round(miles * 1609.34)
-}
-
 function getEffectiveRadiusMiles(radiusChoice: SearchRadiusChoice, customRadiusMiles: string) {
   if (radiusChoice === 'custom') {
     const parsedRadius = Number(customRadiusMiles)
-    return Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : null
+    if (!Number.isFinite(parsedRadius) || parsedRadius <= 0) {
+      return null
+    }
+
+    return capSearchRadiusMiles(parsedRadius)
   }
 
   return radiusChoice
@@ -3668,15 +3673,17 @@ function App() {
 
     const searchCenter = centerResult.center
     const terms = getFoodSearchTerms()
+    const { finalMeters: foodRadiusMeters } = resolvePlacesSearchRadius(foodNearbyRadiusMiles)
     const locationBias = {
       latitude: searchCenter.lat,
       longitude: searchCenter.lng,
-      radiusMeters: milesToMeters(foodNearbyRadiusMiles),
+      radiusMeters: foodRadiusMeters,
     }
 
     console.groupCollapsed('[RepRoute] Food Nearby')
     console.info('anchor', { id: anchor.id, name: anchor.businessName })
     console.info('radiusMiles', foodNearbyRadiusMiles)
+    console.info('finalClampedMeters', foodRadiusMeters)
     console.info('center', searchCenter)
     console.info('terms', terms)
     console.groupEnd()
@@ -5095,29 +5102,29 @@ function App() {
     setIsSearchingPlaces(true)
 
     try {
+      const searchRadiusMiles = capSearchRadiusMiles(effectiveRadiusMiles)
+      const { convertedMeters, finalMeters } = resolvePlacesSearchRadius(searchRadiusMiles)
       const filterSummary = summarizeSearchFilters({
         companyName: trimmedCompanyName,
         selectedIndustries: industries,
-        radiusLabel: uiText.search.filters.radius(effectiveRadiusMiles),
+        radiusLabel: uiText.search.filters.radius(searchRadiusMiles),
         market: shouldUseCurrentLocation ? '' : trimmedMarket,
         usesCurrentLocation: shouldUseCurrentLocation,
       })
       const radiusHardFilterSummary = uiText.search.radiusHardFilterSummary(
-        effectiveRadiusMiles,
+        searchRadiusMiles,
         shouldUseCurrentLocation ? uiText.routes.currentLocation : trimmedMarket,
       )
       const locationBias = {
         latitude: activeSearchCenter.lat,
         longitude: activeSearchCenter.lng,
-        radiusMeters: milesToMeters(effectiveRadiusMiles),
+        radiusMeters: finalMeters,
       }
 
-      console.groupCollapsed('[RepRoute] Live Search radius filter')
-      console.info('selectedRadiusMiles', effectiveRadiusMiles)
-      console.info('searchCenter', activeSearchCenter)
-      console.info('radiusMeters (API hint)', locationBias.radiusMeters)
-      console.info('market', trimmedMarket)
-      console.info('usesCurrentLocation', shouldUseCurrentLocation)
+      console.groupCollapsed('[RepRoute] Live Search radius')
+      console.info('selectedMiles', searchRadiusMiles)
+      console.info('convertedMeters', convertedMeters)
+      console.info('finalClampedMeters', finalMeters)
       console.groupEnd()
 
       const maxResultsPerTerm = trimmedCompanyName ? 10 : 8
@@ -5194,7 +5201,7 @@ function App() {
       }, [])
 
       const withinRadius = normalizedProspectsWithDistance.filter(
-        (entry) => entry.distanceMilesPrecise <= effectiveRadiusMiles,
+        (entry) => entry.distanceMilesPrecise <= searchRadiusMiles,
       )
       if (trimmedCompanyName) {
         withinRadius.sort((left, right) => {
@@ -5224,7 +5231,7 @@ function App() {
           lat: entry.lat,
           lng: entry.lng,
           distanceMiles: Number(entry.distanceMilesPrecise.toFixed(2)),
-          withinRadius: entry.distanceMilesPrecise <= effectiveRadiusMiles,
+          withinRadius: entry.distanceMilesPrecise <= searchRadiusMiles,
         })),
       )
       console.groupEnd()
@@ -5239,11 +5246,7 @@ function App() {
             filterSummary || 'your filters',
           ),
           details:
-            failedResults.length > 0
-              ? `${uiText.errors.searchFailedDetail} ${failedResults
-                  .map((entry) => `${entry.term}: ${entry.result.error}`)
-                  .join(' | ')}`
-              : undefined,
+            failedResults.length > 0 ? uiText.search.statusMessages.someTermsIncomplete : undefined,
           resultsCount: normalizedProspects.length,
           query: radiusHardFilterSummary,
         })
@@ -5252,10 +5255,14 @@ function App() {
 
       setLiveSearchIds([])
       if (failedResults.length > 0) {
+        const failureMessage = resolveLiveSearchFailureMessage(failedResults, {
+          fallbackMessage: uiText.errors.searchFailedDetail,
+          radiusTooLargeMessage: uiText.errors.searchRadiusTooLarge,
+        })
+
         setSearchStatus({
           source: 'api-error',
-          message: failedResults[0]?.result.error ?? uiText.errors.searchFailedDetail,
-          details: failedResults.map((entry) => `${entry.term}: ${entry.result.error}`).join(' | '),
+          message: failureMessage.message,
           query: radiusHardFilterSummary,
         })
       } else {
@@ -6091,13 +6098,15 @@ function App() {
                     type="number"
                     inputMode="numeric"
                     min="1"
+                    max="30"
                     step="1"
                     value={customRadiusMiles}
                     onChange={(event) => setCustomRadiusMiles(event.target.value)}
-                    placeholder="35"
+                    placeholder="30"
                     aria-label={uiText.search.customRadiusLabel}
                   />
                 </div>
+                <p className="field-hint">{uiText.search.customRadiusMaxHint}</p>
               </label>
             ) : null}
 
