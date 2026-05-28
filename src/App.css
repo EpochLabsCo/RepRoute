@@ -400,6 +400,81 @@
   display: none;
 }
 
+.card-more__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card-more__panel .business-card-section__file-input {
+  display: none;
+}
+
+.prospect-primary-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.prospect-primary-actions--nav {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.prospect-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.prospect-action-btn--outline {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.prospect-action-btn--complete {
+  width: 100%;
+}
+
+.prospect-action-btn--complete-done {
+  border-color: rgba(49, 196, 190, 0.35);
+  background: rgba(49, 196, 190, 0.14);
+  color: #7ef0d8;
+}
+
+.prospect-action-btn--route-active {
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.08);
+  color: #ffb4b4;
+}
+
+.route-toggle-button.prospect-action-btn {
+  width: 100%;
+}
+
 .card-more__panel {
   display: grid;
   gap: 10px;

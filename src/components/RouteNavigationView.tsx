@@ -1,14 +1,12 @@
 import { useState, type ChangeEvent } from 'react'
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Circle,
-  ExternalLink,
-  MapPin,
-  Navigation,
-} from 'lucide-react'
+import { ArrowLeft, ExternalLink, MapPin } from 'lucide-react'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
 import { type RouteLineRenderStatus } from './RepRouteMap'
+import {
+  CardMoreActions,
+  CardMoreMenuButton,
+  MarkCompletedButton,
+} from './ProspectCardActions'
 import { uiText } from '../constants/uiText'
 
 type OutcomeTag =
@@ -302,69 +300,65 @@ function RouteNavigationStopCard({
         </div>
       ) : null}
 
-      <div className="route-navigation-stop-card__actions">
+      <div className="prospect-primary-actions prospect-primary-actions--nav">
         <button
           type="button"
-          className="route-action-button"
+          className="prospect-action-btn prospect-action-btn--outline"
           onClick={onMarkArrived}
           disabled={prospect.routeCompleted}
         >
           <MapPin size={16} />
-          {uiText.routes.inAppNavigation.markArrived}
+          <span>{uiText.routes.inAppNavigation.markArrived}</span>
         </button>
-        <button
-          type="button"
-          className="route-action-button"
-          onClick={onMarkCompleted}
-          disabled={prospect.routeCompleted}
-        >
-          {prospect.routeCompleted ? <CheckCircle2 size={16} /> : <Circle size={16} />}
-          {prospect.routeCompleted
-            ? uiText.routes.currentStop.quickActions.markIncomplete
-            : uiText.routes.inAppNavigation.markCompleted}
-        </button>
-        <button type="button" className="route-action-button" onClick={() => setNotesOpen((current) => !current)}>
-          <Navigation size={16} />
-          {uiText.routes.inAppNavigation.addNotes}
-        </button>
+        <MarkCompletedButton completed={prospect.routeCompleted} onClick={onMarkCompleted} />
       </div>
 
-      {notesOpen ? (
-        <div className="route-navigation-stop-card__panel">
-          <label className="field-group">
-            <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-            <textarea
-              className="text-area text-area--compact"
-              rows={3}
-              value={prospect.visitNote}
-              onChange={handleNotesChange}
-              placeholder={uiText.routes.quickNotePlaceholder}
-            />
-          </label>
+      <CardMoreActions>
+        <CardMoreMenuButton onClick={() => setNotesOpen((current) => !current)}>
+          {uiText.routes.inAppNavigation.addNotes}
+        </CardMoreMenuButton>
+        {prospect.routeCompleted ? (
+          <CardMoreMenuButton onClick={onMarkCompleted}>
+            {uiText.routes.currentStop.quickActions.markIncomplete}
+          </CardMoreMenuButton>
+        ) : null}
+        {notesOpen ? (
+          <div className="route-navigation-stop-card__panel">
+            <label className="field-group">
+              <span className="field-label">{uiText.routes.quickNoteLabel}</span>
+              <textarea
+                className="text-area text-area--compact"
+                rows={3}
+                value={prospect.visitNote}
+                onChange={handleNotesChange}
+                placeholder={uiText.routes.quickNotePlaceholder}
+              />
+            </label>
 
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-            <div className="route-outcome-grid">
-              {uiText.routes.outcomeTags.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`route-outcome-chip ${
-                    prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-                  }`}
-                  onClick={() =>
-                    onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : (option as OutcomeTag))
-                  }
-                >
-                  {option}
-                </button>
-              ))}
+            <div className="field-group">
+              <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
+              <div className="route-outcome-grid">
+                {uiText.routes.outcomeTags.map((option) => (
+                  <button
+                    type="button"
+                    key={option}
+                    className={`route-outcome-chip ${
+                      prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
+                    }`}
+                    onClick={() =>
+                      onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : (option as OutcomeTag))
+                    }
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <p className="editor-hint">{uiText.routes.inAppNavigation.noTurnByTurn}</p>
-        </div>
-      ) : null}
+            <p className="editor-hint">{uiText.routes.inAppNavigation.noTurnByTurn}</p>
+          </div>
+        ) : null}
+      </CardMoreActions>
     </article>
   )
 }

@@ -5,7 +5,6 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
-  type ReactNode,
   type TouchEvent,
 } from 'react'
 import {
@@ -29,11 +28,8 @@ import {
   BellRing,
   Bookmark,
   CalendarClock,
-  Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Circle,
   Download,
   ExternalLink,
   UtensilsCrossed,
@@ -41,8 +37,6 @@ import {
   Map as MapIcon,
   Navigation,
   MoonStar,
-  Phone,
-  Plus,
   Route,
   Search,
   Settings2,
@@ -79,6 +73,12 @@ import {
   type NotificationReminderLog,
 } from './lib/notifications'
 import { searchGooglePlaces, type GooglePlacesApiPlace } from './lib/googlePlaces'
+import {
+  CardMoreActions,
+  CardMoreMenuButton,
+  CardMoreMenuLink,
+  ProspectPrimaryActions,
+} from './components/ProspectCardActions'
 import BusinessCardAttachStopSheet from './components/BusinessCardAttachStopSheet'
 import BusinessCardPreviewStrip from './components/BusinessCardPreviewStrip'
 import BusinessCardScanButton from './components/BusinessCardScanButton'
@@ -1660,43 +1660,22 @@ function CurrentStopCard({
         </div>
       </div>
 
-      <div className="route-action-row">
-        {callHref ? (
-          <a className="route-action-button" href={callHref}>
-            <Phone size={16} />
-            {uiText.routes.actions.callBusiness}
-          </a>
-        ) : null}
-        {websiteHref ? (
-          <a className="route-action-button" href={websiteHref} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} />
-            {uiText.routes.actions.openWebsite}
-          </a>
-        ) : null}
-        <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
-          <Navigation size={16} />
-          {travelMode === 'walking'
+      <ProspectPrimaryActions
+        callHref={callHref}
+        onNavigate={() => onNavigate(prospect)}
+        navigateLabel={
+          travelMode === 'walking'
             ? uiText.routes.actions.navigateWalk
-            : uiText.routes.actions.navigateDrive}
-        </button>
-        <button
-          type="button"
-          className={`route-action-button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
-          onClick={() => onToggleRoute(prospect.id)}
-        >
-          <span className="route-toggle-button__icon" aria-hidden="true">
-            {isInRoute ? <Check size={16} /> : <Plus size={16} />}
-          </span>
-          <span className="route-toggle-button__label">
-            {isInRoute ? uiText.search.card.removeRoute : uiText.search.card.addToRoute}
-          </span>
-        </button>
-        <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
-          <UtensilsCrossed size={16} />
-          {uiText.foodNearby.findFoodNearby}
-        </button>
-        <BusinessCardScanButton onFileSelected={onRouteBusinessCardCapture} />
-      </div>
+            : uiText.routes.actions.navigateDrive
+        }
+        isInRoute={isInRoute}
+        onToggleRoute={() => onToggleRoute(prospect.id)}
+        addRouteLabel={uiText.search.card.addToRoute}
+        removeRouteLabel={uiText.search.card.removeRoute}
+        showMarkCompleted
+        routeCompleted={Boolean(prospect.routeCompleted)}
+        onToggleCompleted={() => onToggleCompleted(prospect.id)}
+      />
 
       <BusinessCardPreviewStrip
         prospectId={prospect.id}
@@ -1705,64 +1684,51 @@ function CurrentStopCard({
         onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
       />
 
-      <div className="current-stop-card__quick-actions">
-        <button type="button" className="button" onClick={() => onToggleCompleted(prospect.id)}>
-          {prospect.routeCompleted
-            ? uiText.routes.currentStop.quickActions.markIncomplete
-            : uiText.routes.currentStop.quickActions.markCompleted}
-        </button>
-        <button
-          type="button"
-          className="button button--ghost"
-          onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
-        >
+      <CardMoreActions>
+        {websiteHref ? (
+          <CardMoreMenuLink href={websiteHref}>
+            <ExternalLink size={16} />
+            {uiText.routes.actions.openWebsite}
+          </CardMoreMenuLink>
+        ) : null}
+        <CardMoreMenuButton onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
+        </CardMoreMenuButton>
+        <BusinessCardScanButton
+          className="card-more__action"
+          onFileSelected={onRouteBusinessCardCapture}
+        />
+        <CardMoreMenuButton onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}>
+          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
           {isSaved
             ? uiText.routes.currentStop.quickActions.openSaved
             : uiText.routes.currentStop.quickActions.saveProspect}
-        </button>
-        <button
-          type="button"
-          className={`button button--ghost ${openPanels.contact ? 'button--secondary' : ''}`}
-          onClick={() => togglePanel('contact')}
-        >
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('contact')}>
           {uiText.routes.currentStop.quickActions.editContactInfo}
-        </button>
-        <button
-          type="button"
-          className={`button button--ghost ${openPanels.visit ? 'button--secondary' : ''}`}
-          onClick={() => togglePanel('visit')}
-        >
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('visit')}>
           {uiText.routes.currentStop.quickActions.addVisitNotes}
-        </button>
-        <button
-          type="button"
-          className={`button button--ghost ${openPanels.followUp ? 'button--secondary' : ''}`}
-          onClick={() => togglePanel('followUp')}
-        >
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('followUp')}>
           {uiText.routes.currentStop.quickActions.setFollowUp}
-        </button>
-        <button
-          type="button"
-          className={`button button--ghost ${openPanels.priority ? 'button--secondary' : ''}`}
-          onClick={() => togglePanel('priority')}
-        >
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('priority')}>
           {uiText.routes.currentStop.quickActions.changePriority}
-        </button>
-        <button
-          type="button"
-          className={`button button--ghost ${openPanels.outcome ? 'button--secondary' : ''}`}
-          onClick={() => togglePanel('outcome')}
-        >
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('outcome')}>
           {uiText.routes.currentStop.quickActions.addOutcomeTag}
-        </button>
-        <button
-          type="button"
-          className="button button--ghost"
-          onClick={() => onRequestRemove(prospect.id)}
-        >
+        </CardMoreMenuButton>
+        {prospect.routeCompleted ? (
+          <CardMoreMenuButton onClick={() => onToggleCompleted(prospect.id)}>
+            {uiText.routes.currentStop.quickActions.markIncomplete}
+          </CardMoreMenuButton>
+        ) : null}
+        <CardMoreMenuButton onClick={() => onRequestRemove(prospect.id)}>
           {uiText.routes.actions.removeProspect}
-        </button>
-      </div>
+        </CardMoreMenuButton>
+      </CardMoreActions>
 
       {openPanels.contact ? (
         <div className="current-stop-card__panel">
@@ -1952,7 +1918,20 @@ function RouteWorkflowStopCard({
     >,
   ) => void
 }) {
+  const [openPanels, setOpenPanels] = useState({
+    contact: false,
+    visit: false,
+    priority: false,
+    outcome: false,
+  })
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+
+  function togglePanel(panel: keyof typeof openPanels) {
+    setOpenPanels((current) => ({
+      ...current,
+      [panel]: !current[panel],
+    }))
+  }
   const {
     attributes,
     listeners,
@@ -2011,19 +1990,6 @@ function RouteWorkflowStopCard({
     >
       <div className="route-stop-card__top">
         <div className="route-stop-card__heading">
-          <button
-            type="button"
-            className={`route-stop-check ${prospect.routeCompleted ? 'route-stop-check--checked' : ''}`}
-            onClick={() => onToggleCompleted(prospect.id)}
-            aria-label={
-              prospect.routeCompleted
-                ? uiText.routes.markStopIncompleteAria
-                : uiText.routes.markStopCompleteAria
-            }
-          >
-            {prospect.routeCompleted ? <CheckCircle2 size={22} /> : <Circle size={22} />}
-          </button>
-
           <div className="route-stop-card__title-block">
             <div className="route-stop-card__eyebrow">{uiText.routes.stopLabel(index)}</div>
             <h3>{prospect.businessName}</h3>
@@ -2063,15 +2029,22 @@ function RouteWorkflowStopCard({
         {prospect.routeCompleted ? <span className="meta-pill">{uiText.routes.completed}</span> : null}
       </div>
 
-      <div className="route-action-row route-action-row--primary">
-        <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
-          <Navigation size={16} />
-          {travelMode === 'walking'
+      <ProspectPrimaryActions
+        callHref={callHref}
+        onNavigate={() => onNavigate(prospect)}
+        navigateLabel={
+          travelMode === 'walking'
             ? uiText.routes.actions.navigateWalk
-            : uiText.routes.actions.navigateDrive}
-        </button>
-        <BusinessCardScanButton onFileSelected={onRouteBusinessCardCapture} />
-      </div>
+            : uiText.routes.actions.navigateDrive
+        }
+        isInRoute
+        onToggleRoute={() => onToggleRoute(prospect.id)}
+        addRouteLabel={uiText.search.card.addToRoute}
+        removeRouteLabel={uiText.search.card.removeRoute}
+        showMarkCompleted
+        routeCompleted={Boolean(prospect.routeCompleted)}
+        onToggleCompleted={() => onToggleCompleted(prospect.id)}
+      />
 
       <BusinessCardPreviewStrip
         prospectId={prospect.id}
@@ -2080,119 +2053,119 @@ function RouteWorkflowStopCard({
         onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
       />
 
-      <label className="field-group">
-        <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-        <textarea
-          className="text-area text-area--compact"
-          rows={3}
-          value={prospect.visitNote}
-          onChange={(event) => onUpdateVisitNote(prospect.id, event.target.value)}
-          placeholder={uiText.routes.quickNotePlaceholder}
-        />
-      </label>
-
       <p className="route-stop-card__address">{prospect.address}</p>
 
       <CardMoreActions>
-        <div className="route-action-row">
-          {callHref ? (
-            <a className="route-action-button" href={callHref}>
-              <Phone size={16} />
-              {uiText.routes.actions.callBusiness}
-            </a>
-          ) : null}
-          {websiteHref ? (
-            <a className="route-action-button" href={websiteHref} target="_blank" rel="noreferrer">
-              <ExternalLink size={16} />
-              {uiText.routes.actions.openWebsite}
-            </a>
-          ) : null}
-          <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
-            <UtensilsCrossed size={16} />
-            {uiText.foodNearby.findFoodNearby}
-          </button>
-          <button
-            type="button"
-            className="route-action-button button--danger-outline"
-            onClick={() => onToggleRoute(prospect.id)}
-          >
-            {uiText.search.card.removeRoute}
-          </button>
-          <button
-            type="button"
-            className="route-action-button"
-            onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
-          >
-            <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
-            {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
-          </button>
-          <button type="button" className="mini-button" onClick={() => onRemove(prospect.id)}>
-            {uiText.routes.actions.removeProspect}
-          </button>
-        </div>
-        <BusinessCardSection
-          prospectId={prospect.id}
-          previewUrl={cardPreviewUrl}
-          contact={{
-            contactName: prospect.contactName,
-            contactTitle: prospect.contactTitle,
-            contactPhone: prospect.phone,
-            contactEmail: prospect.contactEmail,
-          }}
-          onCapture={onRouteBusinessCardCapture}
-          onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
-          onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
-          showScanButton={false}
+        {websiteHref ? (
+          <CardMoreMenuLink href={websiteHref}>
+            <ExternalLink size={16} />
+            {uiText.routes.actions.openWebsite}
+          </CardMoreMenuLink>
+        ) : null}
+        <CardMoreMenuButton onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
+        </CardMoreMenuButton>
+        <BusinessCardScanButton
+          className="card-more__action"
+          onFileSelected={onRouteBusinessCardCapture}
         />
-        <div className="field-group">
-          <span className="field-label">{uiText.search.prospectCard.priority}</span>
-          <div className="segment-row">
-            {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-                onClick={() => onUpdatePriority(prospect.id, option)}
-              >
-                {option}
-              </button>
-            ))}
+        <CardMoreMenuButton onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}>
+          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
+          {isSaved ? uiText.routes.actions.openSaved : uiText.routes.actions.saveProspect}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('contact')}>
+          {uiText.routes.currentStop.quickActions.editContactInfo}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('visit')}>
+          {uiText.routes.currentStop.quickActions.addVisitNotes}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('priority')}>
+          {uiText.routes.currentStop.quickActions.changePriority}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => togglePanel('outcome')}>
+          {uiText.routes.currentStop.quickActions.addOutcomeTag}
+        </CardMoreMenuButton>
+        {prospect.routeCompleted ? (
+          <CardMoreMenuButton onClick={() => onToggleCompleted(prospect.id)}>
+            {uiText.routes.currentStop.quickActions.markIncomplete}
+          </CardMoreMenuButton>
+        ) : null}
+        <CardMoreMenuButton onClick={() => onRemove(prospect.id)}>
+          {uiText.routes.actions.removeProspect}
+        </CardMoreMenuButton>
+        {openPanels.contact ? (
+          <BusinessCardSection
+            prospectId={prospect.id}
+            previewUrl={cardPreviewUrl}
+            contact={{
+              contactName: prospect.contactName,
+              contactTitle: prospect.contactTitle,
+              contactPhone: prospect.phone,
+              contactEmail: prospect.contactEmail,
+            }}
+            onCapture={onRouteBusinessCardCapture}
+            onRemoveCard={() => onRemoveBusinessCard(prospect.id)}
+            onUpdateContact={(fields) => onUpdateContactDetails(prospect.id, fields)}
+            showScanButton={false}
+          />
+        ) : null}
+        {openPanels.visit ? (
+          <label className="field-group">
+            <span className="field-label">{uiText.routes.quickNoteLabel}</span>
+            <textarea
+              className="text-area text-area--compact"
+              rows={3}
+              value={prospect.visitNote}
+              onChange={(event) => onUpdateVisitNote(prospect.id, event.target.value)}
+              placeholder={uiText.routes.quickNotePlaceholder}
+            />
+          </label>
+        ) : null}
+        {openPanels.priority ? (
+          <div className="field-group">
+            <span className="field-label">{uiText.search.prospectCard.priority}</span>
+            <div className="segment-row">
+              {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                  onClick={() => onUpdatePriority(prospect.id, option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="field-group">
-          <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-          <div className="route-outcome-grid">
-            {ROUTE_OUTCOME_OPTIONS.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`route-outcome-chip ${
-                  prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-                }`}
-                onClick={() =>
-                  onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
-                }
-              >
-                {option}
-              </button>
-            ))}
+        ) : null}
+        {openPanels.outcome ? (
+          <div className="field-group">
+            <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
+            <div className="route-outcome-grid">
+              {ROUTE_OUTCOME_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  className={`route-outcome-chip ${
+                    prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
+                  }`}
+                  onClick={() =>
+                    onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : option)
+                  }
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </CardMoreActions>
     </article>
   )
 }
 
 // (OptimizeRouteSheet removed — starting location is now a persistent field on Today’s Route.)
-
-function CardMoreActions({ children }: { children: ReactNode }) {
-  return (
-    <details className="card-more">
-      <summary className="card-more__trigger">{uiText.common.more}</summary>
-      <div className="card-more__panel">{children}</div>
-    </details>
-  )
-}
 
 function LiveSearchResultCard({
   prospect,
@@ -2206,6 +2179,7 @@ function LiveSearchResultCard({
   onRequestRemove,
   onToggleSaved,
   onToggleRoute,
+  onToggleCompleted,
 }: {
   prospect: Prospect
   isSaved: boolean
@@ -2218,9 +2192,11 @@ function LiveSearchResultCard({
   onRequestRemove: (prospectId: string) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
+  onToggleCompleted: (prospectId: string) => void
 }) {
+  const callHref = createCallHref(prospect.phone)
   const websiteHref = normalizeWebsiteUrl(prospect.website)
-  const hasPhone = prospect.phone !== 'Phone unavailable'
+  const [priorityOpen, setPriorityOpen] = useState(false)
 
   return (
     <article className="live-result-card">
@@ -2238,71 +2214,66 @@ function LiveSearchResultCard({
 
       <p className="live-result-card__address">{prospect.address}</p>
 
-      <div className="live-result-card__actions live-result-card__actions--primary">
-        <button
-          type="button"
-          className={`button ${isSaved ? 'button--secondary' : ''}`}
-          onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}
-        >
-          {isSaved ? uiText.search.card.saved : uiText.search.card.save}
-        </button>
-        <button
-          type="button"
-          className={`button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
-          onClick={() => onToggleRoute(prospect.id)}
-        >
-          <span className="route-toggle-button__icon" aria-hidden="true">
-            {isInRoute ? <Check size={16} /> : <Plus size={16} />}
-          </span>
-          <span className="route-toggle-button__label">
-            {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
-          </span>
-        </button>
-      </div>
+      <ProspectPrimaryActions
+        callHref={callHref}
+        onNavigate={() => onNavigate(prospect)}
+        navigateLabel={
+          travelMode === 'walking' ? uiText.search.card.navigateWalk : uiText.search.card.navigateDrive
+        }
+        isInRoute={isInRoute}
+        onToggleRoute={() => onToggleRoute(prospect.id)}
+        addRouteLabel={uiText.search.card.addToRoute}
+        removeRouteLabel={uiText.search.card.removeRoute}
+        showMarkCompleted={isInRoute}
+        routeCompleted={Boolean(prospect.routeCompleted)}
+        onToggleCompleted={() => onToggleCompleted(prospect.id)}
+      />
 
       <CardMoreActions>
-        <div className="live-result-card__actions">
-          <button type="button" className="route-action-button" onClick={() => onNavigate(prospect)}>
-            <Navigation size={16} />
-            {travelMode === 'walking'
-              ? uiText.search.card.navigateWalk
-              : uiText.search.card.navigateDrive}
-          </button>
-          <button type="button" className="route-action-button" onClick={() => onFindFoodNearby(prospect.id)}>
-            <UtensilsCrossed size={16} />
-            {uiText.foodNearby.findFoodNearby}
-          </button>
-          {isInRoute || isSaved ? (
-            <button
-              type="button"
-              className="button button--ghost"
-              onClick={() => onRequestRemove(prospect.id)}
-            >
-              {uiText.search.card.removeProspect}
-            </button>
-          ) : null}
-        </div>
-        {hasPhone ? <p>{prospect.phone}</p> : null}
         {websiteHref ? (
-          <a href={websiteHref} target="_blank" rel="noreferrer">
-            {prospect.website}
-          </a>
+          <CardMoreMenuLink href={websiteHref}>
+            <ExternalLink size={16} />
+            {uiText.routes.actions.openWebsite}
+          </CardMoreMenuLink>
         ) : null}
-        <div className="field-group">
-          <span className="field-label">{uiText.search.prospectCard.priority}</span>
-          <div className="segment-row">
-            {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-              <button
-                type="button"
-                key={option}
-                className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-                onClick={() => onUpdatePriority(prospect.id, option)}
-              >
-                {option}
-              </button>
-            ))}
+        <CardMoreMenuButton onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => (isSaved ? onOpenSaved(prospect.id) : onToggleSaved(prospect.id))}>
+          <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
+          {isSaved ? uiText.search.card.saved : uiText.search.card.save}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => setPriorityOpen((current) => !current)}>
+          {uiText.routes.currentStop.quickActions.changePriority}
+        </CardMoreMenuButton>
+        {isInRoute && prospect.routeCompleted ? (
+          <CardMoreMenuButton onClick={() => onToggleCompleted(prospect.id)}>
+            {uiText.routes.currentStop.quickActions.markIncomplete}
+          </CardMoreMenuButton>
+        ) : null}
+        {isInRoute || isSaved ? (
+          <CardMoreMenuButton onClick={() => onRequestRemove(prospect.id)}>
+            {uiText.search.card.removeProspect}
+          </CardMoreMenuButton>
+        ) : null}
+        {priorityOpen ? (
+          <div className="field-group">
+            <span className="field-label">{uiText.search.prospectCard.priority}</span>
+            <div className="segment-row">
+              {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                  onClick={() => onUpdatePriority(prospect.id, option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </CardMoreActions>
     </article>
   )
@@ -2317,6 +2288,7 @@ function ProspectCard({
   onFindFoodNearby,
   onRequestRemove,
   onToggleRoute,
+  onToggleCompleted,
   onToggleExpanded,
   onUpdateNotes,
   onUpdatePriority,
@@ -2329,10 +2301,14 @@ function ProspectCard({
   onFindFoodNearby: (prospectId: string) => void
   onRequestRemove: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
+  onToggleCompleted: (prospectId: string) => void
   onToggleExpanded: (prospectId: string) => void
   onUpdateNotes: (prospectId: string, notes: string) => void
   onUpdatePriority: (prospectId: string, priority: AssignedPriority) => void
 }) {
+  const callHref = createCallHref(prospect.phone)
+  const websiteHref = normalizeWebsiteUrl(prospect.website)
+  const [priorityOpen, setPriorityOpen] = useState(false)
   const notesPreview = prospect.notes.trim()
 
   return (
@@ -2351,68 +2327,73 @@ function ProspectCard({
 
       {notesPreview ? <p className="prospect-card__notes prospect-card__notes--preview">{notesPreview}</p> : null}
 
-      <div className="prospect-card__footer">
-        <button
-          type="button"
-          className={`button route-toggle-button ${isInRoute ? 'button--danger-outline route-toggle-button--active' : ''}`}
-          onClick={() => onToggleRoute(prospect.id)}
-        >
-          <span className="route-toggle-button__icon" aria-hidden="true">
-            {isInRoute ? <Check size={16} /> : <Plus size={16} />}
-          </span>
-          <span className="route-toggle-button__label">
-            {isInRoute ? uiText.search.card.inRoute : uiText.search.card.addToRoute}
-          </span>
-        </button>
-      </div>
+      <ProspectPrimaryActions
+        callHref={callHref}
+        onNavigate={() => onNavigate(prospect)}
+        navigateLabel={
+          travelMode === 'walking' ? uiText.search.card.navigateWalk : uiText.search.card.navigateDrive
+        }
+        isInRoute={isInRoute}
+        onToggleRoute={() => onToggleRoute(prospect.id)}
+        addRouteLabel={uiText.search.card.addToRoute}
+        removeRouteLabel={uiText.search.card.removeRoute}
+        showMarkCompleted={isInRoute}
+        routeCompleted={Boolean(prospect.routeCompleted)}
+        onToggleCompleted={() => onToggleCompleted(prospect.id)}
+      />
 
       <CardMoreActions>
-        <div className="prospect-card__button-group prospect-card__button-group--saved">
-          <button type="button" className="button button--ghost" onClick={() => onNavigate(prospect)}>
-            {travelMode === 'walking'
-              ? uiText.search.card.navigateWalk
-              : uiText.search.card.navigateDrive}
-          </button>
-          <button type="button" className="button button--ghost" onClick={() => onFindFoodNearby(prospect.id)}>
-            <UtensilsCrossed size={16} />
-            {uiText.foodNearby.findFoodNearby}
-          </button>
-          <button type="button" className="button button--ghost" onClick={() => onToggleExpanded(prospect.id)}>
-            {isExpanded ? uiText.search.prospectCard.hide : uiText.saved.edit}
-          </button>
-          <button type="button" className="button button--ghost" onClick={() => onRequestRemove(prospect.id)}>
-            {uiText.saved.remove}
-          </button>
-        </div>
-        {isExpanded ? (
-          <div className="prospect-editor">
-            <div className="field-group">
-              <span className="field-label">{uiText.search.prospectCard.priority}</span>
-              <div className="segment-row">
-                {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
-                  <button
-                    type="button"
-                    key={option}
-                    className={`segment ${
-                      prospect.priority === option ? 'segment--active' : ''
-                    }`}
-                    onClick={() => onUpdatePriority(prospect.id, option)}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
+        {websiteHref ? (
+          <CardMoreMenuLink href={websiteHref}>
+            <ExternalLink size={16} />
+            {uiText.routes.actions.openWebsite}
+          </CardMoreMenuLink>
+        ) : null}
+        <CardMoreMenuButton onClick={() => onFindFoodNearby(prospect.id)}>
+          <UtensilsCrossed size={16} />
+          {uiText.foodNearby.findFoodNearby}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => onToggleExpanded(prospect.id)}>
+          {isExpanded ? uiText.search.prospectCard.hide : uiText.routes.currentStop.quickActions.addVisitNotes}
+        </CardMoreMenuButton>
+        <CardMoreMenuButton onClick={() => setPriorityOpen((current) => !current)}>
+          {uiText.routes.currentStop.quickActions.changePriority}
+        </CardMoreMenuButton>
+        {isInRoute && prospect.routeCompleted ? (
+          <CardMoreMenuButton onClick={() => onToggleCompleted(prospect.id)}>
+            {uiText.routes.currentStop.quickActions.markIncomplete}
+          </CardMoreMenuButton>
+        ) : null}
+        <CardMoreMenuButton onClick={() => onRequestRemove(prospect.id)}>
+          {uiText.saved.remove}
+        </CardMoreMenuButton>
+        {priorityOpen ? (
+          <div className="field-group">
+            <span className="field-label">{uiText.search.prospectCard.priority}</span>
+            <div className="segment-row">
+              {ASSIGNED_PRIORITY_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                  onClick={() => onUpdatePriority(prospect.id, option)}
+                >
+                  {option}
+                </button>
+              ))}
             </div>
-            <label className="field-group">
-              <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
-              <textarea
-                className="text-area"
-                rows={4}
-                value={prospect.notes}
-                onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
-              />
-            </label>
           </div>
+        ) : null}
+        {isExpanded ? (
+          <label className="field-group">
+            <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
+            <textarea
+              className="text-area"
+              rows={4}
+              value={prospect.notes}
+              onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
+            />
+          </label>
         ) : null}
       </CardMoreActions>
     </article>
@@ -4592,7 +4573,12 @@ function App() {
   function handleNavigationMarkCompleted(prospectId: string) {
     const prospect = routeProspects.find((entry) => entry.id === prospectId)
 
-    if (!prospect || prospect.routeCompleted) {
+    if (!prospect) {
+      return
+    }
+
+    if (prospect.routeCompleted) {
+      toggleRouteCompleted(prospectId)
       return
     }
 
@@ -6078,6 +6064,7 @@ function App() {
                 onRequestRemove={openRemoveProspectPrompt}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
+                onToggleCompleted={toggleRouteCompleted}
               />
             ))}
           </div>
@@ -6134,6 +6121,7 @@ function App() {
                 onFindFoodNearby={openFoodNearby}
                 onRequestRemove={openRemoveProspectPrompt}
                 onToggleRoute={toggleRoute}
+                onToggleCompleted={toggleRouteCompleted}
                 onToggleExpanded={toggleExpandedProspect}
                 onUpdateNotes={updateProspectNotes}
                 onUpdatePriority={updateProspectPriority}
