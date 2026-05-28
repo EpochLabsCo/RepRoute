@@ -1114,17 +1114,20 @@ function getEffectiveRadiusMiles(radiusChoice: SearchRadiusChoice, customRadiusM
 }
 
 function summarizeSearchFilters({
+  companyName,
   selectedIndustries,
   radiusLabel,
   market,
   usesCurrentLocation,
 }: {
+  companyName: string
   selectedIndustries: string[]
   radiusLabel: string
   market: string
   usesCurrentLocation: boolean
 }) {
   const parts = [
+    companyName.trim() ? uiText.search.filters.companyName(companyName.trim()) : '',
     radiusLabel,
     selectedIndustries.length > 0 ? uiText.search.filters.industries(selectedIndustries) : '',
     market.trim() ? uiText.search.filters.market(market.trim()) : '',
@@ -1132,6 +1135,49 @@ function summarizeSearchFilters({
   ].filter(Boolean)
 
   return parts.join(' · ')
+}
+
+function buildLiveSearchTerms(companyName: string, industries: SearchIndustry[]) {
+  const trimmedCompany = companyName.trim()
+
+  if (trimmedCompany) {
+    if (industries.length === 0) {
+      return [trimmedCompany]
+    }
+
+    const combinedTerms = industries
+      .slice(0, 6)
+      .map((industry) => `${trimmedCompany} ${industry}`.trim())
+
+    return [trimmedCompany, ...combinedTerms].filter(
+      (term, index, terms) => terms.indexOf(term) === index,
+    )
+  }
+
+  return [...industries]
+}
+
+function scoreCompanyNameMatch(businessName: string, companyQuery: string) {
+  const name = businessName.trim().toLowerCase()
+  const query = companyQuery.trim().toLowerCase()
+
+  if (!query) {
+    return 0
+  }
+
+  if (name === query) {
+    return 3
+  }
+
+  if (name.startsWith(query)) {
+    return 2
+  }
+
+  if (name.includes(query)) {
+    return 1
+  }
+
+  return 0
 }
 
 function dedupePlaces(places: GooglePlacesApiPlace[]) {
@@ -2486,6 +2532,7 @@ function App() {
     )
   const [arrivalDetectionRadiusFeet, setArrivalDetectionRadiusFeet] =
     usePersistentState<ArrivalDetectionRadiusFeet>(STORAGE_KEYS.arrivalDetectionRadiusFeet, 300)
+  const [companyNameQuery, setCompanyNameQuery] = useState('')
   const [manualMarket, setManualMarket] = useState('')
   const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>('current-location')
   const [customRadiusMiles, setCustomRadiusMiles] = useState('35')
@@ -2598,9 +2645,14 @@ function App() {
         setRouteTrackerState('tracking')
 
         const shouldAutoSearch =
-          selectedIndustries.length > 0 && (searchRadiusChoice === 'current-location' || !manualMarket.trim())
+          (selectedIndustries.length > 0 || companyNameQuery.trim()) &&
+          (searchRadiusChoice === 'current-location' || !manualMarket.trim())
         if (shouldAutoSearch) {
-          void runLiveSearch({ market: manualMarket, industries: selectedIndustries })
+          void runLiveSearch({
+            market: manualMarket,
+            industries: selectedIndustries,
+            companyName: companyNameQuery,
+          })
         }
       },
       (error) => {
@@ -4863,6 +4915,7 @@ function App() {
     }
 
     const filterSummary = summarizeSearchFilters({
+      companyName: companyNameQuery,
       selectedIndustries,
       radiusLabel: effectiveRadiusMiles
         ? uiText.search.filters.radius(effectiveRadiusMiles)
@@ -4959,12 +5012,15 @@ function App() {
   async function runLiveSearch({
     market,
     industries,
+    companyName,
   }: {
     market: string
     industries: SearchIndustry[]
+    companyName?: string
   }) {
     const trimmedMarket = market.trim()
-    const searchTerms = industries
+    const trimmedCompanyName = companyName?.trim() ?? ''
+    const searchTerms = buildLiveSearchTerms(trimmedCompanyName, industries)
 
     if (searchTerms.length === 0) {
       setLiveSearchIds([])
@@ -5026,6 +5082,7 @@ function App() {
 
     try {
       const filterSummary = summarizeSearchFilters({
+        companyName: trimmedCompanyName,
         selectedIndustries: industries,
         radiusLabel: uiText.search.filters.radius(effectiveRadiusMiles),
         market: shouldUseCurrentLocation ? '' : trimmedMarket,
@@ -5049,13 +5106,15 @@ function App() {
       console.info('usesCurrentLocation', shouldUseCurrentLocation)
       console.groupEnd()
 
+      const maxResultsPerTerm = trimmedCompanyName ? 10 : 8
+
       const results = await Promise.all(
         searchTerms.map(async (term) => ({
           term,
           result: await searchGooglePlaces({
             apiKey: googleMapsApiKey,
             query: trimmedMarket && !shouldUseCurrentLocation ? `${term} ${trimmedMarket}`.trim() : term,
-            maxResultCount: 8,
+            maxResultCount: maxResultsPerTerm,
             locationBias,
           }),
         })),
@@ -5107,7 +5166,7 @@ function App() {
         const distanceMilesPrecise = calculateDistanceMilesPrecise(activeSearchCenter, { lat, lng })
         const prospect = toLiveProspect(
           place,
-          matchingEntry?.term ?? industries[0],
+          matchingEntry?.term ?? industries[0] ?? trimmedCompanyName,
           fallbackLocationLabel,
           activeSearchCenter,
           distanceMilesPrecise,
@@ -5123,7 +5182,22 @@ function App() {
       const withinRadius = normalizedProspectsWithDistance.filter(
         (entry) => entry.distanceMilesPrecise <= effectiveRadiusMiles,
       )
-      withinRadius.sort((a, b) => a.distanceMilesPrecise - b.distanceMilesPrecise)
+      if (trimmedCompanyName) {
+        withinRadius.sort((left, right) => {
+          const nameScore =
+            scoreCompanyNameMatch(right.prospect.businessName, trimmedCompanyName) -
+            scoreCompanyNameMatch(left.prospect.businessName, trimmedCompanyName)
+
+          if (nameScore !== 0) {
+            return nameScore
+          }
+
+          return left.distanceMilesPrecise - right.distanceMilesPrecise
+        })
+      } else {
+        withinRadius.sort((left, right) => left.distanceMilesPrecise - right.distanceMilesPrecise)
+      }
+
       const normalizedProspects = withinRadius.map((entry) => entry.prospect)
 
       console.groupCollapsed('[RepRoute] Live Search radius filter results')
@@ -5191,6 +5265,7 @@ function App() {
     await runLiveSearch({
       market: manualMarket,
       industries: selectedIndustries,
+      companyName: companyNameQuery,
     })
   }
 
@@ -5889,6 +5964,30 @@ function App() {
           ) : null}
 
           <form className="live-search-form" onSubmit={handleLiveSearch}>
+            <label className="field-group">
+              <span className="field-label">{uiText.search.companyNameLabel}</span>
+              <div className="search-field search-field--with-clear">
+                <Search size={18} />
+                <input
+                  type="search"
+                  value={companyNameQuery}
+                  onChange={(event) => setCompanyNameQuery(event.target.value)}
+                  placeholder={uiText.search.companyNamePlaceholder}
+                  aria-label={uiText.search.companyNameLabel}
+                />
+                {companyNameQuery.trim() ? (
+                  <button
+                    type="button"
+                    className="search-field__clear"
+                    onClick={() => setCompanyNameQuery('')}
+                    aria-label={uiText.search.companyNameClear}
+                  >
+                    <X size={16} />
+                  </button>
+                ) : null}
+              </div>
+            </label>
+
             <label className="field-group">
               <span className="field-label">{uiText.search.marketLabel}</span>
               <div className="search-field">

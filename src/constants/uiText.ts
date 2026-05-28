@@ -96,6 +96,9 @@ export const uiText = {
     prominentTitle: 'Find prospects',
     prominentDescription:
       'Run a Live Search by target industry and radius, then save qualified Prospects or add them to a Route.',
+    companyNameLabel: 'Company name',
+    companyNamePlaceholder: 'Search for a specific company',
+    companyNameClear: 'Clear company name',
     marketLabel: 'City or market',
     marketPlaceholder: 'Optional city or market',
     marketHelp: 'Leave blank to search near your current location.',
@@ -117,7 +120,7 @@ export const uiText = {
       custom: 'Custom radius',
     },
     customRadiusLabel: 'Custom mileage radius',
-    industriesLabel: 'Target industries',
+    industriesLabel: 'Target industries (optional)',
     industriesPlaceholder: 'Select industries',
     industriesSearchPlaceholder: 'Search industries',
     industriesSelectAll: 'Select All',
@@ -269,6 +272,7 @@ export const uiText = {
       radius: (miles: number) => `${miles} miles`,
       industries: (industries: string[]) => industries.join(', '),
       market: (market: string) => `Market: ${market}`,
+      companyName: (name: string) => `Company: ${name}`,
       currentLocation: 'Current location',
     },
     location: {
@@ -819,9 +823,9 @@ export const uiText = {
   },
   errors: {
     apiErrorLabel: 'API Error',
-    searchMissingFields: 'Select at least one target industry before running a Live Search.',
+    searchMissingFields: 'Enter a company name or select at least one target industry.',
     searchMissingFieldsDetail:
-      'Live Search needs at least one target industry to return targeted business results.',
+      'Live Search needs a company name or at least one target industry to return business results.',
     searchFailedDetail: 'Live Search failed. Review the response and try again.',
     connectGooglePlaces: 'Enable Live Search to find businesses.',
     connectGooglePlacesDetail: 'Add a valid search API key to load live business results.',
