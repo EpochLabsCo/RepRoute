@@ -1,4 +1,3 @@
-import { useState, type ChangeEvent } from 'react'
 import { ArrowLeft, ExternalLink, MapPin } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
@@ -55,8 +54,7 @@ type RouteNavigationViewProps = {
   onSelectStop: (prospectId: string) => void
   onMarkArrived: (prospectId: string) => void
   onMarkCompleted: (prospectId: string) => void
-  onUpdateVisitNote: (prospectId: string, note: string) => void
-  onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
+  onOpenVisitWorkflow: (prospectId: string) => void
 }
 
 function formatDriveTime(minutes: number) {
@@ -92,8 +90,7 @@ function RouteNavigationView({
   onSelectStop,
   onMarkArrived,
   onMarkCompleted,
-  onUpdateVisitNote,
-  onUpdateOutcome,
+  onOpenVisitWorkflow,
 }: RouteNavigationViewProps) {
   const activeStop =
     routeProspects.find((prospect) => prospect.id === activeStopId) ??
@@ -197,8 +194,7 @@ function RouteNavigationView({
               onSelect={() => onSelectStop(prospect.id)}
               onMarkArrived={() => onMarkArrived(prospect.id)}
               onMarkCompleted={() => onMarkCompleted(prospect.id)}
-              onUpdateVisitNote={onUpdateVisitNote}
-              onUpdateOutcome={onUpdateOutcome}
+              onOpenVisitWorkflow={() => onOpenVisitWorkflow(prospect.id)}
             />
           ))}
         </div>
@@ -216,8 +212,7 @@ function RouteNavigationStopCard({
   onSelect,
   onMarkArrived,
   onMarkCompleted,
-  onUpdateVisitNote,
-  onUpdateOutcome,
+  onOpenVisitWorkflow,
 }: {
   prospect: RouteNavigationProspect
   index: number
@@ -227,15 +222,8 @@ function RouteNavigationStopCard({
   onSelect: () => void
   onMarkArrived: () => void
   onMarkCompleted: () => void
-  onUpdateVisitNote: (prospectId: string, note: string) => void
-  onUpdateOutcome: (prospectId: string, outcome: OutcomeTag | '') => void
+  onOpenVisitWorkflow: () => void
 }) {
-  const [notesOpen, setNotesOpen] = useState(isActive)
-
-  function handleNotesChange(event: ChangeEvent<HTMLTextAreaElement>) {
-    onUpdateVisitNote(prospect.id, event.target.value)
-  }
-
   return (
     <article
       className={`route-navigation-stop-card ${isActive ? 'route-navigation-stop-card--active' : ''} ${
@@ -273,49 +261,13 @@ function RouteNavigationStopCard({
       </div>
 
       <CardMoreActions>
-        <CardMoreMenuButton onClick={() => setNotesOpen((current) => !current)}>
-          {uiText.routes.inAppNavigation.addNotes}
+        <CardMoreMenuButton onClick={onOpenVisitWorkflow}>
+          {uiText.routes.visitWorkflow.heading}
         </CardMoreMenuButton>
         {prospect.routeCompleted ? (
           <CardMoreMenuButton onClick={onMarkCompleted}>
             {uiText.routes.currentStop.quickActions.markIncomplete}
           </CardMoreMenuButton>
-        ) : null}
-        {notesOpen ? (
-          <div className="route-navigation-stop-card__panel">
-            <label className="field-group">
-              <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-              <textarea
-                className="text-area text-area--compact"
-                rows={3}
-                value={prospect.visitNote}
-                onChange={handleNotesChange}
-                placeholder={uiText.routes.quickNotePlaceholder}
-              />
-            </label>
-
-            <div className="field-group">
-              <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-              <div className="route-outcome-grid">
-                {uiText.routes.outcomeTags.map((option) => (
-                  <button
-                    type="button"
-                    key={option}
-                    className={`route-outcome-chip ${
-                      prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-                    }`}
-                    onClick={() =>
-                      onUpdateOutcome(prospect.id, prospect.visitOutcome === option ? '' : (option as OutcomeTag))
-                    }
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <p className="editor-hint">{uiText.routes.inAppNavigation.noTurnByTurn}</p>
-          </div>
         ) : null}
       </CardMoreActions>
     </article>

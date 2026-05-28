@@ -445,6 +445,7 @@ export const uiText = {
       heading: 'Visit details',
       close: 'Close',
       done: 'Save & continue',
+      contactDetails: 'Contact & prospect notes',
     },
     inAppNavigation: {
       eyebrow: 'Route Navigation',
@@ -478,7 +479,6 @@ export const uiText = {
       arrived: 'Arrived',
       markArrived: 'Mark Arrived',
       markCompleted: 'Mark Completed',
-      addNotes: 'Add Notes',
       distanceToStop: (distance: string) => `${distance} to stop`,
       timeToStop: (duration: string) => `${duration} drive`,
       atStart: 'At route start',
@@ -581,7 +581,6 @@ export const uiText = {
         saveProspect: 'Save Prospect',
         openSaved: 'Open Saved',
         editContactInfo: 'Edit Contact Info',
-        addVisitNotes: 'Add Visit Notes',
         setFollowUp: 'Set Follow-Up',
         changePriority: 'Change Priority',
         addOutcomeTag: 'Add Outcome Tag',
@@ -602,6 +601,12 @@ export const uiText = {
     markStopCompleteAria: 'Mark stop complete',
     markStopIncompleteAria: 'Mark stop incomplete',
     reorderStopAria: 'Reorder stop',
+    reorder: {
+      dragHint: 'Drag to reorder stops',
+      dismissHint: 'Got it',
+      handleLabel: 'Move',
+      stopAria: 'Drag to reorder this stop',
+    },
     actions: {
       callBusiness: 'Call Business',
       openWebsite: 'Open Website',

@@ -1,4 +1,8 @@
-import BusinessCardSection from './BusinessCardSection'
+import { MapPin } from 'lucide-react'
+import BusinessCardContactFields from './BusinessCardContactFields'
+import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
+import BusinessCardScanButton from './BusinessCardScanButton'
+import { MarkCompletedButton } from './ProspectCardActions'
 import { uiText } from '../constants/uiText'
 
 export type VisitWorkflowOutcomeTag =
@@ -32,10 +36,13 @@ export type VisitWorkflowProspect = {
 type VisitWorkflowDrawerProps = {
   prospect: VisitWorkflowProspect
   cardPreviewUrl: string | null
+  isArrived: boolean
   outcomeOptions: readonly VisitWorkflowOutcomeTag[]
   priorityOptions: readonly VisitWorkflowPriority[]
   onClose: () => void
   onDone: () => void
+  onMarkArrived: () => void
+  onToggleCompleted: () => void
   onUpdateContactDetails: (
     fields: Partial<{
       contactName: string
@@ -57,10 +64,13 @@ type VisitWorkflowDrawerProps = {
 export default function VisitWorkflowDrawer({
   prospect,
   cardPreviewUrl,
+  isArrived,
   outcomeOptions,
   priorityOptions,
   onClose,
   onDone,
+  onMarkArrived,
+  onToggleCompleted,
   onUpdateContactDetails,
   onUpdateNotes,
   onUpdateVisitNote,
@@ -91,7 +101,23 @@ export default function VisitWorkflowDrawer({
         </header>
 
         <div className="visit-workflow-drawer__body">
-          <label className="field-group">
+          <div className="visit-workflow-drawer__steps">
+            <button
+              type="button"
+              className={`visit-workflow-step ${isArrived ? 'visit-workflow-step--done' : ''}`}
+              onClick={onMarkArrived}
+              disabled={prospect.routeCompleted}
+            >
+              <MapPin size={16} />
+              {isArrived ? uiText.routes.inAppNavigation.arrived : uiText.routes.inAppNavigation.markArrived}
+            </button>
+            <MarkCompletedButton
+              completed={prospect.routeCompleted}
+              onClick={onToggleCompleted}
+            />
+          </div>
+
+          <label className="field-group visit-workflow-drawer__section">
             <span className="field-label">{uiText.routes.quickNoteLabel}</span>
             <textarea
               className="text-area text-area--compact"
@@ -102,7 +128,40 @@ export default function VisitWorkflowDrawer({
             />
           </label>
 
-          <div className="field-group">
+          <div className="visit-workflow-drawer__section visit-workflow-card-block">
+            <BusinessCardScanButton
+              className="button button--wide visit-workflow-card-block__scan"
+              onFileSelected={onRouteBusinessCardCapture}
+            />
+            {cardPreviewUrl ? (
+              <BusinessCardPreviewStrip
+                prospectId={prospect.id}
+                previewUrl={cardPreviewUrl}
+                onCapture={onRouteBusinessCardCapture}
+                onRemoveCard={onRemoveBusinessCard}
+              />
+            ) : null}
+          </div>
+
+          <div className="field-group visit-workflow-drawer__section">
+            <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
+            <div className="route-outcome-grid">
+              {outcomeOptions.map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  className={`route-outcome-chip ${
+                    prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
+                  }`}
+                  onClick={() => onUpdateOutcome(prospect.visitOutcome === option ? '' : option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field-group visit-workflow-drawer__section">
             <div className="field-header">
               <span className="field-label">{uiText.search.prospectCard.followUpDate}</span>
               {prospect.followUpDate ? (
@@ -137,74 +196,53 @@ export default function VisitWorkflowDrawer({
             </button>
           </div>
 
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
-            <div className="route-outcome-grid">
-              {outcomeOptions.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`route-outcome-chip ${
-                    prospect.visitOutcome === option ? 'route-outcome-chip--active' : ''
-                  }`}
-                  onClick={() => onUpdateOutcome(prospect.visitOutcome === option ? '' : option)}
-                >
-                  {option}
-                </button>
-              ))}
+          <details className="visit-workflow-drawer__details">
+            <summary>{uiText.routes.visitWorkflow.contactDetails}</summary>
+            <div className="visit-workflow-drawer__details-body">
+              <BusinessCardContactFields
+                contact={{
+                  contactName: prospect.contactName,
+                  contactTitle: prospect.contactTitle,
+                  contactPhone: prospect.phone,
+                  contactEmail: prospect.contactEmail,
+                }}
+                onUpdateContact={(fields) => onUpdateContactDetails(fields)}
+              />
+              <div className="field-group">
+                <span className="field-label">{uiText.routes.currentStop.contactFields.website}</span>
+                <input
+                  className="text-input"
+                  type="url"
+                  value={prospect.website}
+                  onChange={(event) => onUpdateContactDetails({ contactWebsite: event.target.value })}
+                />
+              </div>
+              <label className="field-group">
+                <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
+                <textarea
+                  className="text-area text-area--compact"
+                  rows={3}
+                  value={prospect.notes}
+                  onChange={(event) => onUpdateNotes(event.target.value)}
+                />
+              </label>
+              <div className="field-group">
+                <span className="field-label">{uiText.search.prospectCard.priority}</span>
+                <div className="segment-row">
+                  {priorityOptions.map((option) => (
+                    <button
+                      type="button"
+                      key={option}
+                      className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                      onClick={() => onUpdatePriority(option)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-
-          <BusinessCardSection
-            prospectId={prospect.id}
-            previewUrl={cardPreviewUrl}
-            contact={{
-              contactName: prospect.contactName,
-              contactTitle: prospect.contactTitle,
-              contactPhone: prospect.phone,
-              contactEmail: prospect.contactEmail,
-            }}
-            onCapture={onRouteBusinessCardCapture}
-            onRemoveCard={onRemoveBusinessCard}
-            onUpdateContact={(fields) => onUpdateContactDetails(fields)}
-            showScanButton
-          />
-
-          <div className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.website}</span>
-            <input
-              className="text-input"
-              type="url"
-              value={prospect.website}
-              onChange={(event) => onUpdateContactDetails({ contactWebsite: event.target.value })}
-            />
-          </div>
-
-          <label className="field-group">
-            <span className="field-label">{uiText.routes.currentStop.contactFields.notes}</span>
-            <textarea
-              className="text-area text-area--compact"
-              rows={3}
-              value={prospect.notes}
-              onChange={(event) => onUpdateNotes(event.target.value)}
-            />
-          </label>
-
-          <div className="field-group">
-            <span className="field-label">{uiText.search.prospectCard.priority}</span>
-            <div className="segment-row">
-              {priorityOptions.map((option) => (
-                <button
-                  type="button"
-                  key={option}
-                  className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-                  onClick={() => onUpdatePriority(option)}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
+          </details>
         </div>
 
         <div className="modal-sheet__actions visit-workflow-drawer__footer">

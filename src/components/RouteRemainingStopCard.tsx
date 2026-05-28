@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical } from 'lucide-react'
 import type { RouteNavigationLegSummary } from './RouteNavigationView'
+import RouteReorderHandle from './RouteReorderHandle'
 import { uiText } from '../constants/uiText'
 
 type RouteRemainingStopCardProps = {
@@ -42,15 +42,7 @@ export default function RouteRemainingStopCard({
         <strong>{businessName}</strong>
         {metrics ? <span className="route-remaining-stop__metrics">{metrics}</span> : null}
       </div>
-      <button
-        type="button"
-        className="drag-handle route-remaining-stop__handle"
-        aria-label={uiText.routes.reorderStopAria}
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical size={18} />
-      </button>
+      <RouteReorderHandle dragAttributes={attributes} dragListeners={listeners} />
     </article>
   )
 }

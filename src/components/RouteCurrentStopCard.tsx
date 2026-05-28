@@ -1,12 +1,14 @@
 import {
   Bookmark,
   ExternalLink,
+  MapPin,
   Navigation,
   Phone,
   Trash2,
   UtensilsCrossed,
 } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
+import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
 import {
   CardMoreActions,
@@ -28,15 +30,23 @@ type RouteCurrentStopCardProps = {
   websiteHref: string | null
   navigateLabel: string
   isSaved: boolean
+  isArrived: boolean
   routeCompleted: boolean
+  visitNote: string
+  cardPreviewUrl: string | null
+  prospectId: string
+  onUpdateVisitNote: (note: string) => void
   onNavigate: () => void
+  onMarkArrived: () => void
   onToggleCompleted: () => void
-  onOpenVisitWorkflow: (intent: 'complete' | 'notes') => void
+  onOpenCompleteVisit: () => void
+  onOpenVisitDetails: () => void
   onOpenSaved: () => void
   onToggleSaved: () => void
   onFindFoodNearby: () => void
   onRequestRemove: () => void
   onScanBusinessCard: (file: File) => void
+  onRemoveBusinessCard: () => void
 }
 
 export default function RouteCurrentStopCard({
@@ -50,15 +60,23 @@ export default function RouteCurrentStopCard({
   websiteHref,
   navigateLabel,
   isSaved,
+  isArrived,
   routeCompleted,
+  visitNote,
+  cardPreviewUrl,
+  prospectId,
+  onUpdateVisitNote,
   onNavigate,
+  onMarkArrived,
   onToggleCompleted,
-  onOpenVisitWorkflow,
+  onOpenCompleteVisit,
+  onOpenVisitDetails,
   onOpenSaved,
   onToggleSaved,
   onFindFoodNearby,
   onRequestRemove,
   onScanBusinessCard,
+  onRemoveBusinessCard,
 }: RouteCurrentStopCardProps) {
   return (
     <section className="panel section-panel route-current-stop-card">
@@ -83,25 +101,52 @@ export default function RouteCurrentStopCard({
             {uiText.routes.actions.callBusiness}
           </a>
         ) : null}
-        <MarkCompletedButton
-          completed={routeCompleted}
-          onClick={() => onOpenVisitWorkflow('complete')}
+        <button
+          type="button"
+          className={`button button--ghost route-primary-action ${isArrived ? 'route-primary-action--arrived' : ''}`}
+          onClick={onMarkArrived}
+          disabled={routeCompleted}
+        >
+          <MapPin size={18} />
+          {isArrived ? uiText.routes.inAppNavigation.arrived : uiText.routes.inAppNavigation.markArrived}
+        </button>
+        <MarkCompletedButton completed={routeCompleted} onClick={onOpenCompleteVisit} />
+      </div>
+
+      <div className="route-current-stop-card__visit-capture">
+        <label className="field-group route-current-stop-card__quick-note">
+          <span className="field-label">{uiText.routes.quickNoteLabel}</span>
+          <textarea
+            className="text-area text-area--compact"
+            rows={3}
+            value={visitNote}
+            onChange={(event) => onUpdateVisitNote(event.target.value)}
+            placeholder={uiText.routes.quickNotePlaceholder}
+          />
+        </label>
+        <BusinessCardScanButton
+          className="button button--wide route-current-stop-card__scan-card"
+          onFileSelected={onScanBusinessCard}
         />
+        {cardPreviewUrl ? (
+          <BusinessCardPreviewStrip
+            prospectId={prospectId}
+            previewUrl={cardPreviewUrl}
+            onCapture={onScanBusinessCard}
+            onRemoveCard={onRemoveBusinessCard}
+          />
+        ) : null}
       </div>
 
       <CardMoreActions>
-        <BusinessCardScanButton className="card-more__action" onFileSelected={onScanBusinessCard} />
-        <CardMoreMenuButton onClick={() => onOpenVisitWorkflow('notes')}>
-          {uiText.routes.currentStop.quickActions.addVisitNotes}
+        <CardMoreMenuButton onClick={onOpenVisitDetails}>
+          {uiText.routes.visitWorkflow.heading}
         </CardMoreMenuButton>
         <CardMoreMenuButton onClick={() => (isSaved ? onOpenSaved() : onToggleSaved())}>
           <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
           {isSaved
             ? uiText.routes.currentStop.quickActions.openSaved
             : uiText.routes.currentStop.quickActions.saveProspect}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={() => onOpenVisitWorkflow('notes')}>
-          {uiText.routes.currentStop.quickActions.editContactInfo}
         </CardMoreMenuButton>
         <CardMoreMenuButton onClick={onFindFoodNearby}>
           <UtensilsCrossed size={16} />

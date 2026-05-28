@@ -331,7 +331,10 @@ const STORAGE_KEYS = {
   notificationReminderLog: 'reproute:notification-reminder-log',
   arrivalDetectionRadiusFeet: 'reproute:arrival-detection-radius-feet',
   theme: 'reproute:theme',
+  routeReorderHintDismissed: 'reproute:route-reorder-hint-dismissed',
 } as const
+
+const ROUTE_REORDER_HINT_STORAGE_KEY = STORAGE_KEYS.routeReorderHintDismissed
 
 const AUSTIN_FALLBACK = { lat: 30.2672, lng: -97.7431 }
 
@@ -1761,7 +1764,9 @@ function ProspectCard({
           {uiText.foodNearby.findFoodNearby}
         </CardMoreMenuButton>
         <CardMoreMenuButton onClick={() => onToggleExpanded(prospect.id)}>
-          {isExpanded ? uiText.search.prospectCard.hide : uiText.routes.currentStop.quickActions.addVisitNotes}
+          {isExpanded
+            ? uiText.search.prospectCard.hide
+            : uiText.search.prospectCard.prospectNotes}
         </CardMoreMenuButton>
         <CardMoreMenuButton onClick={() => setPriorityOpen((current) => !current)}>
           {uiText.routes.currentStop.quickActions.changePriority}
@@ -1922,10 +1927,15 @@ function App() {
   )
   const [travelMode, setTravelMode] = useState<TravelMode>('driving')
   const [remainingStopsExpanded, setRemainingStopsExpanded] = useState(false)
+  const [showReorderHint, setShowReorderHint] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(ROUTE_REORDER_HINT_STORAGE_KEY) !== '1',
+  )
   const [routeDiagnosticsOpen, setRouteDiagnosticsOpen] = useState(false)
   const [visitWorkflow, setVisitWorkflow] = useState<{
     prospectId: string
-    intent: 'complete' | 'notes'
+    intent: 'complete' | 'visit'
   } | null>(null)
   const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
   const [crmExportScope, setCrmExportScope] = useState<CrmExportScope>('all')
@@ -3691,7 +3701,21 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [foodNearbySession])
 
+  function dismissReorderHint() {
+    if (!showReorderHint) {
+      return
+    }
+
+    setShowReorderHint(false)
+    try {
+      window.localStorage.setItem(ROUTE_REORDER_HINT_STORAGE_KEY, '1')
+    } catch {
+      // Ignore storage failures; hint may reappear next session.
+    }
+  }
+
   function handleRouteDragEnd(event: DragEndEvent) {
+    dismissReorderHint()
     const { active, over } = event
 
     if (!over || active.id === over.id) {
@@ -3984,21 +4008,7 @@ function App() {
       return
     }
 
-    const currentIndex = routeProspects.findIndex((entry) => entry.id === prospectId)
-    const nextStop =
-      routeProspects.slice(currentIndex + 1).find((entry) => !entry.routeCompleted) ??
-      routeProspects.find((entry) => !entry.routeCompleted && entry.id !== prospectId)
-
-    toggleRouteCompleted(prospectId)
-    setNavigationArrivedStopIds((current) => {
-      const next = { ...current }
-      delete next[prospectId]
-      return next
-    })
-
-    if (nextStop) {
-      setNavigationActiveStopId(nextStop.id)
-    }
+    openVisitWorkflow(prospectId, 'complete')
   }
 
   function handleOpenRouteInMaps() {
@@ -4332,7 +4342,7 @@ function App() {
     }
   }
 
-  function openVisitWorkflow(prospectId: string, intent: 'complete' | 'notes') {
+  function openVisitWorkflow(prospectId: string, intent: 'complete' | 'visit') {
     setVisitWorkflow({ prospectId, intent })
   }
 
@@ -4341,10 +4351,28 @@ function App() {
   }
 
   function handleVisitWorkflowDone() {
-    if (visitWorkflow?.intent === 'complete') {
-      const prospect = prospectMap.get(visitWorkflow.prospectId)
-      if (prospect && !prospect.routeCompleted) {
-        toggleRouteCompleted(visitWorkflow.prospectId)
+    if (!visitWorkflow) {
+      return
+    }
+
+    const { prospectId, intent } = visitWorkflow
+    const prospect = prospectMap.get(prospectId)
+
+    if (intent === 'complete' && prospect && !prospect.routeCompleted) {
+      const currentIndex = routeProspects.findIndex((entry) => entry.id === prospectId)
+      const nextStop =
+        routeProspects.slice(currentIndex + 1).find((entry) => !entry.routeCompleted) ??
+        routeProspects.find((entry) => !entry.routeCompleted && entry.id !== prospectId)
+
+      toggleRouteCompleted(prospectId)
+      setNavigationArrivedStopIds((current) => {
+        const next = { ...current }
+        delete next[prospectId]
+        return next
+      })
+
+      if (routeNavigationOpen && nextStop) {
+        setNavigationActiveStopId(nextStop.id)
       }
     }
 
@@ -5006,8 +5034,7 @@ function App() {
           onSelectStop={setNavigationActiveStopId}
           onMarkArrived={handleNavigationMarkArrived}
           onMarkCompleted={handleNavigationMarkCompleted}
-          onUpdateVisitNote={updateVisitNote}
-          onUpdateOutcome={updateVisitOutcome}
+          onOpenVisitWorkflow={(prospectId) => openVisitWorkflow(prospectId, 'visit')}
         />
       )
     }
@@ -5171,15 +5198,23 @@ function App() {
                     : uiText.routes.actions.navigateDrive
                 }
                 isSaved={savedIds.includes(currentStopProspect.id)}
+                isArrived={Boolean(navigationArrivedStopIds[currentStopProspect.id])}
                 routeCompleted={Boolean(currentStopProspect.routeCompleted)}
+                visitNote={currentStopProspect.visitNote}
+                cardPreviewUrl={businessCardPreviewUrls[currentStopProspect.id] ?? null}
+                prospectId={currentStopProspect.id}
+                onUpdateVisitNote={(note) => updateVisitNote(currentStopProspect.id, note)}
                 onNavigate={() => handleNavigateProspect(currentStopProspect)}
+                onMarkArrived={() => handleNavigationMarkArrived(currentStopProspect.id)}
                 onToggleCompleted={() => toggleRouteCompleted(currentStopProspect.id)}
-                onOpenVisitWorkflow={(intent) => openVisitWorkflow(currentStopProspect.id, intent)}
+                onOpenCompleteVisit={() => openVisitWorkflow(currentStopProspect.id, 'complete')}
+                onOpenVisitDetails={() => openVisitWorkflow(currentStopProspect.id, 'visit')}
                 onOpenSaved={() => openSavedProspect(currentStopProspect.id)}
                 onToggleSaved={() => toggleSaved(currentStopProspect.id)}
                 onFindFoodNearby={() => openFoodNearby(currentStopProspect.id)}
                 onRequestRemove={() => openRemoveProspectPrompt(currentStopProspect.id)}
                 onScanBusinessCard={(file) => handleRouteBusinessCardCapture(currentStopProspect.id, file)}
+                onRemoveBusinessCard={() => removeBusinessCard(currentStopProspect.id)}
               />
             ) : null}
 
@@ -5203,6 +5238,14 @@ function App() {
                     collisionDetection={closestCenter}
                     onDragEnd={handleRouteDragEnd}
                   >
+                    {showReorderHint && remainingRouteProspects.length > 1 ? (
+                      <div className="route-reorder-hint" role="note">
+                        <p>{uiText.routes.reorder.dragHint}</p>
+                        <button type="button" className="text-button" onClick={dismissReorderHint}>
+                          {uiText.routes.reorder.dismissHint}
+                        </button>
+                      </div>
+                    ) : null}
                     <SortableContext
                       items={routeProspects.map((prospect) => prospect.id)}
                       strategy={verticalListSortingStrategy}
@@ -6260,10 +6303,13 @@ function App() {
           <VisitWorkflowDrawer
             prospect={visitWorkflowProspect}
             cardPreviewUrl={businessCardPreviewUrls[visitWorkflowProspect.id] ?? null}
+            isArrived={Boolean(navigationArrivedStopIds[visitWorkflowProspect.id])}
             outcomeOptions={ROUTE_OUTCOME_OPTIONS}
             priorityOptions={ASSIGNED_PRIORITY_OPTIONS}
             onClose={closeVisitWorkflow}
             onDone={handleVisitWorkflowDone}
+            onMarkArrived={() => handleNavigationMarkArrived(visitWorkflowProspect.id)}
+            onToggleCompleted={() => toggleRouteCompleted(visitWorkflowProspect.id)}
             onUpdateContactDetails={(fields) => updateContactDetails(visitWorkflowProspect.id, fields)}
             onUpdateNotes={(notes) => updateProspectNotes(visitWorkflowProspect.id, notes)}
             onUpdateVisitNote={(note) => updateVisitNote(visitWorkflowProspect.id, note)}
