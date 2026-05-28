@@ -104,6 +104,8 @@ export const uiText = {
     marketHelp: 'Leave blank to search near your current location.',
     locationPanel: {
       heading: 'Location access',
+      statusHeading: 'Location Status',
+      statusIdle: 'Location not enabled',
       helper: 'Use your current location to search businesses within your selected mileage radius.',
       useCurrentLocation: 'Use My Current Location',
       recommendedHelper: 'Recommended for finding businesses near you.',
@@ -111,6 +113,7 @@ export const uiText = {
       locating: 'Locating…',
       locationEnabled: 'Location Enabled',
       locationUnavailable: 'Location Unavailable',
+      retryLocation: 'Retry Location',
       statusOn: 'Location on',
       statusOff: 'Location off',
       statusNeeded: 'Permission needed',

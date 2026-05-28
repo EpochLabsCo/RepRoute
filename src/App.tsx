@@ -2656,10 +2656,6 @@ function App() {
       return
     }
 
-    if (searchLocationState === 'granted') {
-      return
-    }
-
     setSearchLocationState('requesting')
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -5953,49 +5949,32 @@ function App() {
     const locationLocating = searchLocationState === 'requesting'
     const locationPulse = !locationEnabled && !locationLocating && !locationUnavailable
 
-    const locationButtonLabel = locationLocating
+    const locationStatusText = locationLocating
       ? uiText.search.locationPanel.locating
       : locationEnabled
         ? uiText.search.locationPanel.locationEnabled
         : locationUnavailable
           ? uiText.search.locationPanel.locationUnavailable
-          : uiText.search.locationPanel.useCurrentLocation
+          : uiText.search.locationPanel.statusIdle
+
+    const locationActionLabel = locationLocating
+      ? uiText.search.locationPanel.locating
+      : locationEnabled || locationUnavailable
+        ? uiText.search.locationPanel.retryLocation
+        : uiText.search.locationPanel.useCurrentLocation
+
+    const locationStatusVariant = locationLocating
+      ? 'locating'
+      : locationEnabled
+        ? 'enabled'
+        : locationUnavailable
+          ? 'unavailable'
+          : 'idle'
 
     return (
       <>
         <section className="panel section-panel section-panel--compact">
           <form className="live-search-form" onSubmit={handleLiveSearch}>
-            <div className="search-location-primary">
-              <button
-                type="button"
-                className={`button button--wide search-location-button ${
-                  locationEnabled ? 'search-location-button--enabled' : ''
-                } ${locationLocating ? 'search-location-button--loading' : ''} ${
-                  locationUnavailable ? 'search-location-button--unavailable' : ''
-                } ${locationPulse ? 'search-location-button--pulse' : ''}`}
-                onClick={requestSearchLocationAccess}
-                disabled={locationLocating || searchLocationState === 'unsupported'}
-                aria-live="polite"
-              >
-                {locationLocating ? (
-                  <Loader2 size={20} className="search-location-button__spinner" />
-                ) : locationEnabled ? (
-                  <CheckCircle2 size={20} />
-                ) : (
-                  <LocateFixed size={20} />
-                )}
-                <span>{locationButtonLabel}</span>
-              </button>
-              <p className="search-location-primary__helper">
-                {locationEnabled
-                  ? uiText.search.locationPanel.enabledHelper
-                  : uiText.search.locationPanel.recommendedHelper}
-              </p>
-              {searchLocationState === 'denied' ? (
-                <p className="search-location-primary__blocked">{uiText.search.locationPanel.blocked}</p>
-              ) : null}
-            </div>
-
             <label className="field-group">
               <span className="field-label">{uiText.search.companyNameLabel}</span>
               <div className="search-field search-field--with-clear">
@@ -6035,7 +6014,64 @@ function App() {
               <p className="field-hint">{uiText.search.marketHelp}</p>
             </label>
 
-            <label className="field-group">
+            <div className="search-location-cluster">
+              <div
+                className={`search-location-status search-location-status--${locationStatusVariant}`}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="search-location-status__icon" aria-hidden="true">
+                  {locationLocating ? (
+                    <Loader2 size={22} className="search-location-status__spinner" />
+                  ) : locationEnabled ? (
+                    <CheckCircle2 size={22} />
+                  ) : (
+                    <LocateFixed size={22} />
+                  )}
+                </span>
+                <div className="search-location-status__copy">
+                  <span className="search-location-status__eyebrow">
+                    {uiText.search.locationPanel.statusHeading}
+                  </span>
+                  <strong>{locationStatusText}</strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className={`search-location-action ${
+                  locationEnabled ? 'search-location-action--enabled' : ''
+                } ${locationLocating ? 'search-location-action--loading' : ''} ${
+                  locationUnavailable ? 'search-location-action--retry' : ''
+                } ${locationPulse ? 'search-location-action--pulse' : ''}`}
+                onClick={requestSearchLocationAccess}
+                disabled={locationLocating || searchLocationState === 'unsupported'}
+                aria-label={locationActionLabel}
+              >
+                <span className="search-location-action__lead">
+                  <span className="search-location-action__icon" aria-hidden="true">
+                    {locationLocating ? (
+                      <Loader2 size={22} className="search-location-action__spinner" />
+                    ) : (
+                      <LocateFixed size={22} />
+                    )}
+                  </span>
+                  <span className="search-location-action__label">{locationActionLabel}</span>
+                </span>
+                <ChevronRight size={22} className="search-location-action__chevron" aria-hidden="true" />
+              </button>
+
+              <p className="search-location-cluster__helper">
+                {locationEnabled
+                  ? uiText.search.locationPanel.enabledHelper
+                  : uiText.search.locationPanel.recommendedHelper}
+              </p>
+              {searchLocationState === 'denied' ? (
+                <p className="search-location-cluster__blocked">{uiText.search.locationPanel.blocked}</p>
+              ) : null}
+            </div>
+
+            <label className="field-group search-location-cluster__radius">
               <span className="field-label">{uiText.search.radiusLabel}</span>
               <select
                 className="text-input filter-select"
