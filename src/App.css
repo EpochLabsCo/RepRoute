@@ -329,12 +329,6 @@
   min-width: 0;
 }
 
-.travel-mode-toolbar {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -485,25 +479,15 @@
 
 .route-operational-header {
   display: grid;
-  gap: 8px;
-  padding: 4px 2px 8px;
-}
-
-.route-operational-header__title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
+  padding: 0 2px 6px;
 }
 
 .route-operational-header__title {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.4rem;
   font-weight: 800;
-}
-
-.route-operational-header__mode {
-  flex-wrap: nowrap;
+  line-height: 1.15;
 }
 
 .route-operational-header__stats {

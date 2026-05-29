@@ -122,7 +122,6 @@ import {
 type AssignedPriority = 'Hot' | 'Warm' | 'Cold'
 type Priority = AssignedPriority | 'Unassigned'
 type Theme = 'dark' | 'light'
-type TravelMode = 'driving' | 'walking'
 type View = 'dashboard' | 'map' | 'search' | 'crm-export' | 'follow-ups' | 'settings'
 
 type FoodNearbySession = {
@@ -546,8 +545,8 @@ function resolveDirectionsLocation(prospect: Prospect) {
   return null
 }
 
-function getGoogleDirectionsTravelMode(mode: TravelMode) {
-  return mode === 'walking' ? google.maps.TravelMode.WALKING : google.maps.TravelMode.DRIVING
+function getRouteDirectionsTravelMode() {
+  return google.maps.TravelMode.DRIVING
 }
 
 function createFallbackLiveProspectId(place: GooglePlacesApiPlace, query: string) {
@@ -657,12 +656,12 @@ function getMapsDestination(prospect: Prospect) {
     : `${prospect.location.lat},${prospect.location.lng}`
 }
 
-function getGoogleMapsHref(prospect: Prospect, travelMode: TravelMode) {
+function getGoogleMapsHref(prospect: Prospect) {
   const url = new URL('https://www.google.com/maps/dir/')
 
   url.searchParams.set('api', '1')
   url.searchParams.set('destination', getMapsDestination(prospect))
-  url.searchParams.set('travelmode', travelMode)
+  url.searchParams.set('travelmode', 'driving')
 
   if (prospect.googlePlaceId) {
     url.searchParams.set('destination_place_id', prospect.googlePlaceId)
@@ -671,11 +670,11 @@ function getGoogleMapsHref(prospect: Prospect, travelMode: TravelMode) {
   return url.toString()
 }
 
-function getAppleMapsHref(prospect: Prospect, travelMode: TravelMode) {
+function getAppleMapsHref(prospect: Prospect) {
   const url = new URL('https://maps.apple.com/')
 
   url.searchParams.set('daddr', `${prospect.location.lat},${prospect.location.lng}`)
-  url.searchParams.set('dirflg', travelMode === 'walking' ? 'w' : 'd')
+  url.searchParams.set('dirflg', 'd')
   url.searchParams.set('q', prospect.businessName)
 
   return url.toString()
@@ -707,25 +706,24 @@ function prefersGoogleMaps() {
   return /Android/i.test(userAgent) || /Chrome|CriOS/i.test(userAgent)
 }
 
-function createNavigateHref(prospect: Prospect, travelMode: TravelMode) {
+function createNavigateHref(prospect: Prospect) {
   if (prefersAppleMaps()) {
-    return getAppleMapsHref(prospect, travelMode)
+    return getAppleMapsHref(prospect)
   }
 
   if (prefersGoogleMaps()) {
-    return getGoogleMapsHref(prospect, travelMode)
+    return getGoogleMapsHref(prospect)
   }
 
-  return getGoogleMapsHref(prospect, travelMode)
+  return getGoogleMapsHref(prospect)
 }
 
 function createEntireRouteNavigateHref(
   origin: string | { lat: number; lng: number } | null,
   routeProspects: Prospect[],
-  travelMode: TravelMode,
 ) {
   if (routeProspects.length <= 1) {
-    return routeProspects[0] ? createNavigateHref(routeProspects[0], travelMode) : ''
+    return routeProspects[0] ? createNavigateHref(routeProspects[0]) : ''
   }
 
   const url = new URL('https://www.google.com/maps/dir/')
@@ -736,7 +734,7 @@ function createEntireRouteNavigateHref(
     url.searchParams.set('origin', formatOriginParam(origin))
   }
   url.searchParams.set('destination', orderedStops[orderedStops.length - 1] ?? '')
-  url.searchParams.set('travelmode', travelMode)
+  url.searchParams.set('travelmode', 'driving')
 
   const waypoints = orderedStops.slice(0, -1)
 
@@ -1601,7 +1599,6 @@ function LiveSearchResultCard({
   prospect,
   isSaved,
   isInRoute,
-  travelMode,
   onNavigate,
   onOpenSaved,
   onFindFoodNearby,
@@ -1614,7 +1611,6 @@ function LiveSearchResultCard({
   prospect: Prospect
   isSaved: boolean
   isInRoute: boolean
-  travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onOpenSaved: (prospectId: string) => void
   onFindFoodNearby: (prospectId: string) => void
@@ -1647,9 +1643,7 @@ function LiveSearchResultCard({
       <ProspectPrimaryActions
         callHref={callHref}
         onNavigate={() => onNavigate(prospect)}
-        navigateLabel={
-          travelMode === 'walking' ? uiText.search.card.navigateWalk : uiText.search.card.navigateDrive
-        }
+        navigateLabel={uiText.search.card.navigate}
         isInRoute={isInRoute}
         onToggleRoute={() => onToggleRoute(prospect.id)}
         addRouteLabel={uiText.search.card.addToRoute}
@@ -1713,7 +1707,6 @@ function ProspectCard({
   prospect,
   isInRoute,
   isExpanded,
-  travelMode,
   onNavigate,
   onFindFoodNearby,
   onRequestRemove,
@@ -1726,7 +1719,6 @@ function ProspectCard({
   prospect: Prospect
   isInRoute: boolean
   isExpanded: boolean
-  travelMode: TravelMode
   onNavigate: (prospect: Prospect) => void
   onFindFoodNearby: (prospectId: string) => void
   onRequestRemove: (prospectId: string) => void
@@ -1760,9 +1752,7 @@ function ProspectCard({
       <ProspectPrimaryActions
         callHref={callHref}
         onNavigate={() => onNavigate(prospect)}
-        navigateLabel={
-          travelMode === 'walking' ? uiText.search.card.navigateWalk : uiText.search.card.navigateDrive
-        }
+        navigateLabel={uiText.search.card.navigate}
         isInRoute={isInRoute}
         onToggleRoute={() => onToggleRoute(prospect.id)}
         addRouteLabel={uiText.search.card.addToRoute}
@@ -1945,7 +1935,6 @@ function App() {
   const [routeTrackerLocation, setRouteTrackerLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   )
-  const [travelMode, setTravelMode] = useState<TravelMode>('driving')
   const [remainingStopsExpanded, setRemainingStopsExpanded] = useState(false)
   const [showReorderHint, setShowReorderHint] = useState(
     () =>
@@ -3603,7 +3592,7 @@ function App() {
     const prospect = prospectMap.get(entry.prospectId)
 
     if (prospect && isFiniteLatLng(prospect.location)) {
-      openExternalNavigation(createNavigateHref(prospect, travelMode))
+      openExternalNavigation(createNavigateHref(prospect))
       return
     }
 
@@ -3999,7 +3988,7 @@ function App() {
     const fetchResult = await fetchRouteDirectionsWithFallback({
       origin,
       orderedStops,
-      travelMode: getGoogleDirectionsTravelMode(travelMode),
+      travelMode: getRouteDirectionsTravelMode(),
     })
 
     if (requestId !== routeDirectionsRequestIdRef.current) {
@@ -4158,7 +4147,7 @@ function App() {
     }
 
     const opened = openExternalNavigation(
-      createEntireRouteNavigateHref(startOrigin, stopsForNavigation, travelMode),
+      createEntireRouteNavigateHref(startOrigin, stopsForNavigation),
     )
 
     if (!opened) {
@@ -4179,7 +4168,7 @@ function App() {
     }, 400)
 
     return () => window.clearTimeout(timer)
-  }, [activeView, routeIds.join('|'), travelMode, routeStartLocation, manualMarketLabel])
+  }, [activeView, routeIds.join('|'), routeStartLocation, manualMarketLabel])
 
   useEffect(() => {
     return () => {
@@ -4321,7 +4310,7 @@ function App() {
     const optimization = await optimizeRouteStopOrder({
       origin,
       stops: directionsStops,
-      travelMode: getGoogleDirectionsTravelMode(travelMode),
+      travelMode: getRouteDirectionsTravelMode(),
       batchStopLimit: ROUTE_OPTIMIZATION_BATCH_STOPS,
     })
 
@@ -5181,23 +5170,7 @@ function App() {
         {routeProspects.length > 0 ? (
           <>
             <header className="route-operational-header">
-              <div className="route-operational-header__title-row">
-                <h2 className="route-operational-header__title">{uiText.routes.tab.title}</h2>
-                <div className="chip-row route-operational-header__mode">
-                  {(['driving', 'walking'] as TravelMode[]).map((mode) => (
-                    <button
-                      type="button"
-                      key={mode}
-                      className={`chip ${travelMode === mode ? 'chip--active' : ''}`}
-                      onClick={() => setTravelMode(mode)}
-                    >
-                      {mode === 'driving'
-                        ? uiText.navigation.travelMode.driving
-                        : uiText.navigation.travelMode.walking}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <h2 className="route-operational-header__title">{uiText.routes.tab.title}</h2>
               <p className="route-operational-header__stats">
                 <span>{uiText.routes.tab.stops(routeProspects.length)}</span>
                 <span aria-hidden="true">·</span>
@@ -5323,11 +5296,7 @@ function App() {
                 }
                 callHref={createCallHref(currentStopProspect.phone)}
                 websiteHref={normalizeWebsiteUrl(currentStopProspect.website)}
-                navigateLabel={
-                  travelMode === 'walking'
-                    ? uiText.routes.actions.navigateWalk
-                    : uiText.routes.actions.navigateDrive
-                }
+                navigateLabel={uiText.routes.actions.navigate}
                 isSaved={savedIds.includes(currentStopProspect.id)}
                 isArrived={Boolean(navigationArrivedStopIds[currentStopProspect.id])}
                 isFoodStop={Boolean(currentStopProspect.isFoodStop)}
@@ -5734,7 +5703,6 @@ function App() {
                 prospect={prospect}
                 isSaved={savedIds.includes(prospect.id)}
                 isInRoute={routeIds.includes(prospect.id)}
-                travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
                 onOpenSaved={openSavedProspects}
                 onFindFoodNearby={openFoodNearby}
@@ -5784,7 +5752,6 @@ function App() {
         prospect={prospect}
         isInRoute={routeIds.includes(prospect.id)}
         isExpanded={expandedProspectId === prospect.id}
-        travelMode={travelMode}
         onNavigate={handleNavigateProspect}
         onFindFoodNearby={openFoodNearby}
         onRequestRemove={openRemoveProspectPrompt}

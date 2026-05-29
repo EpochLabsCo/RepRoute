@@ -84,11 +84,6 @@ export const uiText = {
       workspaceDescription:
         'No account is connected yet. This profile area is ready for future sign-in support.',
     },
-    travelMode: {
-      label: 'Travel mode',
-      driving: 'Driving',
-      walking: 'Walking',
-    },
   },
   search: {
     eyebrow: 'Territory Search',
@@ -310,8 +305,7 @@ export const uiText = {
       removeRoute: 'Remove from Route',
       openSaved: 'Open Saved',
       openInMaps: 'Open in Maps',
-      navigateDrive: 'Navigate Drive',
-      navigateWalk: 'Navigate Walk',
+      navigate: 'Navigate',
     },
     prospectCard: {
       removeFromSavedAria: 'Remove from Saved Prospects',
@@ -422,7 +416,6 @@ export const uiText = {
       multiStopHint: 'Route ready in RepRoute. Review your stops, then start route guidance here.',
       stopCount: (count: number) => `${count} stop${count === 1 ? '' : 's'}`,
       estimatedDrive: (time: string) => `Est. drive time: ${time}`,
-      travelMode: (mode: string) => `Travel mode: ${mode}`,
       filters: (summary: string) => `Filters: ${summary}`,
     },
     routeSnapshotEyebrow: 'Today’s Route',
@@ -616,8 +609,7 @@ export const uiText = {
     actions: {
       callBusiness: 'Call Business',
       openWebsite: 'Open Website',
-      navigateDrive: 'Navigate Drive',
-      navigateWalk: 'Navigate Walk',
+      navigate: 'Navigate',
       remove: 'Remove',
       removeProspect: 'Remove Prospect',
       saveProspect: 'Save Prospect',
