@@ -1,8 +1,11 @@
 export type FollowUpRouteStatus = 'on-route' | 'saved' | 'not-in-route'
 
+export type FollowUpStatus = 'pending' | 'scheduled' | 'completed'
+
 export type FollowUpEntry = {
   id: string
   prospectId: string
+  googlePlaceId: string
   businessName: string
   address: string
   category: string
@@ -16,13 +19,14 @@ export type FollowUpEntry = {
   notes: string
   priority: string
   routeStatus: FollowUpRouteStatus
+  status: FollowUpStatus
   completed: boolean
   completedAt: string
   createdAt: string
   updatedAt: string
 }
 
-export type FollowUpSection = 'overdue' | 'today' | 'upcoming' | 'completed'
+export type FollowUpSection = 'overdue' | 'today' | 'upcoming' | 'unscheduled' | 'completed'
 
 export const DEFAULT_FOLLOW_UP_TIME = '09:00'
 
@@ -53,8 +57,24 @@ export function resolveFollowUpRouteStatus(
   return 'not-in-route'
 }
 
+export function resolveFollowUpStatus(
+  followUpDate: string,
+  completed: boolean,
+): FollowUpStatus {
+  if (completed) {
+    return 'completed'
+  }
+
+  if (followUpDate && isValidFollowUpDate(followUpDate)) {
+    return 'scheduled'
+  }
+
+  return 'pending'
+}
+
 export function buildFollowUpSnapshot({
   prospectId,
+  googlePlaceId = '',
   businessName,
   address,
   category,
@@ -74,6 +94,7 @@ export function buildFollowUpSnapshot({
   existing,
 }: {
   prospectId: string
+  googlePlaceId?: string
   businessName: string
   address: string
   category: string
@@ -93,10 +114,13 @@ export function buildFollowUpSnapshot({
   existing?: FollowUpEntry | null
 }) {
   const now = new Date().toISOString()
+  const normalizedDate = followUpDate.trim()
+  const status = resolveFollowUpStatus(normalizedDate, completed)
 
   return {
     id: existing?.id ?? getFollowUpEntryId(prospectId),
     prospectId,
+    googlePlaceId: googlePlaceId.trim() || existing?.googlePlaceId || '',
     businessName: businessName.trim() || existing?.businessName || 'Unknown business',
     address: address.trim() || existing?.address || '',
     category: category.trim() || existing?.category || 'Business',
@@ -105,11 +129,12 @@ export function buildFollowUpSnapshot({
     contactName: contactName.trim() || existing?.contactName || '',
     contactTitle: contactTitle.trim() || existing?.contactTitle || '',
     contactEmail: contactEmail.trim() || existing?.contactEmail || '',
-    followUpDate,
+    followUpDate: normalizedDate,
     followUpTime: followUpTime.trim() || existing?.followUpTime || DEFAULT_FOLLOW_UP_TIME,
     notes: notes.trim() || existing?.notes || '',
     priority: priority.trim() || existing?.priority || 'Unassigned',
     routeStatus: resolveFollowUpRouteStatus(prospectId, routeIds, savedIds),
+    status,
     completed: completed ?? existing?.completed ?? false,
     completedAt: completedAt ?? existing?.completedAt ?? '',
     createdAt: existing?.createdAt ?? now,
@@ -122,12 +147,12 @@ export function isValidFollowUpDate(value: string) {
 }
 
 export function getFollowUpSection(entry: FollowUpEntry, todayKey = getLocalDateKey()): FollowUpSection {
-  if (entry.completed) {
+  if (entry.completed || entry.status === 'completed') {
     return 'completed'
   }
 
-  if (!entry.followUpDate) {
-    return 'upcoming'
+  if (!entry.followUpDate || !isValidFollowUpDate(entry.followUpDate)) {
+    return 'unscheduled'
   }
 
   if (entry.followUpDate < todayKey) {
@@ -156,11 +181,16 @@ export function compareFollowUpEntries(left: FollowUpEntry, right: FollowUpEntry
     overdue: 0,
     today: 1,
     upcoming: 2,
-    completed: 3,
+    unscheduled: 3,
+    completed: 4,
   }
 
   if (leftSection !== rightSection) {
     return sectionRank[leftSection] - sectionRank[rightSection]
+  }
+
+  if (leftSection === 'unscheduled') {
+    return right.createdAt.localeCompare(left.createdAt)
   }
 
   if (left.followUpDate !== right.followUpDate) {
@@ -179,6 +209,7 @@ export function groupFollowUpsBySection(entries: FollowUpEntry[], todayKey = get
     overdue: [],
     today: [],
     upcoming: [],
+    unscheduled: [],
     completed: [],
   }
 
@@ -205,6 +236,7 @@ export function migrateFollowUpsFromProspectRecords(
     contactEmail: string
     notes: string
     priority: string
+    googlePlaceId?: string
   } | null,
 ) {
   const merged = { ...existing }
@@ -222,6 +254,7 @@ export function migrateFollowUpsFromProspectRecords(
 
     merged[prospectId] = buildFollowUpSnapshot({
       prospectId,
+      googlePlaceId: prospect?.googlePlaceId ?? '',
       businessName: prospect?.businessName ?? prospectId,
       address: prospect?.address ?? '',
       category: prospect?.category ?? 'Business',
@@ -253,7 +286,11 @@ export function sanitizeFollowUpEntry(value: unknown): FollowUpEntry | null {
   const prospectId = typeof record.prospectId === 'string' ? record.prospectId : ''
   const followUpDate = typeof record.followUpDate === 'string' ? record.followUpDate : ''
 
-  if (!prospectId || !isValidFollowUpDate(followUpDate)) {
+  if (!prospectId) {
+    return null
+  }
+
+  if (followUpDate && !isValidFollowUpDate(followUpDate)) {
     return null
   }
 
@@ -262,9 +299,16 @@ export function sanitizeFollowUpEntry(value: unknown): FollowUpEntry | null {
       ? record.routeStatus
       : 'not-in-route'
 
+  const completed = record.completed === true
+  const status =
+    record.status === 'pending' || record.status === 'scheduled' || record.status === 'completed'
+      ? record.status
+      : resolveFollowUpStatus(followUpDate, completed)
+
   return {
     id: typeof record.id === 'string' ? record.id : getFollowUpEntryId(prospectId),
     prospectId,
+    googlePlaceId: typeof record.googlePlaceId === 'string' ? record.googlePlaceId : '',
     businessName: typeof record.businessName === 'string' ? record.businessName : 'Unknown business',
     address: typeof record.address === 'string' ? record.address : '',
     category: typeof record.category === 'string' ? record.category : 'Business',
@@ -281,7 +325,8 @@ export function sanitizeFollowUpEntry(value: unknown): FollowUpEntry | null {
     notes: typeof record.notes === 'string' ? record.notes : '',
     priority: typeof record.priority === 'string' ? record.priority : 'Unassigned',
     routeStatus,
-    completed: record.completed === true,
+    status,
+    completed,
     completedAt: typeof record.completedAt === 'string' ? record.completedAt : '',
     createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
     updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : new Date().toISOString(),

@@ -576,8 +576,51 @@
 
 .route-remaining-stop__main {
   display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.route-remaining-stop__open {
+  display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.route-remaining-stop__open:hover {
+  opacity: 0.96;
+}
+
+.route-remaining-stop--open {
+  border-color: rgba(49, 196, 190, 0.45);
+  box-shadow: 0 0 0 1px rgba(49, 196, 190, 0.2);
+}
+
+.route-remaining-stop__hint {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.route-remaining-stop__chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.route-remaining-stop__chevron--open {
+  transform: rotate(90deg);
+  color: var(--accent-soft);
 }
 
 .route-remaining-stop--food {
@@ -715,6 +758,44 @@
   margin: 4px 0 0;
   font-size: 0.86rem;
   color: var(--text-secondary);
+}
+
+.visit-workflow-drawer__address {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.visit-workflow-drawer__contact-row {
+  display: grid;
+  gap: 6px;
+  font-size: 0.84rem;
+}
+
+.visit-workflow-drawer__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-soft);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.visit-workflow-drawer__muted {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.visit-workflow-drawer__follow-up-actions {
+  margin-top: 8px;
+}
+
+.visit-workflow-drawer__footer-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
 }
 
 .visit-workflow-drawer__body {

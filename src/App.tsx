@@ -1096,6 +1096,18 @@ function getFollowUpStatus(date: string) {
   return uiText.followUps.statuses.later
 }
 
+function getFollowUpStatusLabel(entry: FollowUpEntry) {
+  if (entry.completed) {
+    return uiText.followUps.completedLabel
+  }
+
+  if (!entry.followUpDate) {
+    return uiText.followUps.statuses.unscheduled
+  }
+
+  return getFollowUpStatus(entry.followUpDate)
+}
+
 function formatProspectNames(prospects: Prospect[], limit = 3) {
   const names = prospects.slice(0, limit).map((prospect) => prospect.businessName)
 
@@ -2351,6 +2363,7 @@ function App() {
               contactEmail: prospect.contactEmail,
               notes: prospect.notes,
               priority: prospect.priority,
+              googlePlaceId: prospect.googlePlaceId,
             }
           }
 
@@ -2372,6 +2385,7 @@ function App() {
             contactEmail: record?.contactEmail ?? base.contactEmail,
             notes: record?.notes ?? base.notes,
             priority: record?.priority ?? base.priority,
+            googlePlaceId: record?.googlePlaceIdOverride ?? base.googlePlaceId,
           }
         },
       )
@@ -3405,6 +3419,10 @@ function App() {
       ...current,
       visitOutcome,
     }))
+
+    if (visitOutcome === 'Follow-Up Needed') {
+      savePendingFollowUp(prospectId, { showToast: true })
+    }
   }
 
   function updateProspectPriority(prospectId: string, priority: AssignedPriority) {
@@ -3433,6 +3451,93 @@ function App() {
       delete next.followUpCompletedAt
       return next
     })
+  }
+
+  function savePendingFollowUp(
+    prospectId: string,
+    options?: {
+      notes?: string
+      showToast?: boolean
+      silent?: boolean
+    },
+  ) {
+    const prospect = prospectMap.get(prospectId)
+    const base = liveProspects.find((item) => item.id === prospectId)
+    const record = prospectRecords[prospectId]
+
+    if (!prospect && !base) {
+      return
+    }
+
+    const existing = followUpEntries[prospectId]
+    if (existing?.completed) {
+      return
+    }
+
+    const notes =
+      options?.notes ??
+      existing?.notes ??
+      prospect?.visitNote ??
+      prospect?.notes ??
+      record?.notes ??
+      base?.notes ??
+      ''
+    const followUpDate =
+      existing?.followUpDate && isValidFollowUpDate(existing.followUpDate) ? existing.followUpDate : ''
+    const followUpTime =
+      existing?.followUpTime || record?.followUpTime || DEFAULT_FOLLOW_UP_TIME
+
+    const entry = buildFollowUpSnapshot({
+      prospectId,
+      googlePlaceId:
+        prospect?.googlePlaceId ??
+        record?.googlePlaceIdOverride ??
+        base?.googlePlaceId ??
+        existing?.googlePlaceId ??
+        '',
+      businessName: prospect?.businessName ?? base?.businessName ?? existing?.businessName ?? prospectId,
+      address: prospect?.address ?? record?.addressOverride ?? base?.address ?? existing?.address ?? '',
+      category: prospect?.category ?? base?.category ?? existing?.category ?? 'Business',
+      city: prospect?.city ?? base?.city ?? existing?.city ?? '',
+      phone: prospect?.phone ?? record?.contactPhone ?? base?.phone ?? existing?.phone ?? '',
+      contactName: prospect?.contactName ?? record?.contactName ?? base?.contactName ?? existing?.contactName ?? '',
+      contactTitle:
+        prospect?.contactTitle ?? record?.contactTitle ?? base?.contactTitle ?? existing?.contactTitle ?? '',
+      contactEmail:
+        prospect?.contactEmail ?? record?.contactEmail ?? base?.contactEmail ?? existing?.contactEmail ?? '',
+      notes,
+      priority: prospect?.priority ?? record?.priority ?? base?.priority ?? existing?.priority ?? 'Unassigned',
+      routeIds,
+      savedIds,
+      followUpDate,
+      followUpTime,
+      completed: false,
+      completedAt: '',
+      existing,
+    })
+
+    setFollowUpEntries((current) => ({
+      ...current,
+      [prospectId]: entry,
+    }))
+
+    updateProspectRecord(prospectId, (current) => {
+      const next = { ...current, notes, followUpCompleted: false, followUpCompletedAt: '' }
+
+      if (followUpDate) {
+        next.followUpDate = followUpDate
+        next.followUpTime = followUpTime
+      } else {
+        delete next.followUpDate
+        delete next.followUpTime
+      }
+
+      return next
+    })
+
+    if (!options?.silent && options?.showToast !== false) {
+      setActionToast({ type: 'success', text: uiText.followUps.savedToast })
+    }
   }
 
   function persistFollowUp(
@@ -3474,6 +3579,7 @@ function App() {
     const notes =
       options?.notes ??
       existing?.notes ??
+      prospect?.visitNote ??
       prospect?.notes ??
       record?.notes ??
       base?.notes ??
@@ -3503,6 +3609,12 @@ function App() {
 
     const entry = buildFollowUpSnapshot({
       prospectId,
+      googlePlaceId:
+        prospect?.googlePlaceId ??
+        record?.googlePlaceIdOverride ??
+        base?.googlePlaceId ??
+        existing?.googlePlaceId ??
+        '',
       businessName: prospect?.businessName ?? base?.businessName ?? existing?.businessName ?? prospectId,
       address: prospect?.address ?? record?.addressOverride ?? base?.address ?? existing?.address ?? '',
       category: prospect?.category ?? base?.category ?? existing?.category ?? 'Business',
@@ -5373,6 +5485,8 @@ function App() {
                               leg={navigationLegByStopId[prospect.id] ?? null}
                               completed={Boolean(prospect.routeCompleted)}
                               isFoodStop={Boolean(prospect.isFoodStop)}
+                              isOpen={visitWorkflow?.prospectId === prospect.id}
+                              onOpenDetails={() => openVisitWorkflow(prospect.id, 'visit')}
                               onPickUpFood={() => openFoodNearby(prospect.id)}
                             />
                           )
@@ -5958,7 +6072,9 @@ function App() {
           <FollowUpCard
             key={entry.id}
             entry={entry}
-            statusLabel={getFollowUpStatus(entry.followUpDate)}
+            statusLabel={getFollowUpStatusLabel(entry)}
+            isUnscheduled={!entry.followUpDate}
+            onSetDate={() => startFollowUpEdit(entry)}
             isEditing={editingFollowUpId === entry.prospectId}
             editDate={followUpEditDraft.date}
             editTime={followUpEditDraft.time}
@@ -5981,17 +6097,19 @@ function App() {
 
   function renderFollowUpsView() {
     const hasFollowUps = Object.keys(followUpEntries).length > 0
-    const pendingFollowUps = [
-      ...followUpGroups.overdue,
-      ...followUpGroups.today,
-      ...followUpGroups.upcoming,
-    ]
 
     return (
       <>
         {hasFollowUps ? (
           <div className="follow-up-sections stack">
-            {renderFollowUpSection(uiText.followUps.sections.pending, 'pending', pendingFollowUps)}
+            {renderFollowUpSection(uiText.followUps.sections.overdue, 'overdue', followUpGroups.overdue)}
+            {renderFollowUpSection(uiText.followUps.sections.today, 'today', followUpGroups.today)}
+            {renderFollowUpSection(uiText.followUps.sections.upcoming, 'upcoming', followUpGroups.upcoming)}
+            {renderFollowUpSection(
+              uiText.followUps.sections.unscheduled,
+              'unscheduled',
+              followUpGroups.unscheduled,
+            )}
             {renderFollowUpSection(uiText.followUps.sections.completed, 'completed', followUpGroups.completed)}
           </div>
         ) : (
@@ -6466,6 +6584,7 @@ function App() {
             prospect={visitWorkflowProspect}
             cardPreviewUrl={businessCardPreviewUrls[visitWorkflowProspect.id] ?? null}
             isArrived={Boolean(navigationArrivedStopIds[visitWorkflowProspect.id])}
+            isSaved={savedIds.includes(visitWorkflowProspect.id)}
             outcomeOptions={ROUTE_OUTCOME_OPTIONS}
             priorityOptions={ASSIGNED_PRIORITY_OPTIONS}
             onClose={closeVisitWorkflow}
@@ -6478,6 +6597,7 @@ function App() {
             onUpdateFollowUp={(followUpDate, followUpTime, confirmSave) =>
               updateProspectFollowUp(visitWorkflowProspect.id, followUpDate, followUpTime, confirmSave)
             }
+            onSavePendingFollowUp={() => savePendingFollowUp(visitWorkflowProspect.id, { showToast: true })}
             onUpdatePriority={(priority) =>
               updateProspectPriority(visitWorkflowProspect.id, priority as AssignedPriority)
             }
@@ -6487,6 +6607,8 @@ function App() {
             }
             onRemoveBusinessCard={() => removeBusinessCard(visitWorkflowProspect.id)}
             onPickUpFood={() => openFoodNearby(visitWorkflowProspect.id)}
+            onToggleSaved={() => toggleSaved(visitWorkflowProspect.id)}
+            onRemoveFromRoute={() => openRemoveProspectPrompt(visitWorkflowProspect.id)}
           />
         ) : null}
 

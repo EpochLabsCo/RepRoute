@@ -5,6 +5,7 @@ import { uiText } from '../constants/uiText'
 type FollowUpCardProps = {
   entry: FollowUpEntry
   statusLabel: string
+  isUnscheduled?: boolean
   isEditing: boolean
   editDate: string
   editTime: string
@@ -19,11 +20,12 @@ type FollowUpCardProps = {
   onReschedule: (date: string) => void
   onNavigate: () => void
   onRemove: () => void
+  onSetDate?: () => void
 }
 
 function formatFollowUpDateTime(date: string, time: string) {
   if (!date) {
-    return uiText.followUps.noDate
+    return uiText.followUps.unscheduledDateLabel
   }
 
   const formattedDate = new Intl.DateTimeFormat('en-US', {
@@ -38,6 +40,7 @@ function formatFollowUpDateTime(date: string, time: string) {
 function FollowUpCard({
   entry,
   statusLabel,
+  isUnscheduled = false,
   isEditing,
   editDate,
   editTime,
@@ -52,6 +55,7 @@ function FollowUpCard({
   onReschedule,
   onNavigate,
   onRemove,
+  onSetDate,
 }: FollowUpCardProps) {
   const routeStatusLabel =
     entry.routeStatus === 'on-route'
@@ -75,9 +79,11 @@ function FollowUpCard({
               : statusLabel === uiText.followUps.statuses.tomorrow ||
                   statusLabel === uiText.followUps.statuses.thisWeek
                 ? 'meta-pill--warm'
-                : entry.completed
-                  ? 'meta-pill--accent'
-                  : 'meta-pill--cold'
+                : isUnscheduled
+                  ? 'meta-pill--cold'
+                  : entry.completed
+                    ? 'meta-pill--accent'
+                    : 'meta-pill--cold'
           }`}
         >
           {entry.completed ? uiText.followUps.completedLabel : statusLabel}
@@ -107,7 +113,13 @@ function FollowUpCard({
           </div>
           <div className="field-group">
             <span className="field-label">{uiText.followUps.timeLabel}</span>
-            <input className="text-input" type="time" value={editTime} onChange={(e) => onEditTimeChange(e.target.value)} />
+            <input
+              className="text-input"
+              type="time"
+              value={editTime}
+              disabled={!editDate}
+              onChange={(e) => onEditTimeChange(e.target.value)}
+            />
           </div>
           <label className="field-group">
             <span className="field-label">{uiText.followUps.notesLabel}</span>
@@ -127,6 +139,12 @@ function FollowUpCard({
       )}
 
       <div className="follow-up-card__actions">
+        {!entry.completed && isUnscheduled && onSetDate ? (
+          <button type="button" className="route-action-button" onClick={onSetDate}>
+            <CalendarClock size={16} />
+            {uiText.followUps.setDate}
+          </button>
+        ) : null}
         {!entry.completed ? (
           <button type="button" className="route-action-button" onClick={onMarkComplete}>
             <CheckCircle2 size={16} />
@@ -137,7 +155,7 @@ function FollowUpCard({
           <Pencil size={16} />
           {uiText.followUps.edit}
         </button>
-        {!entry.completed ? (
+        {!entry.completed && entry.followUpDate ? (
           <button
             type="button"
             className="route-action-button"

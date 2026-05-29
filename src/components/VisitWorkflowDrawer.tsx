@@ -1,4 +1,4 @@
-import { MapPin } from 'lucide-react'
+import { Bookmark, MapPin, Phone, Trash2 } from 'lucide-react'
 import PickUpFoodPrompt from './PickUpFoodPrompt'
 import QuickVisitNoteField from './QuickVisitNoteField'
 import BusinessCardContactFields from './BusinessCardContactFields'
@@ -21,6 +21,7 @@ export type VisitWorkflowPriority = 'Hot' | 'Warm' | 'Cold' | 'Unassigned'
 export type VisitWorkflowProspect = {
   id: string
   businessName: string
+  address: string
   website: string
   notes: string
   visitNote: string
@@ -40,6 +41,7 @@ type VisitWorkflowDrawerProps = {
   prospect: VisitWorkflowProspect
   cardPreviewUrl: string | null
   isArrived: boolean
+  isSaved: boolean
   outcomeOptions: readonly VisitWorkflowOutcomeTag[]
   priorityOptions: readonly VisitWorkflowPriority[]
   onClose: () => void
@@ -58,17 +60,31 @@ type VisitWorkflowDrawerProps = {
   onUpdateNotes: (notes: string) => void
   onUpdateVisitNote: (note: string) => void
   onUpdateFollowUp: (followUpDate: string, followUpTime?: string, confirmSave?: boolean) => void
+  onSavePendingFollowUp: () => void
   onUpdatePriority: (priority: VisitWorkflowPriority) => void
   onUpdateOutcome: (outcome: VisitWorkflowOutcomeTag | '') => void
   onRouteBusinessCardCapture: (file: File) => void
   onRemoveBusinessCard: () => void
   onPickUpFood: () => void
+  onToggleSaved: () => void
+  onRemoveFromRoute: () => void
+}
+
+function normalizeWebsite(website: string) {
+  if (!website || website === uiText.errors.websiteUnavailable) {
+    return ''
+  }
+
+  return website.startsWith('http://') || website.startsWith('https://')
+    ? website
+    : `https://${website}`
 }
 
 export default function VisitWorkflowDrawer({
   prospect,
   cardPreviewUrl,
   isArrived,
+  isSaved,
   outcomeOptions,
   priorityOptions,
   onClose,
@@ -79,12 +95,18 @@ export default function VisitWorkflowDrawer({
   onUpdateNotes,
   onUpdateVisitNote,
   onUpdateFollowUp,
+  onSavePendingFollowUp,
   onUpdatePriority,
   onUpdateOutcome,
   onRouteBusinessCardCapture,
   onRemoveBusinessCard,
   onPickUpFood,
+  onToggleSaved,
+  onRemoveFromRoute,
 }: VisitWorkflowDrawerProps) {
+  const websiteHref = normalizeWebsite(prospect.website)
+  const phoneHref = prospect.phone?.trim() ? `tel:${prospect.phone.replace(/\s+/g, '')}` : null
+
   return (
     <div className="modal-backdrop visit-workflow-drawer" role="presentation" onClick={onClose}>
       <div
@@ -99,6 +121,9 @@ export default function VisitWorkflowDrawer({
           <div>
             <h2 id="visit-workflow-title">{uiText.routes.visitWorkflow.heading}</h2>
             <p className="visit-workflow-drawer__subtitle">{prospect.businessName}</p>
+            {prospect.address ? (
+              <p className="visit-workflow-drawer__address">{prospect.address}</p>
+            ) : null}
             {!prospect.routeCompleted && !prospect.isFoodStop ? (
               <PickUpFoodPrompt onClick={onPickUpFood} className="visit-workflow-drawer__food-prompt" />
             ) : null}
@@ -109,6 +134,24 @@ export default function VisitWorkflowDrawer({
         </header>
 
         <div className="visit-workflow-drawer__body">
+          <div className="visit-workflow-drawer__contact-row">
+            {phoneHref ? (
+              <a className="visit-workflow-drawer__link" href={phoneHref}>
+                <Phone size={14} />
+                {prospect.phone}
+              </a>
+            ) : (
+              <span className="visit-workflow-drawer__muted">{uiText.errors.phoneUnavailable}</span>
+            )}
+            {websiteHref ? (
+              <a className="visit-workflow-drawer__link" href={websiteHref} target="_blank" rel="noreferrer">
+                {prospect.website}
+              </a>
+            ) : (
+              <span className="visit-workflow-drawer__muted">{uiText.errors.websiteUnavailable}</span>
+            )}
+          </div>
+
           <div className="visit-workflow-drawer__steps">
             <button
               type="button"
@@ -119,10 +162,7 @@ export default function VisitWorkflowDrawer({
               <MapPin size={16} />
               {isArrived ? uiText.routes.inAppNavigation.arrived : uiText.routes.inAppNavigation.markArrived}
             </button>
-            <MarkCompletedButton
-              completed={prospect.routeCompleted}
-              onClick={onToggleCompleted}
-            />
+            <MarkCompletedButton completed={prospect.routeCompleted} onClick={onToggleCompleted} />
           </div>
 
           <QuickVisitNoteField
@@ -146,6 +186,32 @@ export default function VisitWorkflowDrawer({
               />
             ) : null}
           </div>
+
+          <div className="field-group visit-workflow-drawer__section">
+            <span className="field-label">{uiText.search.prospectCard.priority}</span>
+            <div className="segment-row">
+              {priorityOptions.map((option) => (
+                <button
+                  type="button"
+                  key={option}
+                  className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
+                  onClick={() => onUpdatePriority(option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="field-group visit-workflow-drawer__section">
+            <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
+            <textarea
+              className="text-area text-area--compact"
+              rows={3}
+              value={prospect.notes}
+              onChange={(event) => onUpdateNotes(event.target.value)}
+            />
+          </label>
 
           <div className="field-group visit-workflow-drawer__section">
             <span className="field-label">{uiText.routes.visitOutcomeLabel}</span>
@@ -190,14 +256,19 @@ export default function VisitWorkflowDrawer({
                 onChange={(event) => onUpdateFollowUp(prospect.followUpDate, event.target.value)}
               />
             </label>
-            <button
-              type="button"
-              className="button button--ghost"
-              disabled={!prospect.followUpDate}
-              onClick={() => onUpdateFollowUp(prospect.followUpDate, prospect.followUpTime, true)}
-            >
-              {uiText.followUps.saveFollowUp}
-            </button>
+            <div className="button-row visit-workflow-drawer__follow-up-actions">
+              <button type="button" className="button button--ghost" onClick={onSavePendingFollowUp}>
+                {uiText.followUps.saveWithoutDate}
+              </button>
+              <button
+                type="button"
+                className="button"
+                disabled={!prospect.followUpDate}
+                onClick={() => onUpdateFollowUp(prospect.followUpDate, prospect.followUpTime, true)}
+              >
+                {uiText.followUps.saveFollowUp}
+              </button>
+            </div>
           </div>
 
           <details className="visit-workflow-drawer__details">
@@ -221,35 +292,21 @@ export default function VisitWorkflowDrawer({
                   onChange={(event) => onUpdateContactDetails({ contactWebsite: event.target.value })}
                 />
               </div>
-              <label className="field-group">
-                <span className="field-label">{uiText.search.prospectCard.prospectNotes}</span>
-                <textarea
-                  className="text-area text-area--compact"
-                  rows={3}
-                  value={prospect.notes}
-                  onChange={(event) => onUpdateNotes(event.target.value)}
-                />
-              </label>
-              <div className="field-group">
-                <span className="field-label">{uiText.search.prospectCard.priority}</span>
-                <div className="segment-row">
-                  {priorityOptions.map((option) => (
-                    <button
-                      type="button"
-                      key={option}
-                      className={`segment ${prospect.priority === option ? 'segment--active' : ''}`}
-                      onClick={() => onUpdatePriority(option)}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </details>
         </div>
 
         <div className="modal-sheet__actions visit-workflow-drawer__footer">
+          <div className="visit-workflow-drawer__footer-row">
+            <button type="button" className="button button--ghost" onClick={onToggleSaved}>
+              <Bookmark size={16} />
+              {isSaved ? uiText.search.card.removeSaved : uiText.routes.visitWorkflow.saveProspect}
+            </button>
+            <button type="button" className="button button--danger-outline" onClick={onRemoveFromRoute}>
+              <Trash2 size={16} />
+              {uiText.routes.removal.removeFromRoute}
+            </button>
+          </div>
           <button type="button" className="button button--wide" onClick={onDone}>
             {uiText.routes.visitWorkflow.done}
           </button>

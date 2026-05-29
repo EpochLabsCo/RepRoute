@@ -14,6 +14,8 @@ export default function RouteReorderHandle({ dragAttributes, dragListeners }: Ro
       className="route-reorder-handle"
       aria-label={uiText.routes.reorder.stopAria}
       title={uiText.routes.reorder.dragHint}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
       {...dragAttributes}
       {...dragListeners}
     >
