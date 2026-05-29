@@ -5,9 +5,9 @@ import {
   Navigation,
   Phone,
   Trash2,
-  UtensilsCrossed,
 } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
+import PickUpFoodButton from './PickUpFoodButton'
 import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
 import {
@@ -26,6 +26,7 @@ type RouteCurrentStopCardProps = {
   leg: RouteNavigationLegSummary | null
   distanceOverride: string | null
   statusNote: string | null
+  isFoodStop: boolean
   callHref: string | null
   websiteHref: string | null
   navigateLabel: string
@@ -43,7 +44,7 @@ type RouteCurrentStopCardProps = {
   onOpenVisitDetails: () => void
   onOpenSaved: () => void
   onToggleSaved: () => void
-  onFindFoodNearby: () => void
+  onPickUpFood: () => void
   onRequestRemove: () => void
   onScanBusinessCard: (file: File) => void
   onRemoveBusinessCard: () => void
@@ -56,6 +57,7 @@ export default function RouteCurrentStopCard({
   leg,
   distanceOverride,
   statusNote,
+  isFoodStop,
   callHref,
   websiteHref,
   navigateLabel,
@@ -73,13 +75,17 @@ export default function RouteCurrentStopCard({
   onOpenVisitDetails,
   onOpenSaved,
   onToggleSaved,
-  onFindFoodNearby,
+  onPickUpFood,
   onRequestRemove,
   onScanBusinessCard,
   onRemoveBusinessCard,
 }: RouteCurrentStopCardProps) {
   return (
-    <section className="panel section-panel route-current-stop-card">
+    <section
+      className={`panel section-panel route-current-stop-card${
+        isFoodStop ? ' route-current-stop-card--food' : ''
+      }`}
+    >
       <RouteFocusCard
         stopNumber={stopNumber}
         businessName={businessName}
@@ -88,6 +94,7 @@ export default function RouteCurrentStopCard({
         distanceOverride={distanceOverride}
         variant="current"
         statusNote={statusNote}
+        isFoodStop={isFoodStop}
       />
 
       <div className="route-current-stop-card__primary">
@@ -112,6 +119,8 @@ export default function RouteCurrentStopCard({
         </button>
         <MarkCompletedButton completed={routeCompleted} onClick={onOpenCompleteVisit} />
       </div>
+
+      <PickUpFoodButton onClick={onPickUpFood} wide className="button button--ghost route-pick-up-food-btn" />
 
       <div className="route-current-stop-card__visit-capture">
         <label className="field-group route-current-stop-card__quick-note">
@@ -147,10 +156,6 @@ export default function RouteCurrentStopCard({
           {isSaved
             ? uiText.routes.currentStop.quickActions.openSaved
             : uiText.routes.currentStop.quickActions.saveProspect}
-        </CardMoreMenuButton>
-        <CardMoreMenuButton onClick={onFindFoodNearby}>
-          <UtensilsCrossed size={16} />
-          {uiText.foodNearby.findFoodNearby}
         </CardMoreMenuButton>
         {websiteHref ? (
           <CardMoreMenuLink href={websiteHref}>

@@ -1,4 +1,5 @@
 import { MapPin } from 'lucide-react'
+import PickUpFoodButton from './PickUpFoodButton'
 import BusinessCardContactFields from './BusinessCardContactFields'
 import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
@@ -59,6 +60,7 @@ type VisitWorkflowDrawerProps = {
   onUpdateOutcome: (outcome: VisitWorkflowOutcomeTag | '') => void
   onRouteBusinessCardCapture: (file: File) => void
   onRemoveBusinessCard: () => void
+  onPickUpFood: () => void
 }
 
 export default function VisitWorkflowDrawer({
@@ -79,6 +81,7 @@ export default function VisitWorkflowDrawer({
   onUpdateOutcome,
   onRouteBusinessCardCapture,
   onRemoveBusinessCard,
+  onPickUpFood,
 }: VisitWorkflowDrawerProps) {
   return (
     <div className="modal-backdrop visit-workflow-drawer" role="presentation" onClick={onClose}>
@@ -116,6 +119,8 @@ export default function VisitWorkflowDrawer({
               onClick={onToggleCompleted}
             />
           </div>
+
+          <PickUpFoodButton onClick={onPickUpFood} wide className="button button--ghost route-pick-up-food-btn" />
 
           <label className="field-group visit-workflow-drawer__section">
             <span className="field-label">{uiText.routes.quickNoteLabel}</span>

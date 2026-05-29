@@ -626,6 +626,24 @@ const FOOD_SEARCH_TERMS = ['restaurants', 'coffee', 'breakfast', 'lunch', 'cater
 type FoodQuickChip = 'Coffee' | 'Breakfast' | 'Lunch' | 'BBQ' | 'Tacos' | 'Catering'
 const FOOD_QUICK_CHIPS: FoodQuickChip[] = ['Coffee', 'Breakfast', 'Lunch', 'BBQ', 'Tacos', 'Catering']
 
+function insertFoodStopRelativeToAnchor(
+  currentRouteIds: string[],
+  foodProspectId: string,
+  anchorProspectId: string,
+  insertAfter: boolean,
+): string[] {
+  const nextIds = currentRouteIds.filter((id) => id !== foodProspectId)
+  const anchorIndex = nextIds.indexOf(anchorProspectId)
+
+  if (anchorIndex === -1) {
+    return nextIds.includes(foodProspectId) ? currentRouteIds : [...nextIds, foodProspectId]
+  }
+
+  const insertIndex = insertAfter ? anchorIndex + 1 : anchorIndex
+  nextIds.splice(insertIndex, 0, foodProspectId)
+  return nextIds
+}
+
 function createCallHref(phone: string) {
   const digits = phone.replace(/[^\d+]/g, '')
   return digits ? `tel:${digits}` : ''
@@ -1428,7 +1446,7 @@ function FoodNearbyModal({
                     onClick={() => onSaveAsFoodStop(result.id)}
                     disabled={alreadySaved}
                   >
-                    {alreadySaved ? uiText.foodNearby.savedAsFoodStop : uiText.foodNearby.saveAsFoodStop}
+                    {alreadySaved ? uiText.foodNearby.savedAsFoodStop : uiText.foodNearby.addFoodStopToRoute}
                   </button>
                 </div>
               </article>
@@ -2422,8 +2440,14 @@ function App() {
   )
   const routeKey = useMemo(() => routeIds.join('|'), [routeIds])
   const foodStopIds = useMemo(
-    () => new Set(routeProspects.filter((prospect) => prospect.isFoodStop).map((prospect) => prospect.id)),
-    [routeProspects],
+    () =>
+      new Set(
+        routeIds.filter((id) => {
+          const prospect = prospectMap.get(id)
+          return prospect?.isFoodStop
+        }),
+      ),
+    [prospectMap, routeIds],
   )
   const invalidStops = useMemo(() => {
     return routeProspects
@@ -2571,35 +2595,49 @@ function App() {
   )
 
   const crmScopedProspects = useMemo(() => {
+    const savedSet = new Set(savedIds)
     const dedupe = (items: Prospect[]) =>
       Array.from(new globalThis.Map(items.map((prospect) => [prospect.id, prospect])).values())
+    const excludeUnsavedFoodStops = (items: Prospect[]) =>
+      items.filter((prospect) => !prospect.isFoodStop || savedSet.has(prospect.id))
 
     switch (crmExportScope) {
       case 'saved':
-        return dedupe(savedProspects)
+        return dedupe(excludeUnsavedFoodStops(savedProspects))
       case 'route':
-        return dedupe(routeProspects)
+        return dedupe(excludeUnsavedFoodStops(routeProspects))
       case 'followups':
         return dedupe(
-          Object.values(followUpEntries).map((entry) => {
-            const prospect = prospectMap.get(entry.prospectId)
-            if (prospect) {
-              return {
-                ...prospect,
-                followUpDate: entry.followUpDate,
-                followUpTime: entry.followUpTime,
-                notes: entry.notes || prospect.notes,
+          excludeUnsavedFoodStops(
+            Object.values(followUpEntries).map((entry) => {
+              const prospect = prospectMap.get(entry.prospectId)
+              if (prospect) {
+                return {
+                  ...prospect,
+                  followUpDate: entry.followUpDate,
+                  followUpTime: entry.followUpTime,
+                  notes: entry.notes || prospect.notes,
+                }
               }
-            }
 
-            return scheduledFollowUps.find((item) => item.id === entry.prospectId)
-          }).filter((prospect): prospect is Prospect => Boolean(prospect)),
+              return scheduledFollowUps.find((item) => item.id === entry.prospectId)
+            }).filter((prospect): prospect is Prospect => Boolean(prospect)),
+          ),
         )
       case 'all':
       default:
-        return dedupe(prospects)
+        return dedupe(excludeUnsavedFoodStops(prospects))
     }
-  }, [crmExportScope, followUpEntries, prospectMap, prospects, routeProspects, savedProspects, scheduledFollowUps])
+  }, [
+    crmExportScope,
+    followUpEntries,
+    prospectMap,
+    prospects,
+    routeProspects,
+    savedIds,
+    savedProspects,
+    scheduledFollowUps,
+  ])
 
   const crmExportPreview = useMemo(() => {
     const records = crmScopedProspects.map((prospect) => {
@@ -3197,9 +3235,21 @@ function App() {
     }))
   }
 
-  function saveAsFoodStop(prospectId: string) {
-    setRouteIds((current) => (current.includes(prospectId) ? current : [...current, prospectId]))
-    updateProspectRecord(prospectId, (current) => ({
+  function saveAsFoodStop(foodProspectId: string) {
+    const anchorId = foodNearbySession?.anchor.id ?? null
+    const anchor = anchorId ? prospectMap.get(anchorId) : null
+    const insertAfter =
+      anchorId !== null &&
+      (Boolean(anchor?.routeCompleted) || Boolean(navigationArrivedStopIds[anchorId]))
+
+    setRouteIds((current) => {
+      if (!anchorId) {
+        return current.includes(foodProspectId) ? current : [...current, foodProspectId]
+      }
+
+      return insertFoodStopRelativeToAnchor(current, foodProspectId, anchorId, insertAfter)
+    })
+    updateProspectRecord(foodProspectId, (current) => ({
       ...current,
       isFoodStop: true,
     }))
@@ -5035,6 +5085,7 @@ function App() {
           onMarkArrived={handleNavigationMarkArrived}
           onMarkCompleted={handleNavigationMarkCompleted}
           onOpenVisitWorkflow={(prospectId) => openVisitWorkflow(prospectId, 'visit')}
+          onPickUpFood={openFoodNearby}
         />
       )
     }
@@ -5199,6 +5250,7 @@ function App() {
                 }
                 isSaved={savedIds.includes(currentStopProspect.id)}
                 isArrived={Boolean(navigationArrivedStopIds[currentStopProspect.id])}
+                isFoodStop={Boolean(currentStopProspect.isFoodStop)}
                 routeCompleted={Boolean(currentStopProspect.routeCompleted)}
                 visitNote={currentStopProspect.visitNote}
                 cardPreviewUrl={businessCardPreviewUrls[currentStopProspect.id] ?? null}
@@ -5211,7 +5263,7 @@ function App() {
                 onOpenVisitDetails={() => openVisitWorkflow(currentStopProspect.id, 'visit')}
                 onOpenSaved={() => openSavedProspect(currentStopProspect.id)}
                 onToggleSaved={() => toggleSaved(currentStopProspect.id)}
-                onFindFoodNearby={() => openFoodNearby(currentStopProspect.id)}
+                onPickUpFood={() => openFoodNearby(currentStopProspect.id)}
                 onRequestRemove={() => openRemoveProspectPrompt(currentStopProspect.id)}
                 onScanBusinessCard={(file) => handleRouteBusinessCardCapture(currentStopProspect.id, file)}
                 onRemoveBusinessCard={() => removeBusinessCard(currentStopProspect.id)}
@@ -5263,6 +5315,8 @@ function App() {
                               businessName={prospect.businessName}
                               leg={navigationLegByStopId[prospect.id] ?? null}
                               completed={Boolean(prospect.routeCompleted)}
+                              isFoodStop={Boolean(prospect.isFoodStop)}
+                              onPickUpFood={() => openFoodNearby(prospect.id)}
                             />
                           )
                         })}
@@ -6324,6 +6378,7 @@ function App() {
               handleRouteBusinessCardCapture(visitWorkflowProspect.id, file)
             }
             onRemoveBusinessCard={() => removeBusinessCard(visitWorkflowProspect.id)}
+            onPickUpFood={() => openFoodNearby(visitWorkflowProspect.id)}
           />
         ) : null}
 

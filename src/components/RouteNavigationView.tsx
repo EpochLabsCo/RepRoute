@@ -1,5 +1,6 @@
 import { ArrowLeft, ExternalLink, MapPin } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
+import PickUpFoodButton from './PickUpFoodButton'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
 import { type RouteLineRenderStatus } from './RepRouteMap'
 import {
@@ -23,6 +24,7 @@ export type RouteNavigationProspect = {
   businessName: string
   address: string
   routeCompleted: boolean
+  isFoodStop: boolean
   visitNote: string
   visitOutcome: OutcomeTag | ''
 }
@@ -55,6 +57,7 @@ type RouteNavigationViewProps = {
   onMarkArrived: (prospectId: string) => void
   onMarkCompleted: (prospectId: string) => void
   onOpenVisitWorkflow: (prospectId: string) => void
+  onPickUpFood: (prospectId: string) => void
 }
 
 function formatDriveTime(minutes: number) {
@@ -91,6 +94,7 @@ function RouteNavigationView({
   onMarkArrived,
   onMarkCompleted,
   onOpenVisitWorkflow,
+  onPickUpFood,
 }: RouteNavigationViewProps) {
   const activeStop =
     routeProspects.find((prospect) => prospect.id === activeStopId) ??
@@ -175,7 +179,9 @@ function RouteNavigationView({
             address={activeStop.address}
             leg={activeLeg}
             variant="active"
+            isFoodStop={activeStop.isFoodStop}
           />
+          <PickUpFoodButton onClick={() => onPickUpFood(activeStop.id)} wide />
         </section>
       ) : null}
 
@@ -195,6 +201,7 @@ function RouteNavigationView({
               onMarkArrived={() => onMarkArrived(prospect.id)}
               onMarkCompleted={() => onMarkCompleted(prospect.id)}
               onOpenVisitWorkflow={() => onOpenVisitWorkflow(prospect.id)}
+              onPickUpFood={() => onPickUpFood(prospect.id)}
             />
           ))}
         </div>
@@ -213,6 +220,7 @@ function RouteNavigationStopCard({
   onMarkArrived,
   onMarkCompleted,
   onOpenVisitWorkflow,
+  onPickUpFood,
 }: {
   prospect: RouteNavigationProspect
   index: number
@@ -223,12 +231,13 @@ function RouteNavigationStopCard({
   onMarkArrived: () => void
   onMarkCompleted: () => void
   onOpenVisitWorkflow: () => void
+  onPickUpFood: () => void
 }) {
   return (
     <article
       className={`route-navigation-stop-card ${isActive ? 'route-navigation-stop-card--active' : ''} ${
         prospect.routeCompleted ? 'route-navigation-stop-card--completed' : ''
-      }`}
+      } ${prospect.isFoodStop ? 'route-navigation-stop-card--food' : ''}`}
     >
       <button type="button" className="route-navigation-stop-card__select" onClick={onSelect}>
         <RouteFocusCard
@@ -237,6 +246,7 @@ function RouteNavigationStopCard({
           address={prospect.address}
           leg={leg}
           variant={isActive ? 'active' : 'next'}
+          isFoodStop={prospect.isFoodStop}
           statusNote={
             prospect.routeCompleted
               ? uiText.routes.completed
@@ -259,6 +269,8 @@ function RouteNavigationStopCard({
         </button>
         <MarkCompletedButton completed={prospect.routeCompleted} onClick={onMarkCompleted} />
       </div>
+
+      <PickUpFoodButton onClick={onPickUpFood} wide />
 
       <CardMoreActions>
         <CardMoreMenuButton onClick={onOpenVisitWorkflow}>

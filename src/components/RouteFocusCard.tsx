@@ -1,4 +1,5 @@
 import type { RouteNavigationLegSummary } from './RouteNavigationView'
+import { uiText } from '../constants/uiText'
 
 type RouteFocusCardProps = {
   stopNumber: number
@@ -9,6 +10,7 @@ type RouteFocusCardProps = {
   distanceOverride?: string | null
   variant?: 'current' | 'next' | 'active'
   statusNote?: string | null
+  isFoodStop?: boolean
 }
 
 export default function RouteFocusCard({
@@ -19,13 +21,18 @@ export default function RouteFocusCard({
   distanceOverride,
   variant = 'current',
   statusNote,
+  isFoodStop = false,
 }: RouteFocusCardProps) {
   const distance = distanceOverride?.trim() || leg?.distanceText?.trim() || null
   const eta = leg?.durationText?.trim() || null
   const hasMetrics = Boolean(distance || eta)
 
   return (
-    <div className={`route-focus-card route-focus-card--${variant}`}>
+    <div
+      className={`route-focus-card route-focus-card--${variant}${
+        isFoodStop ? ' route-focus-card--food' : ''
+      }`}
+    >
       <div className="route-focus-card__row">
         <span className="route-stop-badge" aria-label={`Stop ${stopNumber}`}>
           {stopNumber}
@@ -44,6 +51,7 @@ export default function RouteFocusCard({
       </div>
       <h3 className="route-focus-card__name">{businessName}</h3>
       <p className="route-focus-card__address">{address}</p>
+      {isFoodStop ? <p className="route-focus-card__food-badge">{uiText.foodNearby.foodStopLabel}</p> : null}
       {statusNote ? <p className="route-focus-card__status">{statusNote}</p> : null}
     </div>
   )

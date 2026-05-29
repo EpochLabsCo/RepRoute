@@ -582,13 +582,33 @@
 }
 
 .route-remaining-stop {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-soft);
+}
+
+.route-remaining-stop__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.route-remaining-stop--food {
+  border-color: rgba(255, 176, 84, 0.42);
+  background:
+    linear-gradient(160deg, rgba(255, 176, 84, 0.12), transparent),
+    var(--surface-soft);
+}
+
+.route-remaining-stop__food-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ffc46a;
 }
 
 .route-remaining-stop--completed {
@@ -808,6 +828,46 @@
 
 .route-current-stop-card .business-card-preview-strip {
   margin-top: 0;
+}
+
+.route-current-stop-card--food {
+  border-color: rgba(255, 176, 84, 0.38);
+  background:
+    linear-gradient(165deg, rgba(255, 176, 84, 0.1), transparent),
+    var(--surface);
+}
+
+.route-focus-card--food {
+  border-color: rgba(255, 176, 84, 0.28);
+}
+
+.route-focus-card__food-badge {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ffc46a;
+}
+
+.route-pick-up-food-btn {
+  justify-content: center;
+  min-height: 42px;
+  border-color: rgba(255, 176, 84, 0.35);
+  color: #ffd28a;
+}
+
+.route-pick-up-food-btn:hover {
+  border-color: rgba(255, 176, 84, 0.55);
+  background: rgba(255, 176, 84, 0.1);
+  color: #ffe2ad;
+}
+
+.route-navigation-stop-card--food {
+  border-color: rgba(255, 176, 84, 0.35);
+  background:
+    linear-gradient(160deg, rgba(255, 176, 84, 0.1), transparent),
+    var(--surface-soft);
 }
 
 .route-primary-action--arrived {
