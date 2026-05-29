@@ -1,6 +1,5 @@
 import { ArrowLeft, ExternalLink, MapPin } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
-import PickUpFoodButton from './PickUpFoodButton'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
 import { type RouteLineRenderStatus } from './RepRouteMap'
 import {
@@ -180,10 +179,12 @@ function RouteNavigationView({
             leg={activeLeg}
             variant="active"
             isFoodStop={activeStop.isFoodStop}
+            onPickUpFood={
+              !activeStop.routeCompleted && !activeStop.isFoodStop
+                ? () => onPickUpFood(activeStop.id)
+                : undefined
+            }
           />
-          <div className="route-stop-actions">
-            <PickUpFoodButton onClick={() => onPickUpFood(activeStop.id)} wide />
-          </div>
         </section>
       ) : null}
 
@@ -256,13 +257,13 @@ function RouteNavigationStopCard({
                 ? uiText.routes.inAppNavigation.arrived
                 : null
           }
+          onPickUpFood={
+            !prospect.routeCompleted && !prospect.isFoodStop ? onPickUpFood : undefined
+          }
         />
       </button>
 
-      <div className="route-stop-actions">
-        <PickUpFoodButton onClick={onPickUpFood} wide />
-
-        <div className="prospect-primary-actions prospect-primary-actions--nav">
+      <div className="prospect-primary-actions prospect-primary-actions--nav">
         <button
           type="button"
           className="prospect-action-btn prospect-action-btn--outline"
@@ -273,7 +274,6 @@ function RouteNavigationStopCard({
           <span>{uiText.routes.inAppNavigation.markArrived}</span>
         </button>
         <MarkCompletedButton completed={prospect.routeCompleted} onClick={onMarkCompleted} />
-        </div>
       </div>
 
       <CardMoreActions>

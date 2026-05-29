@@ -7,7 +7,6 @@ import {
   Trash2,
 } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
-import PickUpFoodButton from './PickUpFoodButton'
 import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
 import {
@@ -95,12 +94,10 @@ export default function RouteCurrentStopCard({
         variant="current"
         statusNote={statusNote}
         isFoodStop={isFoodStop}
+        onPickUpFood={!routeCompleted && !isFoodStop ? onPickUpFood : undefined}
       />
 
-      <div className="route-stop-actions">
-        <PickUpFoodButton onClick={onPickUpFood} wide />
-
-        <div className="route-current-stop-card__primary">
+      <div className="route-current-stop-card__primary">
         <button type="button" className="button button--wide route-primary-action" onClick={onNavigate}>
           <Navigation size={18} />
           {navigateLabel}
@@ -121,7 +118,6 @@ export default function RouteCurrentStopCard({
           {isArrived ? uiText.routes.inAppNavigation.arrived : uiText.routes.inAppNavigation.markArrived}
         </button>
         <MarkCompletedButton completed={routeCompleted} onClick={onOpenCompleteVisit} />
-        </div>
       </div>
 
       <div className="route-current-stop-card__visit-capture">

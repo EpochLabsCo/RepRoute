@@ -347,6 +347,7 @@ export const uiText = {
     distanceAway: (miles: string) => `${miles} from stop`,
     navigate: 'Navigate',
     pickUpFood: 'Pick Up Food?',
+    pickUpFoodPrompt: 'Pick up food before this stop?',
     addFoodStopToRoute: 'Add Food Stop to Route',
     saveAsFoodStop: 'Add Food Stop to Route',
     savedAsFoodStop: 'On Route',

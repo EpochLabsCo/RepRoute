@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { RouteNavigationLegSummary } from './RouteNavigationView'
-import PickUpFoodButton from './PickUpFoodButton'
+import PickUpFoodPrompt from './PickUpFoodPrompt'
 import RouteReorderHandle from './RouteReorderHandle'
 import { uiText } from '../constants/uiText'
 
@@ -28,6 +28,7 @@ export default function RouteRemainingStopCard({
   const distance = leg?.distanceText?.trim() || null
   const eta = leg?.durationText?.trim() || null
   const metrics = [distance, eta].filter(Boolean).join(' · ')
+  const showFoodPrompt = !completed && !isFoodStop
 
   return (
     <article
@@ -40,14 +41,13 @@ export default function RouteRemainingStopCard({
         transition,
       }}
     >
-      <PickUpFoodButton onClick={onPickUpFood} wide />
-
       <div className="route-remaining-stop__main">
         <span className="route-stop-badge" aria-label={uiText.routes.stopLabel(stopNumber - 1)}>
           {stopNumber}
         </span>
         <div className="route-remaining-stop__copy">
           <strong>{businessName}</strong>
+          {showFoodPrompt ? <PickUpFoodPrompt onClick={onPickUpFood} /> : null}
           {isFoodStop ? (
             <span className="route-remaining-stop__food-label">{uiText.foodNearby.foodStopLabel}</span>
           ) : null}

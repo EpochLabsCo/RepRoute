@@ -1,4 +1,5 @@
 import type { RouteNavigationLegSummary } from './RouteNavigationView'
+import PickUpFoodPrompt from './PickUpFoodPrompt'
 import { uiText } from '../constants/uiText'
 
 type RouteFocusCardProps = {
@@ -11,6 +12,7 @@ type RouteFocusCardProps = {
   variant?: 'current' | 'next' | 'active'
   statusNote?: string | null
   isFoodStop?: boolean
+  onPickUpFood?: () => void
 }
 
 export default function RouteFocusCard({
@@ -22,6 +24,7 @@ export default function RouteFocusCard({
   variant = 'current',
   statusNote,
   isFoodStop = false,
+  onPickUpFood,
 }: RouteFocusCardProps) {
   const distance = distanceOverride?.trim() || leg?.distanceText?.trim() || null
   const eta = leg?.durationText?.trim() || null
@@ -50,6 +53,7 @@ export default function RouteFocusCard({
         ) : null}
       </div>
       <h3 className="route-focus-card__name">{businessName}</h3>
+      {onPickUpFood ? <PickUpFoodPrompt onClick={onPickUpFood} /> : null}
       <p className="route-focus-card__address">{address}</p>
       {isFoodStop ? <p className="route-focus-card__food-badge">{uiText.foodNearby.foodStopLabel}</p> : null}
       {statusNote ? <p className="route-focus-card__status">{statusNote}</p> : null}

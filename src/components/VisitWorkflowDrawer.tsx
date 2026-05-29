@@ -1,5 +1,5 @@
 import { MapPin } from 'lucide-react'
-import PickUpFoodButton from './PickUpFoodButton'
+import PickUpFoodPrompt from './PickUpFoodPrompt'
 import BusinessCardContactFields from './BusinessCardContactFields'
 import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
@@ -32,6 +32,7 @@ export type VisitWorkflowProspect = {
   phone: string
   contactEmail: string
   routeCompleted: boolean
+  isFoodStop: boolean
 }
 
 type VisitWorkflowDrawerProps = {
@@ -97,6 +98,9 @@ export default function VisitWorkflowDrawer({
           <div>
             <h2 id="visit-workflow-title">{uiText.routes.visitWorkflow.heading}</h2>
             <p className="visit-workflow-drawer__subtitle">{prospect.businessName}</p>
+            {!prospect.routeCompleted && !prospect.isFoodStop ? (
+              <PickUpFoodPrompt onClick={onPickUpFood} className="visit-workflow-drawer__food-prompt" />
+            ) : null}
           </div>
           <button type="button" className="text-button" onClick={onClose}>
             {uiText.routes.visitWorkflow.close}
@@ -119,8 +123,6 @@ export default function VisitWorkflowDrawer({
               onClick={onToggleCompleted}
             />
           </div>
-
-          <PickUpFoodButton onClick={onPickUpFood} wide className="button button--ghost route-pick-up-food-btn" />
 
           <label className="field-group visit-workflow-drawer__section">
             <span className="field-label">{uiText.routes.quickNoteLabel}</span>

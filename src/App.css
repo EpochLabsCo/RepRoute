@@ -695,7 +695,7 @@
 
 .route-remaining-stop__copy {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
@@ -850,60 +850,45 @@
   color: #ffc46a;
 }
 
-.route-stop-actions {
-  display: grid;
-  gap: 6px;
-}
-
-.route-current-stop-card .route-stop-actions {
-  margin-top: 2px;
-}
-
-.route-pick-up-food-btn {
+.route-food-prompt {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 40px;
-  padding: 8px 12px;
-  font-size: 0.84rem;
-  font-weight: 700;
-  line-height: 1.2;
-  border-color: rgba(255, 176, 84, 0.35);
-  color: #ffd28a;
+  gap: 5px;
+  margin: 3px 0 2px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 176, 84, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 176, 84, 0.06);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  width: fit-content;
+  max-width: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.route-pick-up-food-btn__label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0;
+.route-food-prompt svg {
+  flex-shrink: 0;
+  opacity: 0.75;
+  color: #d4a96a;
 }
 
-.route-pick-up-food-btn__question {
-  margin-left: 1px;
-  font-size: 1.05em;
-  font-weight: 800;
-  color: #fff0d4;
-  opacity: 0.92;
+.route-food-prompt:hover {
+  border-color: rgba(255, 176, 84, 0.38);
+  color: #e8c892;
+  background: rgba(255, 176, 84, 0.11);
 }
 
-.route-pick-up-food-btn:hover {
-  border-color: rgba(255, 176, 84, 0.55);
-  background: rgba(255, 176, 84, 0.1);
-  color: #ffe2ad;
-}
-
-.route-pick-up-food-btn:hover .route-pick-up-food-btn__question {
-  color: #fff8eb;
-}
-
-.route-navigation-stop-card .route-stop-actions,
-.route-remaining-stop .route-pick-up-food-btn {
+.route-remaining-stop__copy .route-food-prompt {
+  margin-top: 2px;
   margin-bottom: 0;
 }
 
-.route-remaining-stop {
-  gap: 6px;
+.visit-workflow-drawer__food-prompt {
+  margin-top: 6px;
 }
 
 .route-navigation-stop-card--food {
