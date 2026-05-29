@@ -580,6 +580,25 @@
   gap: 8px;
 }
 
+.route-remaining-stop__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.route-remaining-stop__aside .card-more {
+  align-self: flex-end;
+}
+
+.route-actions-bar__hint {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+}
+
 .route-remaining-stop__open {
   display: flex;
   align-items: center;

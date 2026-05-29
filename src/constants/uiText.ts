@@ -413,6 +413,7 @@ export const uiText = {
       summaryHeading: 'Route Summary',
       emptyState: 'Add prospects to build a route.',
       singleStopHint: 'Add more stops to optimize a multi-stop route.',
+      addStopsToOptimizeHint: 'Add more stops to optimize a route.',
       readyToOptimize: 'Ready to optimize your route.',
       multiStopHint: 'Route ready in RepRoute. Review your stops, then start route guidance here.',
       stopCount: (count: number) => `${count} stop${count === 1 ? '' : 's'}`,
@@ -660,6 +661,10 @@ export const uiText = {
       removeFromRoute: 'Remove from Route',
       removeFromSaved: 'Remove from Saved Prospects',
       cancel: 'Cancel',
+      confirmRouteMessage: 'Remove this stop from today’s route?',
+      confirmRouteHint:
+        'This only removes the stop from Today’s Route. Saved Prospects, notes, follow-ups, and CRM data are kept.',
+      removedFromRouteToast: 'Stop removed from today’s route.',
     },
     visitOutcomeLabel: 'Visit Outcome',
     mapLegend: {
@@ -979,7 +984,7 @@ export const uiText = {
   emptyStates: {
     noRealProspectsTitle: 'No Prospects Loaded Yet',
     noRealProspectsCopy: 'Enable Live Search to find businesses.',
-    noRouteTitle: 'No prospects currently in your route.',
+    noRouteTitle: 'No stops in today’s route.',
     noRouteCopy: 'Add Prospects from Search or Saved Prospects to build today’s Route.',
     noNearbyTitle: 'No Nearby Prospects Yet',
     noNearbyCopy:

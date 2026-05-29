@@ -359,6 +359,10 @@ type RemoveProspectPrompt = {
   prospectId: string
 }
 
+type RemoveFromRoutePrompt = {
+  prospectId: string
+}
+
 type SettingsSection = 'top' | 'notifications' | 'backup'
 
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
@@ -1212,6 +1216,42 @@ function EmptyState({
   )
 }
 
+function RemoveFromRouteConfirmSheet({
+  prospectName,
+  onConfirm,
+  onCancel,
+}: {
+  prospectName: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remove-from-route-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <h2 id="remove-from-route-title">{prospectName}</h2>
+        <p className="section-copy">{uiText.routes.removal.confirmRouteMessage}</p>
+        <p className="editor-hint">{uiText.routes.removal.confirmRouteHint}</p>
+
+        <div className="modal-sheet__actions">
+          <button type="button" className="button" onClick={onConfirm}>
+            {uiText.routes.removal.removeFromRoute}
+          </button>
+          <button type="button" className="button button--ghost" onClick={onCancel}>
+            {uiText.routes.removal.cancel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RemoveProspectSheet({
   prospect,
   isSaved,
@@ -1852,6 +1892,7 @@ function App() {
   const [notificationMessage, setNotificationMessage] = useState<BackupMessage | null>(null)
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null)
   const [removeProspectPrompt, setRemoveProspectPrompt] = useState<RemoveProspectPrompt | null>(null)
+  const [removeFromRoutePrompt, setRemoveFromRoutePrompt] = useState<RemoveFromRoutePrompt | null>(null)
   const [routeCalculationContext, setRouteCalculationContext] = useState<RouteCalculationContext | null>(
     null,
   )
@@ -2443,6 +2484,11 @@ function App() {
     () => (removeProspectPrompt ? prospectMap.get(removeProspectPrompt.prospectId) ?? null : null),
     [prospectMap, removeProspectPrompt],
   )
+  const removeFromRouteProspect = useMemo(
+    () =>
+      removeFromRoutePrompt ? prospectMap.get(removeFromRoutePrompt.prospectId) ?? null : null,
+    [prospectMap, removeFromRoutePrompt],
+  )
   const foodNearbyAnchorProspect = foodNearbySession?.anchor ?? null
   const editAddressProspect = useMemo(
     () => (editAddressProspectId ? prospectMap.get(editAddressProspectId) ?? null : null),
@@ -2468,6 +2514,7 @@ function App() {
         .filter((prospect): prospect is Prospect => Boolean(prospect)),
     [prospectMap, routeIds],
   )
+  const canOptimizeRoute = routeProspects.length >= 2
   const routeKey = useMemo(() => routeIds.join('|'), [routeIds])
   const foodStopIds = useMemo(
     () =>
@@ -3304,6 +3351,14 @@ function App() {
     setRemoveProspectPrompt(null)
   }
 
+  function openRemoveFromRoutePrompt(prospectId: string) {
+    setRemoveFromRoutePrompt({ prospectId })
+  }
+
+  function closeRemoveFromRoutePrompt() {
+    setRemoveFromRoutePrompt(null)
+  }
+
   async function resolveFoodSearchCenter(anchor: Prospect) {
     if (isFiniteLatLng(anchor.location)) {
       return { ok: true as const, center: anchor.location }
@@ -3530,11 +3585,50 @@ function App() {
   }
 
   function handleRemoveFromRoute(prospectId: string) {
-    setRouteIds((current) => current.filter((id) => id !== prospectId))
+    const nextRouteIds = routeIds.filter((id) => id !== prospectId)
+    const removedWasActiveStop =
+      prospectId === navigationActiveStopId || prospectId === currentStopProspect?.id
+
+    setRouteIds(nextRouteIds)
+    setNavigationArrivedStopIds((current) => {
+      const next = { ...current }
+      delete next[prospectId]
+      return next
+    })
+
+    if (removedWasActiveStop) {
+      const nextProspects = nextRouteIds
+        .map((id) => prospectMap.get(id))
+        .filter((prospect): prospect is Prospect => Boolean(prospect))
+      const nextActiveStop =
+        nextProspects.find((prospect) => !prospect.routeCompleted) ?? nextProspects[0] ?? null
+      setNavigationActiveStopId(nextActiveStop?.id ?? null)
+    }
+
+    if (nextRouteIds.length === 0) {
+      setNavigationActiveStopId(null)
+      if (routeNavigationOpen) {
+        routeNavHistoryPushedRef.current = false
+        setRouteNavigationOpen(false)
+      }
+    }
+
+    if (visitWorkflow?.prospectId === prospectId) {
+      closeVisitWorkflow()
+    }
+
     if (expandedProspectId === prospectId) {
       setExpandedProspectId(null)
     }
+
+    if (foodNearbySession?.anchor.id === prospectId) {
+      dismissFoodNearby(true)
+    }
+
+    setRemoveFromRoutePrompt(null)
     setRemoveProspectPrompt(null)
+    setEtaTick(Date.now())
+    setActionToast({ type: 'success', text: uiText.routes.removal.removedFromRouteToast })
   }
 
   function handleRemoveFromSavedProspects(prospectId: string) {
@@ -5565,6 +5659,7 @@ function App() {
           onMarkCompleted={handleNavigationMarkCompleted}
           onOpenVisitWorkflow={(prospectId) => openVisitWorkflow(prospectId, 'visit')}
           onPickUpFood={openFoodNearby}
+          onRemoveFromRoute={openRemoveFromRoutePrompt}
         />
       )
     }
@@ -5649,13 +5744,18 @@ function App() {
                 type="button"
                 className="button button--wide route-actions-bar__secondary"
                 onClick={() => scheduleOptimizeRoute()}
-                disabled={routeOptimization.status === 'loading'}
+                disabled={!canOptimizeRoute || routeOptimization.status === 'loading'}
               >
                 <Route size={18} />
                 {routeOptimization.status === 'loading'
                   ? uiText.routes.optimization.optimizing
                   : uiText.routes.optimization.button}
               </button>
+              {!canOptimizeRoute && routeProspects.length > 0 ? (
+                <p className="editor-hint route-actions-bar__hint">
+                  {uiText.routes.calculation.addStopsToOptimizeHint}
+                </p>
+              ) : null}
               <button type="button" className="button button--wide button--ghost route-actions-bar__clear" onClick={clearRoute}>
                 <Trash2 size={18} />
                 {uiText.routes.clearRoute}
@@ -5743,7 +5843,7 @@ function App() {
                 onOpenSaved={() => openSavedProspects(currentStopProspect.id)}
                 onToggleSaved={() => toggleSaved(currentStopProspect.id)}
                 onPickUpFood={() => openFoodNearby(currentStopProspect.id)}
-                onRequestRemove={() => openRemoveProspectPrompt(currentStopProspect.id)}
+                onRequestRemove={() => openRemoveFromRoutePrompt(currentStopProspect.id)}
                 onScanBusinessCard={(file) => handleRouteBusinessCardCapture(currentStopProspect.id, file)}
                 onRemoveBusinessCard={() => removeBusinessCard(currentStopProspect.id)}
               />
@@ -5800,6 +5900,7 @@ function App() {
                               isOpen={visitWorkflow?.prospectId === prospect.id}
                               onOpenDetails={() => openVisitWorkflow(prospect.id, 'visit')}
                               onPickUpFood={() => openFoodNearby(prospect.id)}
+                              onRemoveFromRoute={() => openRemoveFromRoutePrompt(prospect.id)}
                             />
                           )
                         })}
@@ -6961,7 +7062,7 @@ function App() {
             onRemoveBusinessCard={() => removeBusinessCard(visitWorkflowProspect.id)}
             onPickUpFood={() => openFoodNearby(visitWorkflowProspect.id)}
             onToggleSaved={() => toggleSaved(visitWorkflowProspect.id)}
-            onRemoveFromRoute={() => openRemoveProspectPrompt(visitWorkflowProspect.id)}
+            onRemoveFromRoute={() => openRemoveFromRoutePrompt(visitWorkflowProspect.id)}
           />
         ) : null}
 
@@ -6989,6 +7090,14 @@ function App() {
             routeOptimizationStatus={routeOptimization.status}
             devDiagnostics={{ routeRenderDebug, routeOptimizationDebug, routeLocationDiagnostics }}
             onClose={() => setRouteDiagnosticsOpen(false)}
+          />
+        ) : null}
+
+        {removeFromRouteProspect ? (
+          <RemoveFromRouteConfirmSheet
+            prospectName={removeFromRouteProspect.businessName}
+            onConfirm={() => handleRemoveFromRoute(removeFromRouteProspect.id)}
+            onCancel={closeRemoveFromRoutePrompt}
           />
         ) : null}
 

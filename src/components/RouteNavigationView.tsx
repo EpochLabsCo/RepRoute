@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, MapPin } from 'lucide-react'
+import { ArrowLeft, ExternalLink, MapPin, Trash2 } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
 import { type RouteLineRenderStatus } from './RepRouteMap'
@@ -59,6 +59,7 @@ type RouteNavigationViewProps = {
   onMarkCompleted: (prospectId: string) => void
   onOpenVisitWorkflow: (prospectId: string) => void
   onPickUpFood: (prospectId: string) => void
+  onRemoveFromRoute: (prospectId: string) => void
 }
 
 function formatDriveTime(minutes: number) {
@@ -98,6 +99,7 @@ function RouteNavigationView({
   onMarkCompleted,
   onOpenVisitWorkflow,
   onPickUpFood,
+  onRemoveFromRoute,
 }: RouteNavigationViewProps) {
   const activeStop =
     routeProspects.find((prospect) => prospect.id === activeStopId) ??
@@ -215,6 +217,7 @@ function RouteNavigationView({
               onMarkCompleted={() => onMarkCompleted(prospect.id)}
               onOpenVisitWorkflow={() => onOpenVisitWorkflow(prospect.id)}
               onPickUpFood={() => onPickUpFood(prospect.id)}
+              onRemoveFromRoute={() => onRemoveFromRoute(prospect.id)}
             />
           ))}
         </div>
@@ -236,6 +239,7 @@ function RouteNavigationStopCard({
   onMarkCompleted,
   onOpenVisitWorkflow,
   onPickUpFood,
+  onRemoveFromRoute,
 }: {
   prospect: RouteNavigationProspect
   index: number
@@ -249,6 +253,7 @@ function RouteNavigationStopCard({
   onMarkCompleted: () => void
   onOpenVisitWorkflow: () => void
   onPickUpFood: () => void
+  onRemoveFromRoute: () => void
 }) {
   return (
     <article
@@ -301,6 +306,10 @@ function RouteNavigationStopCard({
             {uiText.routes.currentStop.quickActions.markIncomplete}
           </CardMoreMenuButton>
         ) : null}
+        <CardMoreMenuButton onClick={onRemoveFromRoute}>
+          <Trash2 size={16} />
+          {uiText.routes.removal.removeFromRoute}
+        </CardMoreMenuButton>
       </CardMoreActions>
     </article>
   )

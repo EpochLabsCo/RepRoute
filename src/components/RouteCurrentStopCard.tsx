@@ -169,7 +169,7 @@ export default function RouteCurrentStopCard({
         ) : null}
         <CardMoreMenuButton onClick={onRequestRemove}>
           <Trash2 size={16} />
-          {uiText.routes.actions.removeProspect}
+          {uiText.routes.removal.removeFromRoute}
         </CardMoreMenuButton>
       </CardMoreActions>
     </section>

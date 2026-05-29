@@ -1,9 +1,10 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Trash2 } from 'lucide-react'
 import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
 import type { RouteStopDistanceDisplay } from '../lib/routeStopDistanceDisplay'
 import PickUpFoodPrompt from './PickUpFoodPrompt'
+import { CardMoreActions, CardMoreMenuButton } from './ProspectCardActions'
 import RouteReorderHandle from './RouteReorderHandle'
 import RouteStopDistanceMetrics from './RouteStopDistanceMetrics'
 import { uiText } from '../constants/uiText'
@@ -20,6 +21,7 @@ type RouteRemainingStopCardProps = {
   isOpen?: boolean
   onOpenDetails: () => void
   onPickUpFood: () => void
+  onRemoveFromRoute: () => void
 }
 
 export default function RouteRemainingStopCard({
@@ -34,6 +36,7 @@ export default function RouteRemainingStopCard({
   isOpen = false,
   onOpenDetails,
   onPickUpFood,
+  onRemoveFromRoute,
 }: RouteRemainingStopCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const showFoodPrompt = !completed && !isFoodStop
@@ -81,7 +84,15 @@ export default function RouteRemainingStopCard({
             aria-hidden
           />
         </button>
-        <RouteReorderHandle dragAttributes={attributes} dragListeners={listeners} />
+        <div className="route-remaining-stop__aside">
+          <CardMoreActions>
+            <CardMoreMenuButton onClick={onRemoveFromRoute}>
+              <Trash2 size={16} />
+              {uiText.routes.removal.removeFromRoute}
+            </CardMoreMenuButton>
+          </CardMoreActions>
+          <RouteReorderHandle dragAttributes={attributes} dragListeners={listeners} />
+        </div>
       </div>
     </article>
   )
