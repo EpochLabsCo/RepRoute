@@ -320,6 +320,7 @@ export const uiText = {
       followUpDate: 'Follow-Up Date',
       clear: 'Clear',
       prospectNotes: 'Prospect Notes',
+      prospectNotesPlaceholder: 'Add prospect notes…',
       editorHint: 'Edits save instantly to local storage on this device.',
     },
   },

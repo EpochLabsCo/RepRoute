@@ -209,6 +209,7 @@ export default function VisitWorkflowDrawer({
               className="text-area text-area--compact"
               rows={3}
               value={prospect.notes}
+              placeholder={uiText.search.prospectCard.prospectNotesPlaceholder}
               onChange={(event) => onUpdateNotes(event.target.value)}
             />
           </label>

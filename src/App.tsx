@@ -103,6 +103,7 @@ import {
   sanitizeFollowUpStore,
   type FollowUpEntry,
 } from './lib/followUps'
+import { normalizeProspectNotes } from './lib/prospectNotes'
 import {
   getBusinessCardDataUrl,
   getBusinessCardObjectUrl,
@@ -162,6 +163,8 @@ type BaseProspect = {
   }
 }
 
+type ProspectImportSource = 'live-search' | 'food-nearby'
+
 type ProspectRecord = {
   contactName?: string
   contactTitle?: string
@@ -171,6 +174,7 @@ type ProspectRecord = {
   addressOverride?: string
   locationOverride?: { lat: number; lng: number }
   googlePlaceIdOverride?: string
+  importSource?: ProspectImportSource
   lastContactDate?: string
   notes?: string
   priority?: AssignedPriority
@@ -590,7 +594,7 @@ function toLiveProspect(
     distance: Number((distanceMilesPrecise ?? calculateDistanceMilesPrecise(searchCenter, { lat, lng })).toFixed(1)),
     priority: 'Unassigned',
     lastContact: 'Not contacted yet',
-    notes: 'Imported from Live Search.',
+    notes: '',
     city: extractCity(address, location.trim()),
     nextTouch: 'Review fit, save if promising, and add to route if qualified.',
     address,
@@ -605,7 +609,22 @@ function mergeProspectCatalog(current: BaseProspect[], incoming: BaseProspect[])
   const merged = new globalThis.Map(current.map((prospect) => [prospect.id, prospect]))
 
   for (const prospect of incoming) {
-    merged.set(prospect.id, prospect)
+    const existing = merged.get(prospect.id)
+    const incomingNotes = normalizeProspectNotes(prospect.notes)
+
+    if (existing) {
+      const existingNotes = normalizeProspectNotes(existing.notes)
+      merged.set(prospect.id, {
+        ...prospect,
+        notes: existingNotes.trim() ? existingNotes : incomingNotes,
+      })
+      continue
+    }
+
+    merged.set(prospect.id, {
+      ...prospect,
+      notes: incomingNotes,
+    })
   }
 
   return Array.from(merged.values())
@@ -843,7 +862,7 @@ function sanitizeBaseProspect(value: unknown): BaseProspect | null {
     distance: value.distance,
     priority: value.priority,
     lastContact: value.lastContact,
-    notes: value.notes,
+    notes: normalizeProspectNotes(value.notes),
     city: value.city,
     nextTouch: value.nextTouch,
     address: value.address,
@@ -941,7 +960,11 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
       }
 
       if (typeof record.notes === 'string') {
-        nextRecord.notes = record.notes
+        nextRecord.notes = normalizeProspectNotes(record.notes)
+      }
+
+      if (record.importSource === 'live-search' || record.importSource === 'food-nearby') {
+        nextRecord.importSource = record.importSource
       }
 
       if (isAssignedPriority(record.priority)) {
@@ -1825,6 +1848,7 @@ function ProspectCard({
               className="text-area"
               rows={4}
               value={prospect.notes}
+              placeholder={uiText.search.prospectCard.prospectNotesPlaceholder}
               onChange={(event) => onUpdateNotes(prospect.id, event.target.value)}
             />
           </label>
@@ -2308,7 +2332,7 @@ function App() {
           contactName: record?.contactName ?? prospect.contactName,
           contactTitle: record?.contactTitle ?? prospect.contactTitle,
           contactEmail: record?.contactEmail ?? prospect.contactEmail,
-          notes: record?.notes ?? prospect.notes,
+          notes: normalizeProspectNotes(record?.notes ?? prospect.notes),
           priority: record?.priority ?? prospect.priority,
           lastContact: record?.lastContactDate
             ? formatFollowUpDate(record.lastContactDate)
@@ -2997,6 +3021,27 @@ function App() {
     }))
   }
 
+  function stampProspectImportSources(prospectIds: string[], source: ProspectImportSource) {
+    setProspectRecords((current) => {
+      let changed = false
+      const next = { ...current }
+
+      for (const prospectId of prospectIds) {
+        if (next[prospectId]?.importSource === source) {
+          continue
+        }
+
+        next[prospectId] = {
+          ...next[prospectId],
+          importSource: source,
+        }
+        changed = true
+      }
+
+      return changed ? next : current
+    })
+  }
+
   function openSavedProspects(prospectId?: string) {
     setExpandedProspectId(prospectId ?? null)
     setSavedProspectsOpen(true)
@@ -3239,8 +3284,10 @@ function App() {
     console.groupEnd()
 
     if (normalizedProspects.length > 0) {
+      const foodProspectIds = normalizedProspects.map((prospect) => prospect.id)
       setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
-      setFoodNearbyResultIds(normalizedProspects.map((prospect) => prospect.id))
+      stampProspectImportSources(foodProspectIds, 'food-nearby')
+      setFoodNearbyResultIds(foodProspectIds)
       setFoodNearbyLoading(false)
       return
     }
@@ -4920,8 +4967,10 @@ function App() {
       console.groupEnd()
 
       if (normalizedProspects.length > 0) {
+        const searchProspectIds = normalizedProspects.map((prospect) => prospect.id)
         setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
-        setLiveSearchIds(normalizedProspects.map((prospect) => prospect.id))
+        stampProspectImportSources(searchProspectIds, 'live-search')
+        setLiveSearchIds(searchProspectIds)
         setSearchStatus({
           source: 'live',
           message: uiText.search.statusMessages.liveResults(
