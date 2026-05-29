@@ -2,6 +2,7 @@ import { ArrowLeft, ExternalLink, MapPin } from 'lucide-react'
 import RouteFocusCard from './RouteFocusCard'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
 import { type RouteLineRenderStatus } from './RepRouteMap'
+import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
 import {
   CardMoreActions,
   CardMoreMenuButton,
@@ -28,10 +29,7 @@ export type RouteNavigationProspect = {
   visitOutcome: OutcomeTag | ''
 }
 
-export type RouteNavigationLegSummary = {
-  distanceText: string
-  durationText: string
-}
+export type RouteNavigationLegSummary = RouteSegmentLeg
 
 type RouteNavigationViewProps = {
   routeProspects: RouteNavigationProspect[]
@@ -52,6 +50,7 @@ type RouteNavigationViewProps = {
   estimatedDriveMinutes: number
   onClose: () => void
   onOpenMaps: () => void
+  activeStopProximityText?: string | null
   onSelectStop: (prospectId: string) => void
   onMarkArrived: (prospectId: string) => void
   onMarkCompleted: (prospectId: string) => void
@@ -89,6 +88,7 @@ function RouteNavigationView({
   estimatedDriveMinutes,
   onClose,
   onOpenMaps,
+  activeStopProximityText = null,
   onSelectStop,
   onMarkArrived,
   onMarkCompleted,
@@ -129,9 +129,13 @@ function RouteNavigationView({
               <span>{uiText.routes.inAppNavigation.stopOrder(activeStopIndex + 1, routeProspects.length)}</span>
             ) : null}
             {activeStopIndex >= 0 ? <span aria-hidden="true">·</span> : null}
-            <span>{routeMiles.toFixed(1)} mi</span>
+            <span>
+              {uiText.routes.distanceMetrics.totalRouteDistance}: {routeMiles.toFixed(1)} mi
+            </span>
             <span aria-hidden="true">·</span>
-            <span>{formatDriveTime(estimatedDriveMinutes)}</span>
+            <span>
+              {uiText.routes.distanceMetrics.totalDriveTime}: {formatDriveTime(estimatedDriveMinutes)}
+            </span>
           </p>
         </div>
 
@@ -176,7 +180,10 @@ function RouteNavigationView({
             stopNumber={activeStopIndex >= 0 ? activeStopIndex + 1 : 1}
             businessName={activeStop.businessName}
             address={activeStop.address}
-            leg={activeLeg}
+            segmentLeg={activeLeg}
+            proximityText={
+              activeStop && activeStop.id === activeStopId ? activeStopProximityText : null
+            }
             variant="active"
             isFoodStop={activeStop.isFoodStop}
             onPickUpFood={
@@ -199,7 +206,8 @@ function RouteNavigationView({
               index={index}
               isActive={prospect.id === activeStopId}
               isArrived={Boolean(arrivedStopIds[prospect.id])}
-              leg={legByStopId[prospect.id]}
+              segmentLeg={legByStopId[prospect.id]}
+              activeStopProximityText={activeStopProximityText}
               onSelect={() => onSelectStop(prospect.id)}
               onMarkArrived={() => onMarkArrived(prospect.id)}
               onMarkCompleted={() => onMarkCompleted(prospect.id)}
@@ -218,7 +226,8 @@ function RouteNavigationStopCard({
   index,
   isActive,
   isArrived,
-  leg,
+  segmentLeg,
+  activeStopProximityText,
   onSelect,
   onMarkArrived,
   onMarkCompleted,
@@ -229,7 +238,8 @@ function RouteNavigationStopCard({
   index: number
   isActive: boolean
   isArrived: boolean
-  leg: RouteNavigationLegSummary | null
+  segmentLeg: RouteNavigationLegSummary | null
+  activeStopProximityText?: string | null
   onSelect: () => void
   onMarkArrived: () => void
   onMarkCompleted: () => void
@@ -247,7 +257,8 @@ function RouteNavigationStopCard({
           stopNumber={index + 1}
           businessName={prospect.businessName}
           address={prospect.address}
-          leg={leg}
+          segmentLeg={segmentLeg}
+          proximityText={isActive ? activeStopProximityText : null}
           variant={isActive ? 'active' : 'next'}
           isFoodStop={prospect.isFoodStop}
           statusNote={

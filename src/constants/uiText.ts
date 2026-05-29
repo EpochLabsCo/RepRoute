@@ -444,6 +444,18 @@ export const uiText = {
     remainingStop: {
       tapForDetails: 'Tap for details',
     },
+    distanceMetrics: {
+      fromPreviousStop: 'From previous stop',
+      fromYourLocation: 'From your location',
+      fromYourLocationValue: (distance: string) => `${distance} from your location`,
+      totalRouteDistance: 'Total route distance',
+      totalDriveTime: 'Total drive time',
+      refreshLocation: 'Refresh Location',
+      locationRefreshing: 'Refreshing GPS…',
+      locationStale: 'GPS location is stale. Refresh for accurate proximity.',
+      segmentSourceDirections: 'Google Directions (driving)',
+      segmentSourceUnavailable: 'Segment distance unavailable',
+    },
     visitWorkflow: {
       heading: 'Visit details',
       close: 'Close',
@@ -490,6 +502,11 @@ export const uiText = {
     },
     routeRender: {
       diagnosticsHeading: 'Route Diagnostics',
+      gpsCoordinates: 'Current GPS',
+      gpsUpdatedAt: 'Last GPS update',
+      routeOriginUsed: 'Route origin used',
+      segmentDistanceSource: 'Segment distance source',
+      waypointOrder: 'Waypoint order',
       stopCount: (count: number) => `${count} stops`,
       optimizedCount: (count: number) => `${count} optimized`,
       skippedCount: (count: number) => `${count} sequential`,

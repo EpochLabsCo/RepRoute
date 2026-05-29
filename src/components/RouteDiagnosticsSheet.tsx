@@ -1,14 +1,26 @@
 import { MapIcon } from 'lucide-react'
 import { uiText } from '../constants/uiText'
 
+export type RouteLocationDiagnostics = {
+  gpsCoordinates: string | null
+  gpsUpdatedAt: string | null
+  gpsIsFresh: boolean
+  routeOriginUsed: string
+  segmentDistanceSource: string
+  waypointOrder: string[]
+}
+
 type RouteDiagnosticsSheetProps = {
   routeStartLocation: string
   onRouteStartLocationChange: (value: string) => void
   onUseCurrentLocation: () => void
+  onRefreshLocation: () => void
+  locationRefreshing?: boolean
   routeProspectCount: number
   routeDirectionsApiStatus: string | null
   routeLineRenderStatus: string
   routeOptimizationStatus: string
+  locationDiagnostics?: RouteLocationDiagnostics | null
   devDiagnostics?: unknown
   onClose: () => void
 }
@@ -17,10 +29,13 @@ export default function RouteDiagnosticsSheet({
   routeStartLocation,
   onRouteStartLocationChange,
   onUseCurrentLocation,
+  onRefreshLocation,
+  locationRefreshing = false,
   routeProspectCount,
   routeDirectionsApiStatus,
   routeLineRenderStatus,
   routeOptimizationStatus,
+  locationDiagnostics,
   devDiagnostics,
   onClose,
 }: RouteDiagnosticsSheetProps) {
@@ -48,9 +63,16 @@ export default function RouteDiagnosticsSheet({
               aria-label={uiText.routes.optimization.startingLocationLabel}
             />
           </div>
-          <button type="button" className="button button--ghost" onClick={onUseCurrentLocation}>
-            {uiText.routes.optimization.useCurrentLocation}
-          </button>
+          <div className="button-row">
+            <button type="button" className="button button--ghost" onClick={onUseCurrentLocation}>
+              {uiText.routes.optimization.useCurrentLocation}
+            </button>
+            <button type="button" className="button button--ghost" onClick={onRefreshLocation} disabled={locationRefreshing}>
+              {locationRefreshing
+                ? uiText.routes.distanceMetrics.locationRefreshing
+                : uiText.routes.distanceMetrics.refreshLocation}
+            </button>
+          </div>
         </label>
 
         <ul className="route-diagnostics-sheet__list">
@@ -63,6 +85,30 @@ export default function RouteDiagnosticsSheet({
           </li>
           <li>Optimize: {routeOptimizationStatus}</li>
         </ul>
+
+        {locationDiagnostics ? (
+          <ul className="route-diagnostics-sheet__list route-diagnostics-sheet__list--location">
+            <li>
+              {uiText.routes.routeRender.gpsCoordinates}: {locationDiagnostics.gpsCoordinates ?? '—'}
+            </li>
+            <li>
+              {uiText.routes.routeRender.gpsUpdatedAt}: {locationDiagnostics.gpsUpdatedAt ?? '—'}
+              {locationDiagnostics.gpsIsFresh ? '' : ` (${uiText.routes.distanceMetrics.locationStale})`}
+            </li>
+            <li>
+              {uiText.routes.routeRender.routeOriginUsed}: {locationDiagnostics.routeOriginUsed}
+            </li>
+            <li>
+              {uiText.routes.routeRender.segmentDistanceSource}: {locationDiagnostics.segmentDistanceSource}
+            </li>
+            <li>
+              {uiText.routes.routeRender.waypointOrder}:{' '}
+              {locationDiagnostics.waypointOrder.length > 0
+                ? locationDiagnostics.waypointOrder.join(' → ')
+                : '—'}
+            </li>
+          </ul>
+        ) : null}
 
         {import.meta.env.DEV && devDiagnostics ? (
           <pre className="editor-hint route-diagnostics-sheet__json">

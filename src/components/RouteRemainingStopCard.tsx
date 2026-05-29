@@ -1,16 +1,17 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ChevronRight } from 'lucide-react'
-import type { RouteNavigationLegSummary } from './RouteNavigationView'
+import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
 import PickUpFoodPrompt from './PickUpFoodPrompt'
 import RouteReorderHandle from './RouteReorderHandle'
+import RouteStopDistanceMetrics from './RouteStopDistanceMetrics'
 import { uiText } from '../constants/uiText'
 
 type RouteRemainingStopCardProps = {
   id: string
   stopNumber: number
   businessName: string
-  leg: RouteNavigationLegSummary | null
+  segmentLeg: RouteSegmentLeg | null
   completed: boolean
   isFoodStop: boolean
   isOpen?: boolean
@@ -22,7 +23,7 @@ export default function RouteRemainingStopCard({
   id,
   stopNumber,
   businessName,
-  leg,
+  segmentLeg,
   completed,
   isFoodStop,
   isOpen = false,
@@ -30,9 +31,6 @@ export default function RouteRemainingStopCard({
   onPickUpFood,
 }: RouteRemainingStopCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const distance = leg?.distanceText?.trim() || null
-  const eta = leg?.durationText?.trim() || null
-  const metrics = [distance, eta].filter(Boolean).join(' · ')
   const showFoodPrompt = !completed && !isFoodStop
 
   return (
@@ -64,7 +62,7 @@ export default function RouteRemainingStopCard({
             {isFoodStop ? (
               <span className="route-remaining-stop__food-label">{uiText.foodNearby.foodStopLabel}</span>
             ) : null}
-            {metrics ? <span className="route-remaining-stop__metrics">{metrics}</span> : null}
+            <RouteStopDistanceMetrics segmentLeg={segmentLeg} compact />
             <span className="route-remaining-stop__hint">{uiText.routes.remainingStop.tapForDetails}</span>
           </div>
           <ChevronRight

@@ -16,15 +16,15 @@ import {
   CardMoreMenuLink,
   MarkCompletedButton,
 } from './ProspectCardActions'
-import type { RouteNavigationLegSummary } from './RouteNavigationView'
+import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
 import { uiText } from '../constants/uiText'
 
 type RouteCurrentStopCardProps = {
   businessName: string
   address: string
   stopNumber: number
-  leg: RouteNavigationLegSummary | null
-  distanceOverride: string | null
+  segmentLeg: RouteSegmentLeg | null
+  proximityText: string | null
   statusNote: string | null
   isFoodStop: boolean
   callHref: string | null
@@ -54,8 +54,8 @@ export default function RouteCurrentStopCard({
   businessName,
   address,
   stopNumber,
-  leg,
-  distanceOverride,
+  segmentLeg,
+  proximityText,
   statusNote,
   isFoodStop,
   callHref,
@@ -90,8 +90,8 @@ export default function RouteCurrentStopCard({
         stopNumber={stopNumber}
         businessName={businessName}
         address={address}
-        leg={leg}
-        distanceOverride={distanceOverride}
+        segmentLeg={segmentLeg}
+        proximityText={proximityText}
         variant="current"
         statusNote={statusNote}
         isFoodStop={isFoodStop}

@@ -720,6 +720,45 @@
   justify-content: center;
 }
 
+.route-stop-metrics {
+  display: grid;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.route-stop-metrics--compact {
+  gap: 2px;
+}
+
+.route-stop-metrics__row {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.route-stop-metrics__row--proximity {
+  color: var(--accent-soft);
+}
+
+.route-stop-metrics__label {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.route-stop-metrics__value {
+  font-weight: 600;
+}
+
+.route-diagnostics-sheet__list--location {
+  margin-top: 8px;
+}
+
 .route-remaining-stop__copy {
   display: grid;
   gap: 4px;
