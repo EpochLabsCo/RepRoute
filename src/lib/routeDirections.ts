@@ -556,7 +556,14 @@ export async function fetchRouteDirectionsWithFallback({
   }
 }
 
-export async function fetchDriveDurationSeconds({
+export type DriveLegMetrics = {
+  durationSeconds: number | null
+  durationText: string | null
+  distanceText: string | null
+  distanceMeters: number | null
+}
+
+export async function fetchDriveLegMetrics({
   origin,
   destination,
   travelMode,
@@ -564,7 +571,7 @@ export async function fetchDriveDurationSeconds({
   origin: string | { lat: number; lng: number }
   destination: RouteDirectionsStop
   travelMode: google.maps.TravelMode
-}): Promise<number | null> {
+}): Promise<DriveLegMetrics | null> {
   if (typeof window === 'undefined' || !window.google?.maps) {
     return null
   }
@@ -587,6 +594,38 @@ export async function fetchDriveDurationSeconds({
     return null
   }
 
-  const durationSeconds = result.routes?.[0]?.legs?.[0]?.duration?.value
-  return typeof durationSeconds === 'number' ? durationSeconds : null
+  const leg = result.routes?.[0]?.legs?.[0]
+  if (!leg) {
+    return null
+  }
+
+  return {
+    durationSeconds: typeof leg.duration?.value === 'number' ? leg.duration.value : null,
+    durationText: leg.duration?.text?.trim() || null,
+    distanceText: leg.distance?.text?.trim() || null,
+    distanceMeters: typeof leg.distance?.value === 'number' ? leg.distance.value : null,
+  }
+}
+
+export async function fetchDriveDurationSeconds({
+  origin,
+  destination,
+  travelMode,
+}: {
+  origin: string | { lat: number; lng: number }
+  destination: RouteDirectionsStop
+  travelMode: google.maps.TravelMode
+}): Promise<number | null> {
+  const metrics = await fetchDriveLegMetrics({ origin, destination, travelMode })
+  return metrics?.durationSeconds ?? null
+}
+
+export function driveLegMetricsToSegmentLeg(metrics: DriveLegMetrics) {
+  return {
+    distanceText: metrics.distanceText ?? '',
+    durationText: metrics.durationText ?? '',
+    distanceMeters: metrics.distanceMeters,
+    durationSeconds: metrics.durationSeconds,
+    source: 'google-directions' as const,
+  }
 }

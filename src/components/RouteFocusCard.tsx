@@ -1,16 +1,16 @@
-import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
-import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
 import PickUpFoodPrompt from './PickUpFoodPrompt'
 import RouteStopDistanceMetrics from './RouteStopDistanceMetrics'
+import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
+import type { RouteStopDistanceDisplay } from '../lib/routeStopDistanceDisplay'
 import { uiText } from '../constants/uiText'
 
 type RouteFocusCardProps = {
   stopNumber: number
   businessName: string
   address: string
-  segmentLeg?: RouteSegmentLeg | null
+  distanceDisplay?: RouteStopDistanceDisplay | null
+  gpsProximityText?: string | null
   schedule?: RouteStopEtaDisplay | null
-  proximityText?: string | null
   variant?: 'current' | 'next' | 'active'
   statusNote?: string | null
   isFoodStop?: boolean
@@ -21,9 +21,9 @@ export default function RouteFocusCard({
   stopNumber,
   businessName,
   address,
-  segmentLeg,
+  distanceDisplay,
+  gpsProximityText,
   schedule,
-  proximityText,
   variant = 'current',
   statusNote,
   isFoodStop = false,
@@ -43,7 +43,11 @@ export default function RouteFocusCard({
       <h3 className="route-focus-card__name">{businessName}</h3>
       {onPickUpFood ? <PickUpFoodPrompt onClick={onPickUpFood} /> : null}
       <p className="route-focus-card__address">{address}</p>
-      <RouteStopDistanceMetrics segmentLeg={segmentLeg} schedule={schedule} proximityText={proximityText} />
+      <RouteStopDistanceMetrics
+        distanceDisplay={distanceDisplay}
+        gpsProximityText={gpsProximityText}
+        schedule={schedule}
+      />
       {isFoodStop ? <p className="route-focus-card__food-badge">{uiText.foodNearby.foodStopLabel}</p> : null}
       {statusNote ? <p className="route-focus-card__status">{statusNote}</p> : null}
     </div>

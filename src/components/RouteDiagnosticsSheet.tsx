@@ -1,13 +1,23 @@
 import { MapIcon } from 'lucide-react'
 import { uiText } from '../constants/uiText'
 
+export type RouteStopDiagnosticRow = {
+  stopNumber: number
+  businessName: string
+  coordinates: string | null
+  scopeLabel: string
+  distanceSource: string
+}
+
 export type RouteLocationDiagnostics = {
   gpsCoordinates: string | null
   gpsUpdatedAt: string | null
   gpsIsFresh: boolean
   routeOriginUsed: string
+  routeOriginCoordinates: string | null
   segmentDistanceSource: string
   waypointOrder: string[]
+  stopDiagnostics: RouteStopDiagnosticRow[]
 }
 
 type RouteDiagnosticsSheetProps = {
@@ -87,27 +97,57 @@ export default function RouteDiagnosticsSheet({
         </ul>
 
         {locationDiagnostics ? (
-          <ul className="route-diagnostics-sheet__list route-diagnostics-sheet__list--location">
-            <li>
-              {uiText.routes.routeRender.gpsCoordinates}: {locationDiagnostics.gpsCoordinates ?? '—'}
-            </li>
-            <li>
-              {uiText.routes.routeRender.gpsUpdatedAt}: {locationDiagnostics.gpsUpdatedAt ?? '—'}
-              {locationDiagnostics.gpsIsFresh ? '' : ` (${uiText.routes.distanceMetrics.locationStale})`}
-            </li>
-            <li>
-              {uiText.routes.routeRender.routeOriginUsed}: {locationDiagnostics.routeOriginUsed}
-            </li>
-            <li>
-              {uiText.routes.routeRender.segmentDistanceSource}: {locationDiagnostics.segmentDistanceSource}
-            </li>
-            <li>
-              {uiText.routes.routeRender.waypointOrder}:{' '}
-              {locationDiagnostics.waypointOrder.length > 0
-                ? locationDiagnostics.waypointOrder.join(' → ')
-                : '—'}
-            </li>
-          </ul>
+          <>
+            <ul className="route-diagnostics-sheet__list route-diagnostics-sheet__list--location">
+              <li>
+                {uiText.routes.routeRender.gpsCoordinates}: {locationDiagnostics.gpsCoordinates ?? '—'}
+              </li>
+              <li>
+                {uiText.routes.routeRender.gpsUpdatedAt}: {locationDiagnostics.gpsUpdatedAt ?? '—'}
+                {locationDiagnostics.gpsIsFresh ? '' : ` (${uiText.routes.distanceMetrics.locationStale})`}
+              </li>
+              <li>
+                {uiText.routes.routeRender.routeOriginUsed}: {locationDiagnostics.routeOriginUsed}
+              </li>
+              <li>
+                {uiText.routes.routeRender.routeOriginCoordinates}:{' '}
+                {locationDiagnostics.routeOriginCoordinates ?? '—'}
+              </li>
+              <li>
+                {uiText.routes.routeRender.segmentDistanceSource}: {locationDiagnostics.segmentDistanceSource}
+              </li>
+              <li>
+                {uiText.routes.routeRender.waypointOrder}:{' '}
+                {locationDiagnostics.waypointOrder.length > 0
+                  ? locationDiagnostics.waypointOrder.join(' → ')
+                  : '—'}
+              </li>
+            </ul>
+
+            {locationDiagnostics.stopDiagnostics.length > 0 ? (
+              <div className="route-diagnostics-sheet__stops">
+                <h3 className="route-diagnostics-sheet__stops-title">
+                  {uiText.routes.routeRender.stopCoordinates}
+                </h3>
+                <ul className="route-diagnostics-sheet__list route-diagnostics-sheet__list--stops">
+                  {locationDiagnostics.stopDiagnostics.map((stop) => (
+                    <li key={`${stop.stopNumber}-${stop.businessName}`}>
+                      <strong>
+                        {stop.stopNumber}. {stop.businessName}
+                      </strong>
+                      <span className="route-diagnostics-sheet__stop-detail">
+                        {uiText.routes.routeRender.stopCoordinates}: {stop.coordinates ?? '—'}
+                      </span>
+                      <span className="route-diagnostics-sheet__stop-detail">
+                        {stop.scopeLabel} · {uiText.routes.routeRender.displayedDistanceSource}:{' '}
+                        {stop.distanceSource}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </>
         ) : null}
 
         {import.meta.env.DEV && devDiagnostics ? (

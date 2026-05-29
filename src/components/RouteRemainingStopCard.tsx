@@ -1,8 +1,8 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ChevronRight } from 'lucide-react'
-import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
 import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
+import type { RouteStopDistanceDisplay } from '../lib/routeStopDistanceDisplay'
 import PickUpFoodPrompt from './PickUpFoodPrompt'
 import RouteReorderHandle from './RouteReorderHandle'
 import RouteStopDistanceMetrics from './RouteStopDistanceMetrics'
@@ -12,7 +12,8 @@ type RouteRemainingStopCardProps = {
   id: string
   stopNumber: number
   businessName: string
-  segmentLeg: RouteSegmentLeg | null
+  distanceDisplay?: RouteStopDistanceDisplay | null
+  gpsProximityText?: string | null
   schedule?: RouteStopEtaDisplay | null
   completed: boolean
   isFoodStop: boolean
@@ -25,7 +26,8 @@ export default function RouteRemainingStopCard({
   id,
   stopNumber,
   businessName,
-  segmentLeg,
+  distanceDisplay,
+  gpsProximityText,
   schedule,
   completed,
   isFoodStop,
@@ -65,7 +67,12 @@ export default function RouteRemainingStopCard({
             {isFoodStop ? (
               <span className="route-remaining-stop__food-label">{uiText.foodNearby.foodStopLabel}</span>
             ) : null}
-            <RouteStopDistanceMetrics segmentLeg={segmentLeg} schedule={schedule} compact />
+            <RouteStopDistanceMetrics
+              distanceDisplay={distanceDisplay}
+              gpsProximityText={gpsProximityText}
+              schedule={schedule}
+              compact
+            />
             <span className="route-remaining-stop__hint">{uiText.routes.remainingStop.tapForDetails}</span>
           </div>
           <ChevronRight

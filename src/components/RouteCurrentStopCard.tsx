@@ -16,17 +16,17 @@ import {
   CardMoreMenuLink,
   MarkCompletedButton,
 } from './ProspectCardActions'
-import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
 import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
+import type { RouteStopDistanceDisplay } from '../lib/routeStopDistanceDisplay'
 import { uiText } from '../constants/uiText'
 
 type RouteCurrentStopCardProps = {
   businessName: string
   address: string
   stopNumber: number
-  segmentLeg: RouteSegmentLeg | null
+  distanceDisplay?: RouteStopDistanceDisplay | null
+  gpsProximityText?: string | null
   schedule?: RouteStopEtaDisplay | null
-  proximityText: string | null
   statusNote: string | null
   isFoodStop: boolean
   callHref: string | null
@@ -56,9 +56,9 @@ export default function RouteCurrentStopCard({
   businessName,
   address,
   stopNumber,
-  segmentLeg,
+  distanceDisplay,
+  gpsProximityText,
   schedule,
-  proximityText,
   statusNote,
   isFoodStop,
   callHref,
@@ -93,9 +93,9 @@ export default function RouteCurrentStopCard({
         stopNumber={stopNumber}
         businessName={businessName}
         address={address}
-        segmentLeg={segmentLeg}
+        distanceDisplay={distanceDisplay}
+        gpsProximityText={gpsProximityText}
         schedule={schedule}
-        proximityText={proximityText}
         variant="current"
         statusNote={statusNote}
         isFoodStop={isFoodStop}

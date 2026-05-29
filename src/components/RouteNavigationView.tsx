@@ -4,6 +4,7 @@ import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavig
 import { type RouteLineRenderStatus } from './RepRouteMap'
 import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
 import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
+import type { RouteStopDistanceDisplay } from '../lib/routeStopDistanceDisplay'
 import {
   CardMoreActions,
   CardMoreMenuButton,
@@ -43,8 +44,9 @@ type RouteNavigationViewProps = {
   userLocation: { lat: number; lng: number } | null
   activeStopId: string | null
   arrivedStopIds: Record<string, boolean>
-  legByStopId: Record<string, RouteNavigationLegSummary | null>
   etaByStopId?: Record<string, RouteStopEtaDisplay>
+  distanceByStopId?: Record<string, RouteStopDistanceDisplay | null>
+  gpsProximityByStopId?: Record<string, string | null>
   completedStops: number
   remainingStops: number
   completionPercentage: number
@@ -52,7 +54,6 @@ type RouteNavigationViewProps = {
   estimatedDriveMinutes: number
   onClose: () => void
   onOpenMaps: () => void
-  activeStopProximityText?: string | null
   onSelectStop: (prospectId: string) => void
   onMarkArrived: (prospectId: string) => void
   onMarkCompleted: (prospectId: string) => void
@@ -82,8 +83,9 @@ function RouteNavigationView({
   userLocation,
   activeStopId,
   arrivedStopIds,
-  legByStopId,
   etaByStopId = {},
+  distanceByStopId = {},
+  gpsProximityByStopId = {},
   completedStops,
   remainingStops,
   completionPercentage,
@@ -91,7 +93,6 @@ function RouteNavigationView({
   estimatedDriveMinutes,
   onClose,
   onOpenMaps,
-  activeStopProximityText = null,
   onSelectStop,
   onMarkArrived,
   onMarkCompleted,
@@ -104,8 +105,6 @@ function RouteNavigationView({
     routeProspects[0] ??
     null
   const activeStopIndex = activeStop ? routeProspects.findIndex((prospect) => prospect.id === activeStop.id) : -1
-  const activeLeg = activeStop ? legByStopId[activeStop.id] : null
-
   return (
     <div className="route-navigation-view">
       <section className="panel section-panel route-navigation-view__header">
@@ -183,11 +182,9 @@ function RouteNavigationView({
             stopNumber={activeStopIndex >= 0 ? activeStopIndex + 1 : 1}
             businessName={activeStop.businessName}
             address={activeStop.address}
-            segmentLeg={activeLeg}
+            distanceDisplay={activeStop ? distanceByStopId[activeStop.id] : null}
+            gpsProximityText={activeStop ? gpsProximityByStopId[activeStop.id] : null}
             schedule={activeStop ? etaByStopId[activeStop.id] : null}
-            proximityText={
-              activeStop && activeStop.id === activeStopId ? activeStopProximityText : null
-            }
             variant="active"
             isFoodStop={activeStop.isFoodStop}
             onPickUpFood={
@@ -210,9 +207,9 @@ function RouteNavigationView({
               index={index}
               isActive={prospect.id === activeStopId}
               isArrived={Boolean(arrivedStopIds[prospect.id])}
-              segmentLeg={legByStopId[prospect.id]}
+              distanceDisplay={distanceByStopId[prospect.id]}
+              gpsProximityText={gpsProximityByStopId[prospect.id]}
               schedule={etaByStopId[prospect.id]}
-              activeStopProximityText={activeStopProximityText}
               onSelect={() => onSelectStop(prospect.id)}
               onMarkArrived={() => onMarkArrived(prospect.id)}
               onMarkCompleted={() => onMarkCompleted(prospect.id)}
@@ -231,9 +228,9 @@ function RouteNavigationStopCard({
   index,
   isActive,
   isArrived,
-  segmentLeg,
+  distanceDisplay,
+  gpsProximityText,
   schedule,
-  activeStopProximityText,
   onSelect,
   onMarkArrived,
   onMarkCompleted,
@@ -244,9 +241,9 @@ function RouteNavigationStopCard({
   index: number
   isActive: boolean
   isArrived: boolean
-  segmentLeg: RouteNavigationLegSummary | null
+  distanceDisplay?: RouteStopDistanceDisplay | null
+  gpsProximityText?: string | null
   schedule?: RouteStopEtaDisplay | null
-  activeStopProximityText?: string | null
   onSelect: () => void
   onMarkArrived: () => void
   onMarkCompleted: () => void
@@ -264,9 +261,9 @@ function RouteNavigationStopCard({
           stopNumber={index + 1}
           businessName={prospect.businessName}
           address={prospect.address}
-          segmentLeg={segmentLeg}
+          distanceDisplay={distanceDisplay}
+          gpsProximityText={gpsProximityText}
           schedule={schedule}
-          proximityText={isActive ? activeStopProximityText : null}
           variant={isActive ? 'active' : 'next'}
           isFoodStop={prospect.isFoodStop}
           statusNote={

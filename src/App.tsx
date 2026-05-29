@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -130,6 +129,11 @@ import {
   type DefaultStopDurationMinutes,
 } from './lib/routeStopEtas'
 import {
+  buildRouteStopDistanceById,
+  formatGpsProximityMiles,
+  formatRouteStopCoordinates,
+} from './lib/routeStopDistanceDisplay'
+import {
   formatGpsTimestamp,
   GPS_INITIAL_MAX_AGE_MS,
   GPS_WATCH_MAX_AGE_MS,
@@ -146,7 +150,8 @@ import {
   saveBusinessCardImage,
 } from './lib/businessCardStorage'
 import {
-  fetchDriveDurationSeconds,
+  driveLegMetricsToSegmentLeg,
+  fetchDriveLegMetrics,
   fetchRouteDirectionsWithFallback,
   optimizeRouteStopOrder,
   ROUTE_OPTIMIZATION_BATCH_STOPS,
@@ -1893,7 +1898,7 @@ function App() {
       15,
     )
   const [etaTick, setEtaTick] = useState(() => Date.now())
-  const [gpsToNextDriveSeconds, setGpsToNextDriveSeconds] = useState<number | null>(null)
+  const [gpsToNextStopLeg, setGpsToNextStopLeg] = useState<RouteSegmentLeg | null>(null)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEYS.mapsAppPreference, JSON.stringify(mapsAppPreference))
@@ -2883,6 +2888,58 @@ function App() {
     [routeNavigationDirections, routeOrigin.source, routeProspects],
   )
 
+  const fromCurrentLocationStopId = useMemo(() => {
+    if (routeNavigationOpen && navigationActiveStopId) {
+      return navigationActiveStopId
+    }
+
+    return currentStopProspect?.id ?? routeProspects.find((prospect) => !prospect.routeCompleted)?.id ?? null
+  }, [currentStopProspect?.id, navigationActiveStopId, routeNavigationOpen, routeProspects])
+
+  const routeStopDistanceLabels = useMemo(
+    () => ({
+      fromPreviousStop: uiText.routes.distanceMetrics.fromPreviousStop,
+      fromRouteStart: uiText.routes.distanceMetrics.fromRouteStart,
+      sourceDirectionsSegment: uiText.routes.distanceMetrics.segmentSourceDirections,
+      sourceAtRouteStart: uiText.routes.distanceMetrics.segmentSourceAtRouteStart,
+      sourceUnavailable: uiText.routes.distanceMetrics.segmentSourceUnavailable,
+    }),
+    [],
+  )
+
+  const routeStopDistanceById = useMemo(
+    () =>
+      buildRouteStopDistanceById({
+        routeStops: routeProspects.map((prospect) => ({
+          id: prospect.id,
+          routeCompleted: Boolean(prospect.routeCompleted),
+        })),
+        legByStopId: navigationLegByStopId,
+        labels: routeStopDistanceLabels,
+      }),
+    [navigationLegByStopId, routeProspects, routeStopDistanceLabels],
+  )
+
+  const gpsProximityByStopId = useMemo(() => {
+    const map: Record<string, string | null> = {}
+
+    if (!fromCurrentLocationStopId || !userGpsFix || !isGpsFixFresh(userGpsFix)) {
+      return map
+    }
+
+    const prospect = prospectMap.get(fromCurrentLocationStopId)
+    if (!prospect || !isFiniteLatLng(prospect.location)) {
+      return map
+    }
+
+    const miles = calculateDistanceMilesPrecise(userGpsFix, prospect.location)
+    map[fromCurrentLocationStopId] = uiText.routes.distanceMetrics.fromYourLocationValue(
+      `${formatGpsProximityMiles(miles)} mi`,
+    )
+
+    return map
+  }, [fromCurrentLocationStopId, prospectMap, userGpsFix])
+
   const routeStopEtaById = useMemo(
     () =>
       buildRouteStopEtaSchedule({
@@ -2894,7 +2951,7 @@ function App() {
         legByStopId: navigationLegByStopId,
         nowMs: etaTick,
         defaultStopDurationMinutes: sanitizeDefaultStopDurationMinutes(defaultStopDurationMinutes),
-        gpsDriveSecondsToNextStop: gpsToNextDriveSeconds,
+        gpsDriveSecondsToNextStop: gpsToNextStopLeg?.durationSeconds ?? null,
         labels: {
           arriveBy: uiText.routes.stopEta.arriveBy,
           completedAt: uiText.routes.stopEta.completedAt,
@@ -2910,7 +2967,7 @@ function App() {
     [
       defaultStopDurationMinutes,
       etaTick,
-      gpsToNextDriveSeconds,
+      gpsToNextStopLeg,
       navigationLegByStopId,
       routeProspects,
     ],
@@ -2939,7 +2996,7 @@ function App() {
     const nextStop = routeProspects.find((prospect) => !prospect.routeCompleted) ?? null
 
     if (!routeTabActive || !nextStop || !userGpsFix || !isGpsFixFresh(userGpsFix)) {
-      setGpsToNextDriveSeconds(null)
+      setGpsToNextStopLeg(null)
       return
     }
 
@@ -2951,14 +3008,14 @@ function App() {
         return
       }
 
-      const seconds = await fetchDriveDurationSeconds({
+      const metrics = await fetchDriveLegMetrics({
         origin: userGpsFix,
         destination: prospectToRouteDirectionsStop(nextStop),
         travelMode: getRouteDirectionsTravelMode(),
       })
 
       if (!cancelled) {
-        setGpsToNextDriveSeconds(seconds)
+        setGpsToNextStopLeg(metrics ? driveLegMetricsToSegmentLeg(metrics) : null)
       }
     })()
 
@@ -2967,48 +3024,53 @@ function App() {
     }
   }, [activeView, etaTick, routeNavigationOpen, routeProspects, routeIds, userGpsFix])
 
-  const proximityTextForProspect = useCallback(
-    (prospectId: string) => {
-      if (!userGpsFix || !isGpsFixFresh(userGpsFix)) {
-        return null
-      }
-
-      const prospect = prospectMap.get(prospectId)
-      if (!prospect || !isFiniteLatLng(prospect.location)) {
-        return null
-      }
-
-      const miles = calculateDistanceMilesPrecise(userGpsFix, prospect.location)
-      return uiText.routes.distanceMetrics.fromYourLocationValue(`${miles < 1 ? miles.toFixed(2) : miles.toFixed(1)} mi`)
-    },
-    [prospectMap, userGpsFix],
-  )
-
-  const navigationActiveProximityText = useMemo(() => {
-    if (!navigationActiveStopId) {
-      return null
-    }
-
-    return proximityTextForProspect(navigationActiveStopId)
-  }, [navigationActiveStopId, proximityTextForProspect])
-
   const routeLocationDiagnostics = useMemo<RouteLocationDiagnostics>(() => {
     const waypointOrder = routeProspects.map(
       (prospect, index) => `${index + 1}. ${prospect.businessName}`,
     )
     const hasDirectionsLegs = Boolean(routeNavigationDirections?.routes?.[0]?.legs?.length)
+    const routeOriginCoordinates =
+      routeOrigin.origin && typeof routeOrigin.origin !== 'string'
+        ? formatRouteStopCoordinates(routeOrigin.origin)
+        : typeof routeOrigin.origin === 'string'
+          ? routeOrigin.origin
+          : null
 
     return {
       gpsCoordinates: userGpsFix ? `${userGpsFix.lat.toFixed(5)}, ${userGpsFix.lng.toFixed(5)}` : null,
       gpsUpdatedAt: userGpsFix ? formatGpsTimestamp(userGpsFix.updatedAt) : null,
       gpsIsFresh: isGpsFixFresh(userGpsFix),
       routeOriginUsed: formatRouteOriginLabel(routeOrigin.origin, routeOrigin.source),
+      routeOriginCoordinates,
       segmentDistanceSource: hasDirectionsLegs
         ? uiText.routes.distanceMetrics.segmentSourceDirections
         : uiText.routes.distanceMetrics.segmentSourceUnavailable,
       waypointOrder,
+      stopDiagnostics: routeProspects.map((prospect, index) => {
+        const display = routeStopDistanceById[prospect.id]
+        const gpsProximity = gpsProximityByStopId[prospect.id]
+        const segmentSource =
+          display?.sourceLabel ?? uiText.routes.distanceMetrics.segmentSourceUnavailable
+
+        return {
+          stopNumber: index + 1,
+          businessName: prospect.businessName,
+          coordinates: formatRouteStopCoordinates(prospect.location),
+          scopeLabel: display?.scopeLabel ?? '—',
+          distanceSource: gpsProximity
+            ? `${segmentSource}; ${uiText.routes.distanceMetrics.segmentSourceGpsProximity}`
+            : segmentSource,
+        }
+      }),
     }
-  }, [routeNavigationDirections, routeOrigin, routeProspects, userGpsFix])
+  }, [
+    gpsProximityByStopId,
+    routeNavigationDirections,
+    routeOrigin,
+    routeProspects,
+    routeStopDistanceById,
+    userGpsFix,
+  ])
   const effectiveRadiusMiles = getEffectiveRadiusMiles(searchRadiusChoice, customRadiusMiles)
   const notificationPermissionLabel =
     notificationPermission === 'granted'
@@ -5486,11 +5548,11 @@ function App() {
           directionsError={routeNavigationError}
           onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
           userLocation={userGpsMapPosition}
-          activeStopProximityText={navigationActiveProximityText}
           activeStopId={navigationActiveStopId}
           arrivedStopIds={navigationArrivedStopIds}
-          legByStopId={navigationLegByStopId}
           etaByStopId={routeStopEtaById}
+          distanceByStopId={routeStopDistanceById}
+          gpsProximityByStopId={gpsProximityByStopId}
           completedStops={completedRouteStops}
           remainingStops={remainingRouteStops}
           completionPercentage={completionPercentage}
@@ -5652,9 +5714,9 @@ function App() {
                 stopNumber={
                   routeProspects.findIndex((prospect) => prospect.id === currentStopProspect.id) + 1
                 }
-                segmentLeg={navigationLegByStopId[currentStopProspect.id] ?? null}
+                distanceDisplay={routeStopDistanceById[currentStopProspect.id]}
+                gpsProximityText={gpsProximityByStopId[currentStopProspect.id]}
                 schedule={routeStopEtaById[currentStopProspect.id]}
-                proximityText={proximityTextForProspect(currentStopProspect.id)}
                 statusNote={
                   onLocationRouteStop
                     ? uiText.routes.currentStop.onLocation
@@ -5730,7 +5792,8 @@ function App() {
                               id={prospect.id}
                               stopNumber={stopNumber}
                               businessName={prospect.businessName}
-                              segmentLeg={navigationLegByStopId[prospect.id] ?? null}
+                              distanceDisplay={routeStopDistanceById[prospect.id]}
+                              gpsProximityText={gpsProximityByStopId[prospect.id]}
                               schedule={routeStopEtaById[prospect.id]}
                               completed={Boolean(prospect.routeCompleted)}
                               isFoodStop={Boolean(prospect.isFoodStop)}

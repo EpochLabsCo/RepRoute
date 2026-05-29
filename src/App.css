@@ -739,8 +739,35 @@
   color: var(--text-secondary);
 }
 
-.route-stop-metrics__row--proximity {
+.route-stop-metrics__segment {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+}
+
+.route-stop-metrics__proximity {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-soft) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 8%, var(--surface-elevated));
+}
+
+.route-stop-metrics__proximity .route-stop-metrics__label {
   color: var(--accent-soft);
+}
+
+.route-stop-metrics__proximity .route-stop-metrics__value {
+  color: var(--accent-soft);
+}
+
+.route-stop-metrics--compact .route-stop-metrics__segment,
+.route-stop-metrics--compact .route-stop-metrics__proximity {
+  padding: 4px 6px;
 }
 
 .route-stop-metrics__label {
@@ -753,6 +780,33 @@
 
 .route-stop-metrics__value {
   font-weight: 600;
+}
+
+.route-stop-metrics__value--muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.route-diagnostics-sheet__stops {
+  margin-top: 12px;
+}
+
+.route-diagnostics-sheet__stops-title {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.route-diagnostics-sheet__list--stops li {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.route-diagnostics-sheet__stop-detail {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
 }
 
 .route-stop-eta {
