@@ -850,17 +850,60 @@
   color: #ffc46a;
 }
 
+.route-stop-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.route-current-stop-card .route-stop-actions {
+  margin-top: 2px;
+}
+
 .route-pick-up-food-btn {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  min-height: 42px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.2;
   border-color: rgba(255, 176, 84, 0.35);
   color: #ffd28a;
+}
+
+.route-pick-up-food-btn__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+}
+
+.route-pick-up-food-btn__question {
+  margin-left: 1px;
+  font-size: 1.05em;
+  font-weight: 800;
+  color: #fff0d4;
+  opacity: 0.92;
 }
 
 .route-pick-up-food-btn:hover {
   border-color: rgba(255, 176, 84, 0.55);
   background: rgba(255, 176, 84, 0.1);
   color: #ffe2ad;
+}
+
+.route-pick-up-food-btn:hover .route-pick-up-food-btn__question {
+  color: #fff8eb;
+}
+
+.route-navigation-stop-card .route-stop-actions,
+.route-remaining-stop .route-pick-up-food-btn {
+  margin-bottom: 0;
+}
+
+.route-remaining-stop {
+  gap: 6px;
 }
 
 .route-navigation-stop-card--food {
@@ -3401,6 +3444,88 @@
 }
 
 .crm-preview-table td {
+  color: var(--text-secondary);
+}
+
+.crm-export-toggles {
+  display: grid;
+  gap: 8px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.toggle-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.crm-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.crm-export-actions .button {
+  flex: 1 1 140px;
+}
+
+.search-saved-prospects-btn {
+  margin-top: 4px;
+}
+
+.saved-prospects-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.saved-prospects-sheet__panel {
+  width: min(100%, 520px);
+  max-height: min(88dvh, 720px);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.saved-prospects-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 8px;
+}
+
+.saved-prospects-sheet__subtitle {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.saved-prospects-sheet__body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px max(16px, env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+.saved-prospects-sheet__empty {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  padding: 24px 12px;
+  text-align: center;
   color: var(--text-secondary);
 }
 

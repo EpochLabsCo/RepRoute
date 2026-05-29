@@ -55,6 +55,7 @@ import RouteDiagnosticsSheet from './components/RouteDiagnosticsSheet'
 import RouteNavigationView, { type RouteNavigationLegSummary } from './components/RouteNavigationView'
 import RouteRemainingStopCard from './components/RouteRemainingStopCard'
 import VisitWorkflowDrawer from './components/VisitWorkflowDrawer'
+import SavedProspectsSheet from './components/SavedProspectsSheet'
 import {
   buildCrmExportRecord,
   buildCrmExportRows,
@@ -62,6 +63,7 @@ import {
   getCrmExportFormats,
   getCrmExportScopes,
   type CrmExportFormat,
+  type CrmExportOptions,
   type CrmExportScope,
 } from './lib/crmExport'
 import {
@@ -121,7 +123,7 @@ type AssignedPriority = 'Hot' | 'Warm' | 'Cold'
 type Priority = AssignedPriority | 'Unassigned'
 type Theme = 'dark' | 'light'
 type TravelMode = 'driving' | 'walking'
-type View = 'dashboard' | 'map' | 'search' | 'saved' | 'follow-ups' | 'settings'
+type View = 'dashboard' | 'map' | 'search' | 'crm-export' | 'follow-ups' | 'settings'
 
 type FoodNearbySession = {
   anchor: Prospect
@@ -308,7 +310,7 @@ type RemoveProspectPrompt = {
   prospectId: string
 }
 
-type SettingsSection = 'top' | 'notifications' | 'crm' | 'backup'
+type SettingsSection = 'top' | 'notifications' | 'backup'
 
 const ROUTE_OUTCOME_OPTIONS: OutcomeTag[] = [...uiText.routes.outcomeTags]
 const ASSIGNED_PRIORITY_OPTIONS: AssignedPriority[] = ['Hot', 'Warm', 'Cold']
@@ -1955,8 +1957,14 @@ function App() {
     prospectId: string
     intent: 'complete' | 'visit'
   } | null>(null)
-  const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('generic')
-  const [crmExportScope, setCrmExportScope] = useState<CrmExportScope>('all')
+  const [crmExportFormat, setCrmExportFormat] = useState<CrmExportFormat>('wpcrm')
+  const [crmExportScope, setCrmExportScope] = useState<CrmExportScope>('today')
+  const [crmExportOnlyCompleted, setCrmExportOnlyCompleted] = useState(false)
+  const [crmExportIncludeNotes, setCrmExportIncludeNotes] = useState(true)
+  const [crmExportIncludeFollowUps, setCrmExportIncludeFollowUps] = useState(true)
+  const [crmExportIncludeBusinessCard, setCrmExportIncludeBusinessCard] = useState(true)
+  const [crmExportPreviewOpen, setCrmExportPreviewOpen] = useState(false)
+  const [savedProspectsOpen, setSavedProspectsOpen] = useState(false)
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null)
@@ -1980,8 +1988,6 @@ function App() {
     const target =
       section === 'notifications'
         ? notificationSectionRef.current
-        : section === 'crm'
-        ? crmExportSectionRef.current
         : section === 'backup'
           ? backupSectionRef.current
           : settingsTopRef.current
@@ -2264,10 +2270,9 @@ function App() {
       { id: 'search', label: uiText.navigation.items.search, icon: Search },
       { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
       {
-        id: 'saved',
-        label: uiText.navigation.items.saved,
-        icon: Bookmark,
-        badgeCount: savedIds.length,
+        id: 'crm-export',
+        label: uiText.navigation.items.crmExport,
+        icon: Upload,
       },
       {
         id: 'follow-ups',
@@ -2276,7 +2281,7 @@ function App() {
       },
       { id: 'settings', label: uiText.navigation.items.settings, icon: Settings2 },
     ],
-    [savedIds.length],
+    [],
   )
   const normalizedIndustrySearchQuery = industrySearchQuery.trim().toLowerCase()
   const filteredIndustryGroups = useMemo(
@@ -2594,20 +2599,55 @@ function App() {
     [followUpEntries],
   )
 
+  const crmExportOptions = useMemo<CrmExportOptions>(
+    () => ({
+      includeNotes: crmExportIncludeNotes,
+      includeFollowUps: crmExportIncludeFollowUps,
+      includeBusinessCardMetadata: crmExportIncludeBusinessCard,
+    }),
+    [crmExportIncludeBusinessCard, crmExportIncludeFollowUps, crmExportIncludeNotes],
+  )
+
   const crmScopedProspects = useMemo(() => {
     const savedSet = new Set(savedIds)
+    const todayKey = getLocalDateKey()
     const dedupe = (items: Prospect[]) =>
       Array.from(new globalThis.Map(items.map((prospect) => [prospect.id, prospect])).values())
     const excludeUnsavedFoodStops = (items: Prospect[]) =>
       items.filter((prospect) => !prospect.isFoodStop || savedSet.has(prospect.id))
+    const isActiveToday = (prospect: Prospect) => {
+      const followUpEntry = followUpEntries[prospect.id]
+
+      if (prospect.visitCompletedAt.slice(0, 10) === todayKey) {
+        return true
+      }
+
+      if (prospect.lastContactDate === todayKey) {
+        return true
+      }
+
+      if ((followUpEntry?.followUpDate || prospect.followUpDate) === todayKey) {
+        return true
+      }
+
+      if (followUpEntry?.completedAt?.slice(0, 10) === todayKey) {
+        return true
+      }
+
+      return false
+    }
+
+    let scoped: Prospect[]
 
     switch (crmExportScope) {
+      case 'today':
+        scoped = dedupe(excludeUnsavedFoodStops(prospects.filter(isActiveToday)))
+        break
       case 'saved':
-        return dedupe(excludeUnsavedFoodStops(savedProspects))
-      case 'route':
-        return dedupe(excludeUnsavedFoodStops(routeProspects))
+        scoped = dedupe(excludeUnsavedFoodStops(savedProspects))
+        break
       case 'followups':
-        return dedupe(
+        scoped = dedupe(
           excludeUnsavedFoodStops(
             Object.values(followUpEntries).map((entry) => {
               const prospect = prospectMap.get(entry.prospectId)
@@ -2624,11 +2664,25 @@ function App() {
             }).filter((prospect): prospect is Prospect => Boolean(prospect)),
           ),
         )
+        break
+      case 'routeCompleted':
+        scoped = dedupe(
+          excludeUnsavedFoodStops(routeProspects.filter((prospect) => prospect.routeCompleted)),
+        )
+        break
       case 'all':
       default:
-        return dedupe(excludeUnsavedFoodStops(prospects))
+        scoped = dedupe(excludeUnsavedFoodStops(prospects))
+        break
     }
+
+    if (crmExportOnlyCompleted && crmExportScope !== 'routeCompleted') {
+      scoped = scoped.filter((prospect) => prospect.routeCompleted)
+    }
+
+    return scoped
   }, [
+    crmExportOnlyCompleted,
     crmExportScope,
     followUpEntries,
     prospectMap,
@@ -2674,9 +2728,9 @@ function App() {
 
     return {
       records,
-      ...buildCrmExportRows(records, crmExportFormat),
+      ...buildCrmExportRows(records, crmExportFormat, crmExportOptions),
     }
-  }, [crmExportFormat, crmScopedProspects, followUpEntries])
+  }, [crmExportFormat, crmExportOptions, crmScopedProspects, followUpEntries])
 
   const routeMiles = useMemo(
     () => {
@@ -2933,9 +2987,31 @@ function App() {
     }))
   }
 
-  function openSavedProspect(prospectId?: string) {
+  function openSavedProspects(prospectId?: string) {
     setExpandedProspectId(prospectId ?? null)
-    setActiveView('saved')
+    setSavedProspectsOpen(true)
+  }
+
+  function openCrmExportView() {
+    setActiveView('crm-export')
+    setAccountMenuOpen(false)
+    setAccountMenuMessage(null)
+  }
+
+  function handlePreviewCrmExport() {
+    if (crmExportPreview.records.length === 0) {
+      setCrmExportMessage({
+        type: 'error',
+        text: uiText.errors.noCrmDataForScope,
+      })
+      return
+    }
+
+    setCrmExportPreviewOpen(true)
+    setCrmExportMessage(null)
+    window.requestAnimationFrame(() => {
+      crmExportSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   function toggleSaved(prospectId: string) {
@@ -5182,6 +5258,10 @@ function App() {
                 {uiText.routes.clearRoute}
               </button>
               <CardMoreActions>
+                <CardMoreMenuButton onClick={() => openSavedProspects()}>
+                  <Bookmark size={16} />
+                  {uiText.saved.openSavedProspects}
+                </CardMoreMenuButton>
                 <CardMoreMenuButton onClick={handleExportRoute}>
                   <Download size={16} />
                   {uiText.routes.tab.exportRoute}
@@ -5261,7 +5341,7 @@ function App() {
                 onToggleCompleted={() => toggleRouteCompleted(currentStopProspect.id)}
                 onOpenCompleteVisit={() => openVisitWorkflow(currentStopProspect.id, 'complete')}
                 onOpenVisitDetails={() => openVisitWorkflow(currentStopProspect.id, 'visit')}
-                onOpenSaved={() => openSavedProspect(currentStopProspect.id)}
+                onOpenSaved={() => openSavedProspects(currentStopProspect.id)}
                 onToggleSaved={() => toggleSaved(currentStopProspect.id)}
                 onPickUpFood={() => openFoodNearby(currentStopProspect.id)}
                 onRequestRemove={() => openRemoveProspectPrompt(currentStopProspect.id)}
@@ -5604,6 +5684,17 @@ function App() {
             <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
               {isSearchingPlaces ? uiText.search.searchingButton : uiText.search.searchButton}
             </button>
+
+            <button
+              type="button"
+              className="button button--ghost button--wide search-saved-prospects-btn"
+              onClick={() => openSavedProspects()}
+            >
+              <Bookmark size={16} />
+              {savedIds.length > 0
+                ? uiText.saved.openSavedProspectsWithCount(savedIds.length)
+                : uiText.saved.openSavedProspects}
+            </button>
           </form>
 
           {effectiveSearchStatus.source === 'api-error' ? (
@@ -5645,7 +5736,7 @@ function App() {
                 isInRoute={routeIds.includes(prospect.id)}
                 travelMode={travelMode}
                 onNavigate={handleNavigateProspect}
-                onOpenSaved={openSavedProspect}
+                onOpenSaved={openSavedProspects}
                 onFindFoodNearby={openFoodNearby}
                 onUpdatePriority={updateProspectPriority}
                 onRequestRemove={openRemoveProspectPrompt}
@@ -5686,44 +5777,193 @@ function App() {
     )
   }
 
-  function renderSavedView() {
+  function renderSavedProspectCard(prospect: Prospect) {
+    return (
+      <ProspectCard
+        key={prospect.id}
+        prospect={prospect}
+        isInRoute={routeIds.includes(prospect.id)}
+        isExpanded={expandedProspectId === prospect.id}
+        travelMode={travelMode}
+        onNavigate={handleNavigateProspect}
+        onFindFoodNearby={openFoodNearby}
+        onRequestRemove={openRemoveProspectPrompt}
+        onToggleRoute={toggleRoute}
+        onToggleCompleted={toggleRouteCompleted}
+        onToggleExpanded={toggleExpandedProspect}
+        onUpdateNotes={updateProspectNotes}
+        onUpdatePriority={updateProspectPriority}
+      />
+    )
+  }
+
+  function renderCrmExportView() {
+    const onlyCompletedDisabled = crmExportScope === 'routeCompleted'
+
     return (
       <>
-        {savedProspects.length > 0 ? (
-          <p className="inline-summary inline-summary--compact">
-            {uiText.saved.countLabel(savedProspects.length)}
-          </p>
-        ) : null}
+        <section className="panel section-panel section-panel--compact">
+          <div className="eyebrow eyebrow--tight">{uiText.crmExport.eyebrow}</div>
+          <p className="section-copy">{uiText.crmExport.description}</p>
+          <button type="button" className="button button--ghost button--wide" onClick={() => openSavedProspects()}>
+            <Bookmark size={16} />
+            {savedIds.length > 0
+              ? uiText.saved.openSavedProspectsWithCount(savedIds.length)
+              : uiText.crmExport.viewSavedProspects}
+          </button>
+        </section>
 
-        {savedProspects.length > 0 ? (
-          <div className="stack">
-            {savedProspects.map((prospect) => (
-              <ProspectCard
-                key={prospect.id}
-                prospect={prospect}
-                isInRoute={routeIds.includes(prospect.id)}
-                isExpanded={expandedProspectId === prospect.id}
-                travelMode={travelMode}
-                onNavigate={handleNavigateProspect}
-                onFindFoodNearby={openFoodNearby}
-                onRequestRemove={openRemoveProspectPrompt}
-                onToggleRoute={toggleRoute}
-                onToggleCompleted={toggleRouteCompleted}
-                onToggleExpanded={toggleExpandedProspect}
-                onUpdateNotes={updateProspectNotes}
-                onUpdatePriority={updateProspectPriority}
-              />
-            ))}
+        <section ref={crmExportSectionRef} className="panel section-panel section-panel--compact crm-export-panel">
+          <div className="section-heading">
+            <h2>{uiText.crmExport.heading}</h2>
+            <span className="meta-pill">{uiText.crmExport.rowsLabel(crmExportPreview.records.length)}</span>
           </div>
-        ) : (
-          <EmptyState
-            title={uiText.emptyStates.noSavedTitle}
-            copy={uiText.emptyStates.noSavedCopy}
-            icon={Bookmark}
-            actionLabel={uiText.saved.emptyAction}
-            onAction={() => setActiveView('search')}
-          />
-        )}
+
+          <div className="field-group">
+            <span className="field-label">{uiText.crmExport.exportFormatLabel}</span>
+            <div className="crm-option-grid">
+              {crmExportFormats.map((format) => (
+                <button
+                  type="button"
+                  key={format.id}
+                  className={`crm-option-card ${
+                    crmExportFormat === format.id ? 'crm-option-card--active' : ''
+                  }`}
+                  onClick={() => {
+                    setCrmExportFormat(format.id)
+                    setCrmExportMessage(null)
+                  }}
+                >
+                  <strong>{format.label}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="field-group">
+            <span className="field-label">{uiText.crmExport.exportScopeLabel}</span>
+            <div className="chip-row">
+              {crmExportScopes.map((scope) => (
+                <button
+                  type="button"
+                  key={scope.id}
+                  className={`chip ${crmExportScope === scope.id ? 'chip--active' : ''}`}
+                  onClick={() => {
+                    setCrmExportScope(scope.id)
+                    setCrmExportMessage(null)
+                    if (scope.id === 'routeCompleted') {
+                      setCrmExportOnlyCompleted(true)
+                    }
+                  }}
+                >
+                  {scope.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="crm-export-toggles field-group">
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={onlyCompletedDisabled || crmExportOnlyCompleted}
+                disabled={onlyCompletedDisabled}
+                onChange={(event) => setCrmExportOnlyCompleted(event.target.checked)}
+              />
+              <span>{uiText.crmExport.toggles.onlyCompletedStops}</span>
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={crmExportIncludeNotes}
+                onChange={(event) => setCrmExportIncludeNotes(event.target.checked)}
+              />
+              <span>{uiText.crmExport.toggles.includeNotes}</span>
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={crmExportIncludeFollowUps}
+                onChange={(event) => setCrmExportIncludeFollowUps(event.target.checked)}
+              />
+              <span>{uiText.crmExport.toggles.includeFollowUps}</span>
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={crmExportIncludeBusinessCard}
+                onChange={(event) => setCrmExportIncludeBusinessCard(event.target.checked)}
+              />
+              <span>{uiText.crmExport.toggles.includeBusinessCardMetadata}</span>
+            </label>
+          </div>
+
+          {crmExportMessage ? (
+            <div className={`status-banner status-banner--${crmExportMessage.type}`}>
+              <p>{crmExportMessage.text}</p>
+            </div>
+          ) : null}
+
+          <div className="crm-export-actions">
+            <button type="button" className="button button--ghost" onClick={handlePreviewCrmExport}>
+              {uiText.crmExport.previewButton}
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={handleDownloadCrmExport}
+              disabled={crmExportPreview.records.length === 0}
+            >
+              <Download size={16} />
+              {uiText.crmExport.downloadButton}
+            </button>
+          </div>
+
+          {crmExportPreviewOpen ? (
+            <div className="crm-preview-panel">
+              <div className="crm-preview-panel__header">
+                <div>
+                  <div className="eyebrow eyebrow--tight">{uiText.crmExport.previewEyebrow}</div>
+                  <h3>{crmExportPreview.profile.label}</h3>
+                </div>
+                <span className="meta-pill">
+                  {uiText.crmExport.recordsLabel(crmExportPreview.records.length)}
+                </span>
+              </div>
+
+              {crmExportPreview.records.length > 0 ? (
+                <div className="crm-preview-table-wrap">
+                  <table className="crm-preview-table">
+                    <thead>
+                      <tr>
+                        {crmExportPreview.columns.map((column) => (
+                          <th key={column}>{column}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {crmExportPreview.rows.slice(0, 5).map((row, rowIndex) => (
+                        <tr key={`${crmExportPreview.profile.id}-${rowIndex}`}>
+                          {row.map((value, cellIndex) => (
+                            <td key={`${crmExportPreview.profile.id}-${rowIndex}-${cellIndex}`}>
+                              {value || uiText.crmExport.previewFallback}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState
+                  title={uiText.emptyStates.noCrmDataTitle}
+                  copy={uiText.emptyStates.noCrmDataCopy}
+                  icon={Download}
+                />
+              )}
+            </div>
+          ) : null}
+        </section>
       </>
     )
   }
@@ -6026,113 +6266,6 @@ function App() {
 
         </section>
 
-        <section ref={crmExportSectionRef} className="panel section-panel section-panel--compact">
-          <div className="section-heading">
-            <h2>{uiText.crmExport.heading}</h2>
-            <span className="meta-pill">{uiText.crmExport.rowsLabel(crmExportPreview.records.length)}</span>
-          </div>
-
-          <div className="field-group">
-            <span className="field-label">{uiText.crmExport.exportFormatLabel}</span>
-            <div className="crm-option-grid">
-              {crmExportFormats.map((format) => (
-                <button
-                  type="button"
-                  key={format.id}
-                  className={`crm-option-card ${
-                    crmExportFormat === format.id ? 'crm-option-card--active' : ''
-                  }`}
-                  onClick={() => {
-                    setCrmExportFormat(format.id)
-                    setCrmExportMessage(null)
-                  }}
-                >
-                  <strong>{format.label}</strong>
-                  <span>Future API target: {format.futureApiTarget}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="field-group">
-            <span className="field-label">{uiText.crmExport.exportScopeLabel}</span>
-            <div className="chip-row">
-              {crmExportScopes.map((scope) => (
-                <button
-                  type="button"
-                  key={scope.id}
-                  className={`chip ${crmExportScope === scope.id ? 'chip--active' : ''}`}
-                  onClick={() => {
-                    setCrmExportScope(scope.id)
-                    setCrmExportMessage(null)
-                  }}
-                >
-                  {scope.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {crmExportMessage ? (
-            <div className={`status-banner status-banner--${crmExportMessage.type}`}>
-              <p>{crmExportMessage.text}</p>
-            </div>
-          ) : null}
-
-          <div className="crm-preview-panel">
-            <div className="crm-preview-panel__header">
-              <div>
-                <div className="eyebrow eyebrow--tight">{uiText.crmExport.previewEyebrow}</div>
-                <h3>{crmExportPreview.profile.label}</h3>
-              </div>
-              <span className="meta-pill">
-                {uiText.crmExport.recordsLabel(crmExportPreview.records.length)}
-              </span>
-            </div>
-
-            {crmExportPreview.records.length > 0 ? (
-              <div className="crm-preview-table-wrap">
-                <table className="crm-preview-table">
-                  <thead>
-                    <tr>
-                      {crmExportPreview.columns.map((column) => (
-                        <th key={column}>{column}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {crmExportPreview.rows.slice(0, 5).map((row, rowIndex) => (
-                      <tr key={`${crmExportPreview.profile.id}-${rowIndex}`}>
-                        {row.map((value, cellIndex) => (
-                          <td key={`${crmExportPreview.profile.id}-${rowIndex}-${cellIndex}`}>
-                            {value || uiText.crmExport.previewFallback}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                title={uiText.emptyStates.noCrmDataTitle}
-                copy={uiText.emptyStates.noCrmDataCopy}
-                icon={Download}
-              />
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="button"
-            onClick={handleDownloadCrmExport}
-            disabled={crmExportPreview.records.length === 0}
-          >
-            <Download size={16} />
-            {uiText.crmExport.downloadLabel(crmExportPreview.profile.label)}
-          </button>
-        </section>
-
         <section ref={backupSectionRef} className="panel section-panel section-panel--compact">
           <div className="section-heading">
             <h2>{uiText.settings.backupHeading}</h2>
@@ -6257,8 +6390,8 @@ function App() {
         return renderMapView()
       case 'search':
         return renderSearchView()
-      case 'saved':
-        return renderSavedView()
+      case 'crm-export':
+        return renderCrmExportView()
       case 'follow-ups':
         return renderFollowUpsView()
       case 'settings':
@@ -6317,8 +6450,8 @@ function App() {
                     <Settings2 size={16} />
                     {uiText.navigation.accountMenu.settings}
                   </button>
-                  <button type="button" className="account-menu__item" onClick={() => openSettingsPanel('crm')}>
-                    <Download size={16} />
+                  <button type="button" className="account-menu__item" onClick={openCrmExportView}>
+                    <Upload size={16} />
                     {uiText.navigation.accountMenu.exportCrm}
                   </button>
                   <button
@@ -6429,6 +6562,17 @@ function App() {
         ) : null}
 
       </main>
+
+      <SavedProspectsSheet
+        open={savedProspectsOpen}
+        prospects={savedProspects}
+        onClose={() => setSavedProspectsOpen(false)}
+        onBrowseSearch={() => {
+          setSavedProspectsOpen(false)
+          setActiveView('search')
+        }}
+        renderProspectCard={(prospect) => renderSavedProspectCard(prospect as Prospect)}
+      />
 
       {businessCardPendingAttach ? (
         <BusinessCardAttachStopSheet

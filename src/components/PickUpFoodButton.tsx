@@ -7,6 +7,19 @@ type PickUpFoodButtonProps = {
   wide?: boolean
 }
 
+function PickUpFoodLabel() {
+  const label = uiText.foodNearby.pickUpFood
+  const questionMark = label.endsWith('?') ? '?' : ''
+  const text = questionMark ? label.slice(0, -1) : label
+
+  return (
+    <span className="route-pick-up-food-btn__label">
+      {text}
+      {questionMark ? <span className="route-pick-up-food-btn__question">{questionMark}</span> : null}
+    </span>
+  )
+}
+
 export default function PickUpFoodButton({
   onClick,
   className = 'button button--ghost route-pick-up-food-btn',
@@ -21,8 +34,8 @@ export default function PickUpFoodButton({
         onClick()
       }}
     >
-      <UtensilsCrossed size={16} />
-      {uiText.foodNearby.pickUpFood}
+      <UtensilsCrossed size={15} aria-hidden="true" />
+      <PickUpFoodLabel />
     </button>
   )
 }

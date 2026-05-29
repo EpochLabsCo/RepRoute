@@ -181,7 +181,9 @@ function RouteNavigationView({
             variant="active"
             isFoodStop={activeStop.isFoodStop}
           />
-          <PickUpFoodButton onClick={() => onPickUpFood(activeStop.id)} wide />
+          <div className="route-stop-actions">
+            <PickUpFoodButton onClick={() => onPickUpFood(activeStop.id)} wide />
+          </div>
         </section>
       ) : null}
 
@@ -257,7 +259,10 @@ function RouteNavigationStopCard({
         />
       </button>
 
-      <div className="prospect-primary-actions prospect-primary-actions--nav">
+      <div className="route-stop-actions">
+        <PickUpFoodButton onClick={onPickUpFood} wide />
+
+        <div className="prospect-primary-actions prospect-primary-actions--nav">
         <button
           type="button"
           className="prospect-action-btn prospect-action-btn--outline"
@@ -268,9 +273,8 @@ function RouteNavigationStopCard({
           <span>{uiText.routes.inAppNavigation.markArrived}</span>
         </button>
         <MarkCompletedButton completed={prospect.routeCompleted} onClick={onMarkCompleted} />
+        </div>
       </div>
-
-      <PickUpFoodButton onClick={onPickUpFood} wide />
 
       <CardMoreActions>
         <CardMoreMenuButton onClick={onOpenVisitWorkflow}>

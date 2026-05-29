@@ -41,7 +41,7 @@ export const uiText = {
       dashboard: 'Home',
       map: 'Route',
       search: 'Search',
-      saved: 'Saved',
+      crmExport: 'CRM Export',
       followUps: 'Follow-Ups',
       settings: 'Settings',
     },
@@ -59,9 +59,9 @@ export const uiText = {
         title: 'Search',
         subtitle: 'Find businesses and add them to your route.',
       },
-      saved: {
-        title: 'Saved',
-        subtitle: 'Prospects you saved for later.',
+      'crm-export': {
+        title: 'CRM Export',
+        subtitle: 'Export route activity and prospect data to your CRM.',
       },
       'follow-ups': {
         title: 'Follow-Ups',
@@ -69,7 +69,7 @@ export const uiText = {
       },
       settings: {
         title: 'Settings',
-        subtitle: 'Backup, export, notifications, and location.',
+        subtitle: 'Account, notifications, location, and backup.',
       },
     },
     accountMenu: {
@@ -346,7 +346,7 @@ export const uiText = {
     resultBadge: 'Nearby',
     distanceAway: (miles: string) => `${miles} from stop`,
     navigate: 'Navigate',
-    pickUpFood: 'Pick Up Food',
+    pickUpFood: 'Pick Up Food?',
     addFoodStopToRoute: 'Add Food Stop to Route',
     saveAsFoodStop: 'Add Food Stop to Route',
     savedAsFoodStop: 'On Route',
@@ -358,6 +358,9 @@ export const uiText = {
   saved: {
     eyebrow: 'Saved Pipeline',
     heading: 'Saved Prospects',
+    openSavedProspects: 'Saved Prospects',
+    openSavedProspectsWithCount: (count: number) => `Saved Prospects (${count})`,
+    closeSheet: 'Close Saved Prospects',
     countLabel: (count: number) => `${count} saved`,
     savedMessage: 'Saved to Prospects',
     summaryPrimaryTitle: 'Keep the bench warm',
@@ -841,16 +844,25 @@ export const uiText = {
     recordsLabel: (count: number) => `${count} record${count === 1 ? '' : 's'}`,
     futureIntegrationsLabel: (targets: string[]) =>
       `Future direct integrations planned: ${targets.join(', ')}`,
+    previewButton: 'Preview Export',
+    downloadButton: 'Download CSV',
     downloadLabel: (label: string) => `Download ${label}`,
+    viewSavedProspects: 'View Saved Prospects',
+    toggles: {
+      onlyCompletedStops: 'Export only completed stops',
+      includeNotes: 'Include notes',
+      includeFollowUps: 'Include follow-ups',
+      includeBusinessCardMetadata: 'Include business card metadata',
+    },
     successMessage: (count: number, label: string) =>
       `Exported ${count} record${count === 1 ? '' : 's'} as ${label}.`,
     formats: {
-      generic: 'CSV for Any CRM',
-      hubspot: 'HubSpot-Ready CSV',
-      salesforce: 'Salesforce-Ready CSV',
-      zoho: 'Zoho-Ready CSV',
-      pipedrive: 'Pipedrive-Ready CSV',
-      wpcrm: 'WPCRM-ready CSV',
+      wpcrm: 'WPCRM CSV',
+      generic: 'Generic CSV',
+      hubspot: 'HubSpot CSV',
+      salesforce: 'Salesforce CSV',
+      zoho: 'Zoho CSV',
+      pipedrive: 'Pipedrive CSV',
     },
     futureTargets: {
       generic: 'Generic CSV importer',
@@ -862,10 +874,11 @@ export const uiText = {
     },
     previewFallback: '—',
     scopes: {
-      saved: 'Saved Prospects Only',
-      route: 'Today’s Route Only',
-      followups: 'Follow-Ups Only',
-      all: 'All RepRoute Data',
+      today: "Export Today's Activity",
+      saved: 'Export Saved Prospects',
+      followups: 'Export Follow-Ups',
+      routeCompleted: 'Export Completed Route Stops',
+      all: 'Export All Data',
     },
   },
   errors: {

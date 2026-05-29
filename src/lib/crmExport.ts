@@ -8,7 +8,36 @@ export type CrmExportFormat =
   | 'pipedrive'
   | 'wpcrm'
 
-export type CrmExportScope = 'saved' | 'route' | 'followups' | 'all'
+export type CrmExportScope = 'today' | 'saved' | 'followups' | 'routeCompleted' | 'all'
+
+export type CrmExportOptions = {
+  includeNotes?: boolean
+  includeFollowUps?: boolean
+  includeBusinessCardMetadata?: boolean
+}
+
+const CRM_FORMAT_DISPLAY_ORDER = [
+  'wpcrm',
+  'generic',
+  'hubspot',
+  'salesforce',
+  'zoho',
+  'pipedrive',
+] as const satisfies readonly CrmExportFormat[]
+
+const NOTE_FIELD_KEYS = ['notes', 'visitNotes', 'followUpNotes'] as const satisfies readonly CrmExportColumnKey[]
+const FOLLOW_UP_FIELD_KEYS = [
+  'followUpDate',
+  'followUpTime',
+  'followUpNotes',
+  'followUpCompleted',
+  'followUpRouteStatus',
+] as const satisfies readonly CrmExportColumnKey[]
+const BUSINESS_CARD_FIELD_KEYS = [
+  'businessCardCaptured',
+  'businessCardCapturedAt',
+  'businessCardImageIncluded',
+] as const satisfies readonly CrmExportColumnKey[]
 
 export type CrmExportRecord = {
   businessName: string
@@ -396,16 +425,35 @@ export function getCrmExportProfile(format: CrmExportFormat) {
 }
 
 export function getCrmExportFormats() {
-  return Object.values(CRM_EXPORT_PROFILES)
+  return CRM_FORMAT_DISPLAY_ORDER.map((format) => CRM_EXPORT_PROFILES[format])
 }
 
 export function getCrmExportScopes() {
   return [
+    { id: 'today', label: uiText.crmExport.scopes.today },
     { id: 'saved', label: uiText.crmExport.scopes.saved },
-    { id: 'route', label: uiText.crmExport.scopes.route },
     { id: 'followups', label: uiText.crmExport.scopes.followups },
+    { id: 'routeCompleted', label: uiText.crmExport.scopes.routeCompleted },
     { id: 'all', label: uiText.crmExport.scopes.all },
   ] as const
+}
+
+function resolveExcludedFieldKeys(options?: CrmExportOptions) {
+  const excluded = new Set<CrmExportColumnKey>()
+
+  if (options?.includeNotes === false) {
+    NOTE_FIELD_KEYS.forEach((key) => excluded.add(key))
+  }
+
+  if (options?.includeFollowUps === false) {
+    FOLLOW_UP_FIELD_KEYS.forEach((key) => excluded.add(key))
+  }
+
+  if (options?.includeBusinessCardMetadata === false) {
+    BUSINESS_CARD_FIELD_KEYS.forEach((key) => excluded.add(key))
+  }
+
+  return excluded
 }
 
 export function getFutureCrmApiTargets() {
@@ -415,10 +463,13 @@ export function getFutureCrmApiTargets() {
 export function buildCrmExportRows(
   records: CrmExportRecord[],
   format: CrmExportFormat,
+  options?: CrmExportOptions,
 ) {
   const profile = getCrmExportProfile(format)
-  const columns = profile.fieldOrder.map((key) => profile.columnMap[key])
-  const rows = records.map((record) => profile.fieldOrder.map((key) => record[key]))
+  const excluded = resolveExcludedFieldKeys(options)
+  const fieldOrder = profile.fieldOrder.filter((key) => !excluded.has(key))
+  const columns = fieldOrder.map((key) => profile.columnMap[key])
+  const rows = records.map((record) => fieldOrder.map((key) => record[key]))
 
   return {
     profile,

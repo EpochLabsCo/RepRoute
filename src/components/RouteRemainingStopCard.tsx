@@ -40,6 +40,8 @@ export default function RouteRemainingStopCard({
         transition,
       }}
     >
+      <PickUpFoodButton onClick={onPickUpFood} wide />
+
       <div className="route-remaining-stop__main">
         <span className="route-stop-badge" aria-label={uiText.routes.stopLabel(stopNumber - 1)}>
           {stopNumber}
@@ -53,7 +55,6 @@ export default function RouteRemainingStopCard({
         </div>
         <RouteReorderHandle dragAttributes={attributes} dragListeners={listeners} />
       </div>
-      <PickUpFoodButton onClick={onPickUpFood} wide />
     </article>
   )
 }

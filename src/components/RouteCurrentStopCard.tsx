@@ -97,7 +97,10 @@ export default function RouteCurrentStopCard({
         isFoodStop={isFoodStop}
       />
 
-      <div className="route-current-stop-card__primary">
+      <div className="route-stop-actions">
+        <PickUpFoodButton onClick={onPickUpFood} wide />
+
+        <div className="route-current-stop-card__primary">
         <button type="button" className="button button--wide route-primary-action" onClick={onNavigate}>
           <Navigation size={18} />
           {navigateLabel}
@@ -118,9 +121,8 @@ export default function RouteCurrentStopCard({
           {isArrived ? uiText.routes.inAppNavigation.arrived : uiText.routes.inAppNavigation.markArrived}
         </button>
         <MarkCompletedButton completed={routeCompleted} onClick={onOpenCompleteVisit} />
+        </div>
       </div>
-
-      <PickUpFoodButton onClick={onPickUpFood} wide className="button button--ghost route-pick-up-food-btn" />
 
       <div className="route-current-stop-card__visit-capture">
         <label className="field-group route-current-stop-card__quick-note">
