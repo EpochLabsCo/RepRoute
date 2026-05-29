@@ -3,6 +3,7 @@ import RouteFocusCard from './RouteFocusCard'
 import RepRouteNavigationMap, { type RouteNavigationStop } from './RepRouteNavigationMap'
 import { type RouteLineRenderStatus } from './RepRouteMap'
 import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
+import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
 import {
   CardMoreActions,
   CardMoreMenuButton,
@@ -43,6 +44,7 @@ type RouteNavigationViewProps = {
   activeStopId: string | null
   arrivedStopIds: Record<string, boolean>
   legByStopId: Record<string, RouteNavigationLegSummary | null>
+  etaByStopId?: Record<string, RouteStopEtaDisplay>
   completedStops: number
   remainingStops: number
   completionPercentage: number
@@ -81,6 +83,7 @@ function RouteNavigationView({
   activeStopId,
   arrivedStopIds,
   legByStopId,
+  etaByStopId = {},
   completedStops,
   remainingStops,
   completionPercentage,
@@ -181,6 +184,7 @@ function RouteNavigationView({
             businessName={activeStop.businessName}
             address={activeStop.address}
             segmentLeg={activeLeg}
+            schedule={activeStop ? etaByStopId[activeStop.id] : null}
             proximityText={
               activeStop && activeStop.id === activeStopId ? activeStopProximityText : null
             }
@@ -207,6 +211,7 @@ function RouteNavigationView({
               isActive={prospect.id === activeStopId}
               isArrived={Boolean(arrivedStopIds[prospect.id])}
               segmentLeg={legByStopId[prospect.id]}
+              schedule={etaByStopId[prospect.id]}
               activeStopProximityText={activeStopProximityText}
               onSelect={() => onSelectStop(prospect.id)}
               onMarkArrived={() => onMarkArrived(prospect.id)}
@@ -227,6 +232,7 @@ function RouteNavigationStopCard({
   isActive,
   isArrived,
   segmentLeg,
+  schedule,
   activeStopProximityText,
   onSelect,
   onMarkArrived,
@@ -239,6 +245,7 @@ function RouteNavigationStopCard({
   isActive: boolean
   isArrived: boolean
   segmentLeg: RouteNavigationLegSummary | null
+  schedule?: RouteStopEtaDisplay | null
   activeStopProximityText?: string | null
   onSelect: () => void
   onMarkArrived: () => void
@@ -258,12 +265,13 @@ function RouteNavigationStopCard({
           businessName={prospect.businessName}
           address={prospect.address}
           segmentLeg={segmentLeg}
+          schedule={schedule}
           proximityText={isActive ? activeStopProximityText : null}
           variant={isActive ? 'active' : 'next'}
           isFoodStop={prospect.isFoodStop}
           statusNote={
             prospect.routeCompleted
-              ? uiText.routes.completed
+              ? null
               : isArrived
                 ? uiText.routes.inAppNavigation.arrived
                 : null

@@ -456,6 +456,12 @@ export const uiText = {
       segmentSourceDirections: 'Google Directions (driving)',
       segmentSourceUnavailable: 'Segment distance unavailable',
     },
+    stopEta: {
+      arriveBy: (time: string) => `Arrive by ${time}`,
+      completedAt: (time: string) => `Completed at ${time}`,
+      etaUnavailable: 'ETA unavailable',
+      minDrive: (minutes: number) => `${minutes} min drive`,
+    },
     visitWorkflow: {
       heading: 'Visit details',
       close: 'Close',
@@ -756,6 +762,12 @@ export const uiText = {
     arrivalDetectionLabel: 'Arrival Detection Radius',
     arrivalDetectionOption: (feet: number) =>
       feet >= 1320 ? '0.25 miles' : `${feet.toLocaleString()} feet`,
+    defaultStopDuration: {
+      label: 'Default stop duration',
+      description:
+        'Time added at each stop when projecting arrival times for later stops on Today’s Route.',
+      option: (minutes: number) => (minutes === 0 ? '0 minutes' : `${minutes} minutes`),
+    },
     mapsPreference: {
       label: 'Preferred Maps App',
       description: 'Choose which maps app opens for Navigate, Open in Maps, and food stop directions.',

@@ -17,6 +17,7 @@ import {
   MarkCompletedButton,
 } from './ProspectCardActions'
 import type { RouteSegmentLeg } from '../lib/routeDistanceMetrics'
+import type { RouteStopEtaDisplay } from '../lib/routeStopEtas'
 import { uiText } from '../constants/uiText'
 
 type RouteCurrentStopCardProps = {
@@ -24,6 +25,7 @@ type RouteCurrentStopCardProps = {
   address: string
   stopNumber: number
   segmentLeg: RouteSegmentLeg | null
+  schedule?: RouteStopEtaDisplay | null
   proximityText: string | null
   statusNote: string | null
   isFoodStop: boolean
@@ -55,6 +57,7 @@ export default function RouteCurrentStopCard({
   address,
   stopNumber,
   segmentLeg,
+  schedule,
   proximityText,
   statusNote,
   isFoodStop,
@@ -91,6 +94,7 @@ export default function RouteCurrentStopCard({
         businessName={businessName}
         address={address}
         segmentLeg={segmentLeg}
+        schedule={schedule}
         proximityText={proximityText}
         variant="current"
         statusNote={statusNote}

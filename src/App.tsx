@@ -124,6 +124,12 @@ import {
   type RouteSegmentLeg,
 } from './lib/routeDistanceMetrics'
 import {
+  buildRouteStopEtaSchedule,
+  DEFAULT_STOP_DURATION_OPTIONS,
+  sanitizeDefaultStopDurationMinutes,
+  type DefaultStopDurationMinutes,
+} from './lib/routeStopEtas'
+import {
   formatGpsTimestamp,
   GPS_INITIAL_MAX_AGE_MS,
   GPS_WATCH_MAX_AGE_MS,
@@ -140,6 +146,7 @@ import {
   saveBusinessCardImage,
 } from './lib/businessCardStorage'
 import {
+  fetchDriveDurationSeconds,
   fetchRouteDirectionsWithFallback,
   optimizeRouteStopOrder,
   ROUTE_OPTIMIZATION_BATCH_STOPS,
@@ -370,6 +377,7 @@ const STORAGE_KEYS = {
   notificationReminderLog: 'reproute:notification-reminder-log',
   arrivalDetectionRadiusFeet: 'reproute:arrival-detection-radius-feet',
   mapsAppPreference: 'reproute:maps-app-preference',
+  defaultStopDurationMinutes: 'reproute:default-stop-duration-minutes',
   theme: 'reproute:theme',
   routeReorderHintDismissed: 'reproute:route-reorder-hint-dismissed',
 } as const
@@ -1879,6 +1887,13 @@ function App() {
   const [arrivalDetectionRadiusFeet, setArrivalDetectionRadiusFeet] =
     usePersistentState<ArrivalDetectionRadiusFeet>(STORAGE_KEYS.arrivalDetectionRadiusFeet, 300)
   const [mapsAppPreference, setMapsAppPreference] = useState<MapsApp>(() => readMapsAppPreference())
+  const [defaultStopDurationMinutes, setDefaultStopDurationMinutes] =
+    usePersistentState<DefaultStopDurationMinutes>(
+      STORAGE_KEYS.defaultStopDurationMinutes,
+      15,
+    )
+  const [etaTick, setEtaTick] = useState(() => Date.now())
+  const [gpsToNextDriveSeconds, setGpsToNextDriveSeconds] = useState<number | null>(null)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEYS.mapsAppPreference, JSON.stringify(mapsAppPreference))
@@ -2868,6 +2883,90 @@ function App() {
     [routeNavigationDirections, routeOrigin.source, routeProspects],
   )
 
+  const routeStopEtaById = useMemo(
+    () =>
+      buildRouteStopEtaSchedule({
+        routeStops: routeProspects.map((prospect) => ({
+          id: prospect.id,
+          routeCompleted: Boolean(prospect.routeCompleted),
+          visitCompletedAt: prospect.visitCompletedAt,
+        })),
+        legByStopId: navigationLegByStopId,
+        nowMs: etaTick,
+        defaultStopDurationMinutes: sanitizeDefaultStopDurationMinutes(defaultStopDurationMinutes),
+        gpsDriveSecondsToNextStop: gpsToNextDriveSeconds,
+        labels: {
+          arriveBy: uiText.routes.stopEta.arriveBy,
+          completedAt: uiText.routes.stopEta.completedAt,
+          etaUnavailable: uiText.routes.stopEta.etaUnavailable,
+          minDrive: uiText.routes.stopEta.minDrive,
+          formatTime: (timestampMs) =>
+            new Intl.DateTimeFormat(undefined, {
+              hour: 'numeric',
+              minute: '2-digit',
+            }).format(new Date(timestampMs)),
+        },
+      }),
+    [
+      defaultStopDurationMinutes,
+      etaTick,
+      gpsToNextDriveSeconds,
+      navigationLegByStopId,
+      routeProspects,
+    ],
+  )
+
+  useEffect(() => {
+    if (activeView !== 'map') {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setEtaTick(Date.now())
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [activeView])
+
+  useEffect(() => {
+    setEtaTick(Date.now())
+  }, [routeIds, routeNavigationDirections])
+
+  useEffect(() => {
+    const routeTabActive = activeView === 'map' || routeNavigationOpen
+    const nextStop = routeProspects.find((prospect) => !prospect.routeCompleted) ?? null
+
+    if (!routeTabActive || !nextStop || !userGpsFix || !isGpsFixFresh(userGpsFix)) {
+      setGpsToNextDriveSeconds(null)
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const mapsReady = await waitForGoogleMaps(8000)
+      if (!mapsReady || cancelled) {
+        return
+      }
+
+      const seconds = await fetchDriveDurationSeconds({
+        origin: userGpsFix,
+        destination: prospectToRouteDirectionsStop(nextStop),
+        travelMode: getRouteDirectionsTravelMode(),
+      })
+
+      if (!cancelled) {
+        setGpsToNextDriveSeconds(seconds)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, etaTick, routeNavigationOpen, routeProspects, routeIds, userGpsFix])
+
   const proximityTextForProspect = useCallback(
     (prospectId: string) => {
       if (!userGpsFix || !isGpsFixFresh(userGpsFix)) {
@@ -3396,6 +3495,7 @@ function App() {
       visitCompletedAt:
         !(current?.routeCompleted ?? false) ? new Date().toISOString() : '',
     }))
+    setEtaTick(Date.now())
   }
 
   function saveAsFoodStop(foodProspectId: string) {
@@ -4080,6 +4180,7 @@ function App() {
 
       return arrayMove(current, oldIndex, newIndex)
     })
+    setEtaTick(Date.now())
   }
 
   function handleNavigateProspect(prospect: Prospect) {
@@ -4640,6 +4741,7 @@ function App() {
       }))
     })
     setActionToast({ type: 'success', text: uiText.routes.tab.resetCompletedSuccess })
+    setEtaTick(Date.now())
   }
 
   function handleExportRoute() {
@@ -5388,6 +5490,7 @@ function App() {
           activeStopId={navigationActiveStopId}
           arrivedStopIds={navigationArrivedStopIds}
           legByStopId={navigationLegByStopId}
+          etaByStopId={routeStopEtaById}
           completedStops={completedRouteStops}
           remainingStops={remainingRouteStops}
           completionPercentage={completionPercentage}
@@ -5550,6 +5653,7 @@ function App() {
                   routeProspects.findIndex((prospect) => prospect.id === currentStopProspect.id) + 1
                 }
                 segmentLeg={navigationLegByStopId[currentStopProspect.id] ?? null}
+                schedule={routeStopEtaById[currentStopProspect.id]}
                 proximityText={proximityTextForProspect(currentStopProspect.id)}
                 statusNote={
                   onLocationRouteStop
@@ -5627,6 +5731,7 @@ function App() {
                               stopNumber={stopNumber}
                               businessName={prospect.businessName}
                               segmentLeg={navigationLegByStopId[prospect.id] ?? null}
+                              schedule={routeStopEtaById[prospect.id]}
                               completed={Boolean(prospect.routeCompleted)}
                               isFoodStop={Boolean(prospect.isFoodStop)}
                               isOpen={visitWorkflow?.prospectId === prospect.id}
@@ -6310,6 +6415,28 @@ function App() {
                 ))}
               </select>
               <p className="editor-hint">{uiText.settings.mapsPreference.defaultHint(mapsAppPreference)}</p>
+            </label>
+
+            <label className="field-group">
+              <span className="field-label">{uiText.settings.defaultStopDuration.label}</span>
+              <p className="section-copy settings-field-hint">
+                {uiText.settings.defaultStopDuration.description}
+              </p>
+              <select
+                className="text-input filter-select"
+                value={defaultStopDurationMinutes}
+                onChange={(event) =>
+                  setDefaultStopDurationMinutes(
+                    sanitizeDefaultStopDurationMinutes(Number(event.target.value)),
+                  )
+                }
+              >
+                {DEFAULT_STOP_DURATION_OPTIONS.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {uiText.settings.defaultStopDuration.option(minutes)}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
         </section>

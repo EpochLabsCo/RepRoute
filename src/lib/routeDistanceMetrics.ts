@@ -2,6 +2,7 @@ export type RouteSegmentLeg = {
   distanceText: string
   durationText: string
   distanceMeters: number | null
+  durationSeconds: number | null
   source: 'google-directions' | 'at-route-start' | 'unavailable'
 }
 
@@ -27,6 +28,7 @@ export function buildStopLegMap(
         distanceText: atStartLabel,
         durationText: '',
         distanceMeters: 0,
+        durationSeconds: 0,
         source: 'at-route-start',
       }
       continue
@@ -39,12 +41,15 @@ export function buildStopLegMap(
           distanceText: leg.distance?.text ?? '',
           durationText: leg.duration?.text ?? '',
           distanceMeters: leg.distance?.value ?? null,
+          durationSeconds:
+            typeof leg.duration?.value === 'number' ? leg.duration.value : null,
           source: 'google-directions',
         }
       : {
           distanceText: '',
           durationText: '',
           distanceMeters: null,
+          durationSeconds: null,
           source: 'unavailable',
         }
   }

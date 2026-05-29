@@ -555,3 +555,38 @@ export async function fetchRouteDirectionsWithFallback({
     request: sequentialRequest,
   }
 }
+
+export async function fetchDriveDurationSeconds({
+  origin,
+  destination,
+  travelMode,
+}: {
+  origin: string | { lat: number; lng: number }
+  destination: RouteDirectionsStop
+  travelMode: google.maps.TravelMode
+}): Promise<number | null> {
+  if (typeof window === 'undefined' || !window.google?.maps) {
+    return null
+  }
+
+  const destinationLocation = resolveDirectionsLocation(destination)
+  if (!destinationLocation) {
+    return null
+  }
+
+  const request: google.maps.DirectionsRequest = {
+    origin,
+    destination: destinationLocation,
+    travelMode,
+  }
+
+  const { result, status } = await requestDirections(request)
+  const okStatus = String(google.maps.DirectionsStatus.OK)
+
+  if (!result || status !== okStatus) {
+    return null
+  }
+
+  const durationSeconds = result.routes?.[0]?.legs?.[0]?.duration?.value
+  return typeof durationSeconds === 'number' ? durationSeconds : null
+}

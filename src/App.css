@@ -755,6 +755,32 @@
   font-weight: 600;
 }
 
+.route-stop-eta {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.route-stop-metrics--compact .route-stop-eta {
+  font-size: 0.76rem;
+}
+
+.route-stop-eta--primary {
+  color: var(--accent-soft);
+}
+
+.route-stop-eta--completed {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.route-stop-eta--unavailable {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .route-diagnostics-sheet__list--location {
   margin-top: 8px;
 }
