@@ -103,6 +103,14 @@ import {
   sanitizeFollowUpStore,
   type FollowUpEntry,
 } from './lib/followUps'
+import {
+  destinationFromProspect,
+  openMapsNavigation,
+  openMapsSearch,
+  readMapsAppPreference,
+  sanitizeMapsAppPreference,
+  type MapsApp,
+} from './lib/mapsNavigation'
 import { normalizeProspectNotes } from './lib/prospectNotes'
 import {
   getBusinessCardDataUrl,
@@ -335,6 +343,7 @@ const STORAGE_KEYS = {
   notificationPreferences: 'reproute:notification-preferences',
   notificationReminderLog: 'reproute:notification-reminder-log',
   arrivalDetectionRadiusFeet: 'reproute:arrival-detection-radius-feet',
+  mapsAppPreference: 'reproute:maps-app-preference',
   theme: 'reproute:theme',
   routeReorderHintDismissed: 'reproute:route-reorder-hint-dismissed',
 } as const
@@ -532,10 +541,6 @@ function isFiniteLatLng(value: { lat: number; lng: number } | null | undefined) 
   )
 }
 
-function formatOriginParam(origin: string | { lat: number; lng: number }) {
-  return typeof origin === 'string' ? origin : `${origin.lat},${origin.lng}`
-}
-
 function resolveDirectionsLocation(prospect: Prospect) {
   if (isFiniteLatLng(prospect.location)) {
     return prospect.location
@@ -667,110 +672,6 @@ function insertFoodStopRelativeToAnchor(
 function createCallHref(phone: string) {
   const digits = phone.replace(/[^\d+]/g, '')
   return digits ? `tel:${digits}` : ''
-}
-
-function getMapsDestination(prospect: Prospect) {
-  return prospect.address
-    ? prospect.address
-    : `${prospect.location.lat},${prospect.location.lng}`
-}
-
-function getGoogleMapsHref(prospect: Prospect) {
-  const url = new URL('https://www.google.com/maps/dir/')
-
-  url.searchParams.set('api', '1')
-  url.searchParams.set('destination', getMapsDestination(prospect))
-  url.searchParams.set('travelmode', 'driving')
-
-  if (prospect.googlePlaceId) {
-    url.searchParams.set('destination_place_id', prospect.googlePlaceId)
-  }
-
-  return url.toString()
-}
-
-function getAppleMapsHref(prospect: Prospect) {
-  const url = new URL('https://maps.apple.com/')
-
-  url.searchParams.set('daddr', `${prospect.location.lat},${prospect.location.lng}`)
-  url.searchParams.set('dirflg', 'd')
-  url.searchParams.set('q', prospect.businessName)
-
-  return url.toString()
-}
-
-function prefersAppleMaps() {
-  if (typeof navigator === 'undefined') {
-    return false
-  }
-
-  const userAgent = navigator.userAgent
-  const vendor = navigator.vendor ?? ''
-  const isIos = /iPhone|iPad|iPod/i.test(userAgent)
-  const isMacSafari =
-    /Macintosh/i.test(userAgent) &&
-    /Safari/i.test(userAgent) &&
-    !/Chrome|CriOS|Chromium|Edg|OPR|Firefox/i.test(userAgent) &&
-    /Apple/i.test(vendor)
-
-  return isIos || isMacSafari
-}
-
-function prefersGoogleMaps() {
-  if (typeof navigator === 'undefined') {
-    return false
-  }
-
-  const userAgent = navigator.userAgent
-  return /Android/i.test(userAgent) || /Chrome|CriOS/i.test(userAgent)
-}
-
-function createNavigateHref(prospect: Prospect) {
-  if (prefersAppleMaps()) {
-    return getAppleMapsHref(prospect)
-  }
-
-  if (prefersGoogleMaps()) {
-    return getGoogleMapsHref(prospect)
-  }
-
-  return getGoogleMapsHref(prospect)
-}
-
-function createEntireRouteNavigateHref(
-  origin: string | { lat: number; lng: number } | null,
-  routeProspects: Prospect[],
-) {
-  if (routeProspects.length <= 1) {
-    return routeProspects[0] ? createNavigateHref(routeProspects[0]) : ''
-  }
-
-  const url = new URL('https://www.google.com/maps/dir/')
-  const orderedStops = routeProspects.map((prospect) => getMapsDestination(prospect))
-
-  url.searchParams.set('api', '1')
-  if (origin) {
-    url.searchParams.set('origin', formatOriginParam(origin))
-  }
-  url.searchParams.set('destination', orderedStops[orderedStops.length - 1] ?? '')
-  url.searchParams.set('travelmode', 'driving')
-
-  const waypoints = orderedStops.slice(0, -1)
-
-  if (waypoints.length > 0) {
-    url.searchParams.set('waypoints', waypoints.join('|'))
-  }
-
-  return url.toString()
-}
-
-function openExternalNavigation(url: string) {
-  if (!url) {
-    return false
-  }
-
-  const nextWindow = window.open(url, '_blank', 'noopener,noreferrer')
-  return Boolean(nextWindow)
 }
 
 const ROUTE_GUIDANCE_HISTORY_STATE = { reprouteRouteMode: 'guidance' } as const
@@ -1944,6 +1845,11 @@ function App() {
     )
   const [arrivalDetectionRadiusFeet, setArrivalDetectionRadiusFeet] =
     usePersistentState<ArrivalDetectionRadiusFeet>(STORAGE_KEYS.arrivalDetectionRadiusFeet, 300)
+  const [mapsAppPreference, setMapsAppPreference] = useState<MapsApp>(() => readMapsAppPreference())
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.mapsAppPreference, JSON.stringify(mapsAppPreference))
+  }, [mapsAppPreference])
   const [companyNameQuery, setCompanyNameQuery] = useState('')
   const [manualMarket, setManualMarket] = useState('')
   const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>(10)
@@ -3754,19 +3660,56 @@ function App() {
     setEditingFollowUpId(null)
   }
 
+  function showMapsOpenBlockedToast() {
+    setActionToast({
+      type: 'info',
+      text: uiText.routes.inAppNavigation.mapsPopupBlocked,
+    })
+  }
+
+  function openProspectInPreferredMaps(prospect: Prospect) {
+    const result = openMapsNavigation(
+      {
+        destinations: [destinationFromProspect(prospect)],
+      },
+      mapsAppPreference,
+    )
+
+    if (!result.opened) {
+      showMapsOpenBlockedToast()
+    }
+  }
+
+  function openRouteInPreferredMaps(
+    origin: string | { lat: number; lng: number } | null,
+    stops: Prospect[],
+  ) {
+    const result = openMapsNavigation(
+      {
+        origin,
+        destinations: stops.map((stop) => destinationFromProspect(stop)),
+      },
+      mapsAppPreference,
+    )
+
+    if (!result.opened) {
+      showMapsOpenBlockedToast()
+    }
+  }
+
   function navigateFollowUp(entry: FollowUpEntry) {
     const prospect = prospectMap.get(entry.prospectId)
 
     if (prospect && isFiniteLatLng(prospect.location)) {
-      openExternalNavigation(createNavigateHref(prospect))
+      openProspectInPreferredMaps(prospect)
       return
     }
 
     if (entry.address.trim()) {
-      const url = new URL('https://www.google.com/maps/search/')
-      url.searchParams.set('api', '1')
-      url.searchParams.set('query', entry.address)
-      openExternalNavigation(url.toString())
+      const result = openMapsSearch(entry.address, mapsAppPreference)
+      if (!result.opened) {
+        showMapsOpenBlockedToast()
+      }
     }
   }
 
@@ -4016,16 +3959,15 @@ function App() {
   }
 
   function handleNavigateProspect(prospect: Prospect) {
-    if (routeIds.includes(prospect.id)) {
-      void startRouteNavigationForStop(prospect.id)
+    if (!isFiniteLatLng(prospect.location) && !prospect.address?.trim()) {
+      setActionToast({
+        type: 'info',
+        text: uiText.routes.optimization.missingCoordinates,
+      })
       return
     }
 
-    setActiveView('map')
-    setActionToast({
-      type: 'info',
-      text: uiText.routes.inAppNavigation.addToRouteToNavigate,
-    })
+    openProspectInPreferredMaps(prospect)
   }
 
   async function loadRouteNavigationDirections() {
@@ -4312,16 +4254,7 @@ function App() {
       return
     }
 
-    const opened = openExternalNavigation(
-      createEntireRouteNavigateHref(startOrigin, stopsForNavigation),
-    )
-
-    if (!opened) {
-      setActionToast({
-        type: 'info',
-        text: uiText.routes.inAppNavigation.mapsPopupBlocked,
-      })
-    }
+    openRouteInPreferredMaps(startOrigin, stopsForNavigation)
   }
 
   useEffect(() => {
@@ -6196,6 +6129,25 @@ function App() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="field-group">
+              <span className="field-label">{uiText.settings.mapsPreference.label}</span>
+              <p className="section-copy settings-field-hint">{uiText.settings.mapsPreference.description}</p>
+              <select
+                className="text-input filter-select"
+                value={mapsAppPreference}
+                onChange={(event) =>
+                  setMapsAppPreference(sanitizeMapsAppPreference(event.target.value))
+                }
+              >
+                {uiText.settings.mapsPreference.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="editor-hint">{uiText.settings.mapsPreference.defaultHint(mapsAppPreference)}</p>
             </label>
           </div>
         </section>

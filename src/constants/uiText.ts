@@ -739,6 +739,26 @@ export const uiText = {
     arrivalDetectionLabel: 'Arrival Detection Radius',
     arrivalDetectionOption: (feet: number) =>
       feet >= 1320 ? '0.25 miles' : `${feet.toLocaleString()} feet`,
+    mapsPreference: {
+      label: 'Preferred Maps App',
+      description: 'Choose which maps app opens for Navigate, Open in Maps, and food stop directions.',
+      options: [
+        { value: 'google-maps', label: 'Google Maps' },
+        { value: 'apple-maps', label: 'Apple Maps' },
+        { value: 'waze', label: 'Waze' },
+      ] as const,
+      defaultHint: (app: string) => {
+        if (app === 'google-maps') {
+          return 'Opens Google Maps app links on mobile, with web directions as fallback.'
+        }
+
+        if (app === 'apple-maps') {
+          return 'Opens Apple Maps on iPhone, iPad, and Mac Safari when available.'
+        }
+
+        return 'Waze supports one stop at a time; multi-stop routes open in Google Maps web with your optimized order.'
+      },
+    },
     googlePlacesEyebrow: 'Live Search',
     googlePlacesHeading: 'Search Connection',
     apiKeyDetected: 'API key detected',
