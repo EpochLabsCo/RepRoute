@@ -1,5 +1,6 @@
 import { MapPin } from 'lucide-react'
 import PickUpFoodPrompt from './PickUpFoodPrompt'
+import QuickVisitNoteField from './QuickVisitNoteField'
 import BusinessCardContactFields from './BusinessCardContactFields'
 import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
@@ -124,16 +125,12 @@ export default function VisitWorkflowDrawer({
             />
           </div>
 
-          <label className="field-group visit-workflow-drawer__section">
-            <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-            <textarea
-              className="text-area text-area--compact"
-              rows={4}
-              value={prospect.visitNote}
-              onChange={(event) => onUpdateVisitNote(event.target.value)}
-              placeholder={uiText.routes.quickNotePlaceholder}
-            />
-          </label>
+          <QuickVisitNoteField
+            key={prospect.id}
+            className="visit-workflow-drawer__section"
+            value={prospect.visitNote}
+            onChange={onUpdateVisitNote}
+          />
 
           <div className="visit-workflow-drawer__section visit-workflow-card-block">
             <BusinessCardScanButton

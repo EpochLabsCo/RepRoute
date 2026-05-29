@@ -628,7 +628,7 @@ export const uiText = {
     },
     visitOutcomeLabel: 'Visit Outcome',
     quickNoteLabel: 'Quick Note After Visit',
-    quickNotePlaceholder: 'Capture what happened at this stop...',
+    quickNotePlaceholder: 'Quick visit note...',
     nearbyEyebrow: 'Nearby Coverage',
     nearbyHeading: 'Nearby Prospects',
     withinFiveMiles: 'Within 5 Miles',

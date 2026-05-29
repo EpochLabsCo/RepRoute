@@ -9,6 +9,7 @@ import {
 import RouteFocusCard from './RouteFocusCard'
 import BusinessCardPreviewStrip from './BusinessCardPreviewStrip'
 import BusinessCardScanButton from './BusinessCardScanButton'
+import QuickVisitNoteField from './QuickVisitNoteField'
 import {
   CardMoreActions,
   CardMoreMenuButton,
@@ -121,16 +122,12 @@ export default function RouteCurrentStopCard({
       </div>
 
       <div className="route-current-stop-card__visit-capture">
-        <label className="field-group route-current-stop-card__quick-note">
-          <span className="field-label">{uiText.routes.quickNoteLabel}</span>
-          <textarea
-            className="text-area text-area--compact"
-            rows={3}
-            value={visitNote}
-            onChange={(event) => onUpdateVisitNote(event.target.value)}
-            placeholder={uiText.routes.quickNotePlaceholder}
-          />
-        </label>
+        <QuickVisitNoteField
+          key={prospectId}
+          className="route-current-stop-card__quick-note"
+          value={visitNote}
+          onChange={onUpdateVisitNote}
+        />
         <BusinessCardScanButton
           className="button button--wide route-current-stop-card__scan-card"
           onFileSelected={onScanBusinessCard}
