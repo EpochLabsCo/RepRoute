@@ -6,7 +6,13 @@ import {
   useJsApiLoader,
   type Libraries,
 } from '@react-google-maps/api'
+import RouteMapLegend from './RouteMapLegend'
 import { uiText } from '../constants/uiText'
+import {
+  createMapPinIcon,
+  MAP_PIN_COLORS,
+  resolveNavigationStopAppearance,
+} from '../lib/mapPinStyles'
 import { type RouteLineRenderStatus } from './RepRouteMap'
 
 const AUSTIN_CENTER = { lat: 30.2672, lng: -97.7431 }
@@ -20,7 +26,16 @@ export type RouteNavigationStop = {
   routeOrder: number
   isActive: boolean
   isCompleted: boolean
+  isFoodStop?: boolean
 }
+
+const PIN_STATE_LABELS = {
+  upcoming: uiText.routes.mapLegend.upcoming,
+  current: uiText.routes.mapLegend.current,
+  completed: uiText.routes.mapLegend.completed,
+  food: uiText.routes.mapLegend.food,
+  invalid: uiText.routes.mapLegend.invalid,
+} as const
 
 function directionsResponseReady(
   directions: google.maps.DirectionsResult | null,
@@ -48,24 +63,6 @@ type RepRouteNavigationMapProps = {
   stops: RouteNavigationStop[]
   userLocation: { lat: number; lng: number } | null
   onRouteLineRenderStatusChange?: (status: RouteLineRenderStatus) => void
-}
-
-function createMarkerIcon(fill: string, scale = 1) {
-  const width = Math.round(36 * scale)
-  const height = Math.round(48 * scale)
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 36 48" fill="none">
-      <path
-        d="M18 2C9.163 2 2 9.163 2 18c0 11.708 14.017 26.211 15.496 27.712a.72.72 0 0 0 1.008 0C19.983 44.211 34 29.708 34 18 34 9.163 26.837 2 18 2Z"
-        fill="${fill}"
-        stroke="#081120"
-        stroke-width="2.5"
-      />
-      <circle cx="18" cy="18" r="6.5" fill="white" fill-opacity="0.9" />
-    </svg>
-  `
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
 function RepRouteNavigationMap({
@@ -214,7 +211,7 @@ function RepRouteNavigationMap({
               suppressMarkers: true,
               preserveViewport: true,
               polylineOptions: {
-                strokeColor: '#4a7bff',
+                strokeColor: MAP_PIN_COLORS.upcoming,
                 strokeOpacity: 0.92,
                 strokeWeight: 6,
               },
@@ -227,31 +224,36 @@ function RepRouteNavigationMap({
             position={userLocation}
             title={uiText.routes.currentLocation}
             zIndex={1000}
-            icon={createMarkerIcon('#44d1c8', 1.05)}
+            icon={createMapPinIcon(MAP_PIN_COLORS.userLocation, 1.05)}
           />
         ) : null}
 
         {stops.map((stop) => {
-          const fill = stop.isCompleted ? '#6b7c93' : stop.isActive ? '#31c4be' : '#4a7bff'
-          const scale = stop.isActive ? 1.15 : 1
+          const appearance = resolveNavigationStopAppearance(stop, PIN_STATE_LABELS)
 
           return (
             <MarkerF
               key={stop.id}
               position={stop.position}
-              title={stop.businessName}
-              zIndex={stop.isActive ? 900 : stop.isCompleted ? 100 : 500}
-              icon={createMarkerIcon(fill, scale)}
-              label={{
-                text: String(stop.routeOrder),
-                color: '#081120',
-                fontWeight: '700',
-                fontSize: '12px',
-              }}
+              title={appearance.hoverTitle}
+              zIndex={appearance.zIndex}
+              icon={createMapPinIcon(appearance.fill, appearance.scale, appearance.isActive)}
+              label={
+                appearance.label
+                  ? {
+                      text: appearance.label,
+                      color: '#081120',
+                      fontWeight: '700',
+                      fontSize: stop.isFoodStop ? '11px' : '12px',
+                    }
+                  : undefined
+              }
             />
           )
         })}
       </GoogleMap>
+
+      <RouteMapLegend />
     </div>
   )
 }

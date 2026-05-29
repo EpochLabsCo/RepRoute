@@ -2464,6 +2464,10 @@ function App() {
       })
       .filter((entry) => entry.missing.length > 0)
   }, [routeProspects])
+  const invalidStopIds = useMemo(
+    () => new Set(invalidStops.map((entry) => entry.prospect.id)),
+    [invalidStops],
+  )
   const showInvalidStopsPanel =
     invalidStops.length > 0 && invalidStopsDismissedForRouteKey !== routeKey
 
@@ -2522,6 +2526,8 @@ function App() {
           position: prospect.location,
           isSaved: savedSet.has(prospect.id),
           isInRoute: routeSet.has(prospect.id),
+          isFoodStop: prospect.isFoodStop,
+          routeCompleted: prospect.routeCompleted,
           categories,
           routeOrder: routeOrderById.get(prospect.id),
         }
@@ -2823,6 +2829,7 @@ function App() {
           routeOrder: index + 1,
           isActive: prospect.id === navigationActiveStopId,
           isCompleted: prospect.routeCompleted,
+          isFoodStop: prospect.isFoodStop,
         })),
     [navigationActiveStopId, routeProspects],
   )
@@ -5259,6 +5266,7 @@ function App() {
                 directionsApiStatus={routeDirectionsApiStatus}
                 userLocation={routeTrackerLocation}
                 activeRouteStopId={currentStopProspect?.id ?? null}
+                invalidStopIds={invalidStopIds}
                 onRouteLineRenderStatusChange={handleRouteLineRenderStatusChange}
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}

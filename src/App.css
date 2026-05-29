@@ -1966,6 +1966,8 @@
 
 .google-map-shell {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 500px;
   overflow: hidden;
   border-radius: 24px;
@@ -2000,7 +2002,52 @@
 }
 
 .google-map-canvas {
-  min-height: 500px;
+  flex: 1 1 auto;
+  min-height: 460px;
+}
+
+.route-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 12, 22, 0.82);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-secondary);
+}
+
+.route-map-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.route-map-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 480px) {
+  .route-map-legend {
+    gap: 5px 10px;
+    padding: 7px 8px;
+    font-size: 0.66rem;
+  }
+
+  .route-map-legend__dot {
+    width: 7px;
+    height: 7px;
+  }
 }
 
 .route-nav-map {
@@ -2008,7 +2055,8 @@
 }
 
 .route-nav-map__canvas {
-  min-height: 320px;
+  flex: 1 1 auto;
+  min-height: 272px;
 }
 
 .route-navigation-view {

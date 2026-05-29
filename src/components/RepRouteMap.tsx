@@ -7,7 +7,13 @@ import {
   useJsApiLoader,
   type Libraries,
 } from '@react-google-maps/api'
+import RouteMapLegend from './RouteMapLegend'
 import { uiText } from '../constants/uiText'
+import {
+  createMapPinIcon,
+  MAP_PIN_COLORS,
+  resolveMapPinAppearance,
+} from '../lib/mapPinStyles'
 
 const AUSTIN_CENTER = { lat: 30.2672, lng: -97.7431 }
 const GOOGLE_MAPS_LIBRARIES: Libraries = ['places']
@@ -28,6 +34,8 @@ export type RepRouteMapMarker = {
   }
   isSaved: boolean
   isInRoute: boolean
+  isFoodStop?: boolean
+  routeCompleted?: boolean
   categories: RepRouteMapMarkerCategory[]
   routeOrder?: number
 }
@@ -46,44 +54,22 @@ type RepRouteMapProps = {
   directionsApiStatus?: string | null
   userLocation?: { lat: number; lng: number } | null
   activeRouteStopId?: string | null
+  invalidStopIds?: Set<string>
+  showLegend?: boolean
   onRouteLineRenderStatusChange?: (status: RouteLineRenderStatus) => void
   onToggleSaved: (prospectId: string) => void
   onToggleRoute: (prospectId: string) => void
 }
 
-function getPrimaryMarkerCategory(marker: RepRouteMapMarker) {
-  if (marker.categories.includes('route')) {
-    return 'route'
-  }
-
-  if (marker.categories.includes('food')) {
-    return 'food'
-  }
-
-  if (marker.categories.includes('saved')) {
-    return 'saved'
-  }
-
-  return 'search'
-}
-
-function createMarkerIcon(fill: string, scale = 1) {
-  const width = Math.round(36 * scale)
-  const height = Math.round(48 * scale)
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 36 48" fill="none">
-      <path
-        d="M18 2C9.163 2 2 9.163 2 18c0 11.708 14.017 26.211 15.496 27.712a.72.72 0 0 0 1.008 0C19.983 44.211 34 29.708 34 18 34 9.163 26.837 2 18 2Z"
-        fill="${fill}"
-        stroke="#081120"
-        stroke-width="2.5"
-      />
-      <circle cx="18" cy="18" r="6.5" fill="white" fill-opacity="0.9" />
-    </svg>
-  `
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
-}
+const PIN_STATE_LABELS = {
+  upcoming: uiText.routes.mapLegend.upcoming,
+  current: uiText.routes.mapLegend.current,
+  completed: uiText.routes.mapLegend.completed,
+  food: uiText.routes.mapLegend.food,
+  invalid: uiText.routes.mapLegend.invalid,
+  search: uiText.search.card.searchResult,
+  saved: uiText.followUps.savedStatus,
+} as const
 
 function formatRating(rating: number | null) {
   if (rating === null) {
@@ -129,6 +115,8 @@ function RepRouteMap({
   directionsApiStatus = null,
   userLocation: userLocationProp = null,
   activeRouteStopId = null,
+  invalidStopIds,
+  showLegend = true,
   onRouteLineRenderStatusChange,
   onToggleSaved,
   onToggleRoute,
@@ -153,6 +141,7 @@ function RepRouteMap({
   const canRenderRouteLine = Boolean(
     map && isLoaded && directionsResponseReady(directions, directionsApiStatus),
   )
+  const showInvalidLegend = Boolean(invalidStopIds && invalidStopIds.size > 0)
 
   useEffect(() => {
     if (!isLoaded) {
@@ -302,7 +291,7 @@ function RepRouteMap({
               suppressMarkers: true,
               preserveViewport: true,
               polylineOptions: {
-                strokeColor: '#4a7bff',
+                strokeColor: MAP_PIN_COLORS.upcoming,
                 strokeOpacity: 0.92,
                 strokeWeight: 6,
               },
@@ -315,40 +304,34 @@ function RepRouteMap({
             position={userLocation}
             title={uiText.routes.currentLocation}
             zIndex={1000}
-            icon={createMarkerIcon('#44d1c8', 1.05)}
+            icon={createMapPinIcon(MAP_PIN_COLORS.userLocation, 1.05)}
           />
         ) : null}
 
         {markers.map((marker) => {
-          const primaryCategory = getPrimaryMarkerCategory(marker)
-          const isActiveRouteStop = activeRouteStopId === marker.id && marker.categories.includes('route')
-          const fill = isActiveRouteStop
-            ? '#31c4be'
-            : primaryCategory === 'route'
-              ? '#4a7bff'
-              : primaryCategory === 'food'
-                ? '#c77dff'
-                : primaryCategory === 'saved'
-                  ? '#f7b955'
-                  : '#44d1c8'
-          const scale = isActiveRouteStop ? 1.12 : 1
-          const label =
-            primaryCategory === 'route'
-              ? `${marker.routeOrder ?? ''}`
-              : primaryCategory === 'food'
-                ? 'F'
-                : primaryCategory === 'saved'
-                  ? 'S'
-                  : undefined
+          const appearance = resolveMapPinAppearance(marker, {
+            activeRouteStopId,
+            invalidStopIds,
+            stateLabels: PIN_STATE_LABELS,
+          })
 
           return (
             <MarkerF
               key={marker.id}
               position={marker.position}
-              title={marker.businessName}
-              zIndex={isActiveRouteStop ? 900 : primaryCategory === 'route' ? 500 : 400}
-              icon={createMarkerIcon(fill, scale)}
-              label={label}
+              title={appearance.hoverTitle}
+              zIndex={appearance.zIndex}
+              icon={createMapPinIcon(appearance.fill, appearance.scale, appearance.isActive)}
+              label={
+                appearance.label
+                  ? {
+                      text: appearance.label,
+                      color: '#081120',
+                      fontWeight: '700',
+                      fontSize: appearance.routeState === 'food' ? '11px' : '12px',
+                    }
+                  : undefined
+              }
               onClick={() => setSelectedMarkerId(marker.id)}
             />
           )
@@ -408,6 +391,8 @@ function RepRouteMap({
           </InfoWindowF>
         ) : null}
       </GoogleMap>
+
+      {showLegend ? <RouteMapLegend showInvalid={showInvalidLegend} /> : null}
     </div>
   )
 }
