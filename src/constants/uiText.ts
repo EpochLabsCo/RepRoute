@@ -244,6 +244,20 @@ export const uiText = {
     ] as const,
     searchButton: 'Search Businesses',
     searchingButton: 'Searching Businesses...',
+    clearSearch: 'Clear Search',
+    clearSearchConfirmTitle: 'Clear search results?',
+    clearSearchConfirmMessage:
+      'This clears live search results and filters. Saved Prospects, Route stops, and Follow-Ups are not affected.',
+    clearSearchConfirmAction: 'Clear Search',
+    clearSearchCancel: 'Cancel',
+    clearedEmptyTitle: 'Ready to search',
+    clearedEmptyCopy: 'Search for businesses near your territory.',
+    resultsSectionTitle: 'Live Search Results',
+    resultsLegend: {
+      searchResult: 'Search result',
+      saved: 'Saved',
+      onRoute: 'On route',
+    },
     suggestedSearchesLabel: 'Suggested Searches',
     suggestedKeywords: [
       'equipment rental',

@@ -2074,6 +2074,24 @@
   border-color: rgba(74, 123, 255, 0.24);
 }
 
+.meta-pill--search {
+  color: #8ec5ff;
+  background: rgba(74, 123, 255, 0.14);
+  border-color: rgba(74, 123, 255, 0.28);
+}
+
+.meta-pill--saved {
+  color: #ffd27a;
+  background: rgba(255, 193, 79, 0.12);
+  border-color: rgba(255, 193, 79, 0.28);
+}
+
+.meta-pill--route {
+  color: #7ee0c8;
+  background: rgba(49, 196, 190, 0.14);
+  border-color: rgba(49, 196, 190, 0.28);
+}
+
 .prospect-card__notes-block {
   display: grid;
   gap: 4px;
@@ -3179,6 +3197,40 @@
 .live-search-form {
   display: grid;
   gap: 12px;
+}
+
+.search-form-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.search-results-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-results-header__copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.search-results-header__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.search-results-header__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.search-results-header__clear {
+  flex-shrink: 0;
 }
 
 .location-access-panel {

@@ -393,6 +393,8 @@ const STORAGE_KEYS = {
 
 const ROUTE_REORDER_HINT_STORAGE_KEY = STORAGE_KEYS.routeReorderHintDismissed
 
+const CLEAR_SEARCH_CONFIRM_MIN_RESULTS = 8
+
 const AUSTIN_FALLBACK = { lat: 30.2672, lng: -97.7431 }
 
 const screenMeta: Record<View, { title: string; subtitle: string }> = uiText.navigation.screenMeta
@@ -1216,6 +1218,39 @@ function EmptyState({
   )
 }
 
+function ClearSearchConfirmSheet({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="clear-search-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <h2 id="clear-search-title">{uiText.search.clearSearchConfirmTitle}</h2>
+        <p className="section-copy">{uiText.search.clearSearchConfirmMessage}</p>
+
+        <div className="modal-sheet__actions">
+          <button type="button" className="button" onClick={onConfirm}>
+            {uiText.search.clearSearchConfirmAction}
+          </button>
+          <button type="button" className="button button--ghost" onClick={onCancel}>
+            {uiText.search.clearSearchCancel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RemoveFromRouteConfirmSheet({
   prospectName,
   onConfirm,
@@ -1655,9 +1690,18 @@ function LiveSearchResultCard({
             {prospect.category} · {formatDistance(prospect.distance)}
           </p>
         </div>
-        <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
-          {prospect.priority}
-        </span>
+        <div className="live-result-card__meta">
+          <span className="meta-pill meta-pill--search">{uiText.search.resultsLegend.searchResult}</span>
+          {isSaved ? (
+            <span className="meta-pill meta-pill--saved">{uiText.search.resultsLegend.saved}</span>
+          ) : null}
+          {isInRoute ? (
+            <span className="meta-pill meta-pill--route">{uiText.search.resultsLegend.onRoute}</span>
+          ) : null}
+          <span className={`meta-pill meta-pill--${getPriorityTone(prospect.priority)}`}>
+            {prospect.priority}
+          </span>
+        </div>
       </div>
 
       <p className="live-result-card__address">{prospect.address}</p>
@@ -1990,6 +2034,8 @@ function App() {
   const [crmExportPreviewOpen, setCrmExportPreviewOpen] = useState(false)
   const [savedProspectsOpen, setSavedProspectsOpen] = useState(false)
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
+  const [searchSessionCleared, setSearchSessionCleared] = useState(false)
+  const [clearSearchPromptOpen, setClearSearchPromptOpen] = useState(false)
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -5107,6 +5153,7 @@ function App() {
     industries: SearchIndustry[]
     companyName?: string
   }) {
+    setSearchSessionCleared(false)
     const trimmedMarket = market.trim()
     const trimmedCompanyName = companyName?.trim() ?? ''
     const searchTerms = buildLiveSearchTerms(trimmedCompanyName, industries)
@@ -5358,6 +5405,51 @@ function App() {
       industries: selectedIndustries,
       companyName: companyNameQuery,
     })
+  }
+
+  const hasClearableSearch = useMemo(
+    () =>
+      liveSearchIds.length > 0 ||
+      Boolean(companyNameQuery.trim()) ||
+      Boolean(manualMarket.trim()) ||
+      selectedIndustries.length > 0 ||
+      searchStatus?.source === 'live',
+    [companyNameQuery, liveSearchIds.length, manualMarket, searchStatus?.source, selectedIndustries.length],
+  )
+
+  function executeClearSearch() {
+    setLiveSearchIds([])
+    setSearchStatus(null)
+    setCompanyNameQuery('')
+    setManualMarket('')
+    setSelectedIndustries([])
+    setIndustrySearchQuery('')
+    setIndustryDropdownOpen(false)
+    setExpandedIndustryGroups({})
+    setSearchRadiusChoice(10)
+    setCustomRadiusMiles('35')
+    setSearchSessionCleared(true)
+    setClearSearchPromptOpen(false)
+  }
+
+  function handleClearSearchRequest() {
+    if (!hasClearableSearch) {
+      return
+    }
+
+    const manyResults = searchResultProspects.length >= CLEAR_SEARCH_CONFIRM_MIN_RESULTS
+    const hasUnroutedResults = searchResultProspects.some(
+      (prospect) => !routeIds.includes(prospect.id),
+    )
+    const needsConfirmation =
+      searchResultProspects.length > 0 && (manyResults || hasUnroutedResults)
+
+    if (needsConfirmation) {
+      setClearSearchPromptOpen(true)
+      return
+    }
+
+    executeClearSearch()
   }
 
   async function handleTestGooglePlacesConnection() {
@@ -6185,9 +6277,19 @@ function App() {
               </details>
             </div>
 
-            <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
-              {isSearchingPlaces ? uiText.search.searchingButton : uiText.search.searchButton}
-            </button>
+            <div className="search-form-actions">
+              <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
+                {isSearchingPlaces ? uiText.search.searchingButton : uiText.search.searchButton}
+              </button>
+              <button
+                type="button"
+                className="button button--ghost button--wide"
+                disabled={!hasClearableSearch}
+                onClick={handleClearSearchRequest}
+              >
+                {uiText.search.clearSearch}
+              </button>
+            </div>
 
             <button
               type="button"
@@ -6231,39 +6333,62 @@ function App() {
         </section>
 
         {searchResultProspects.length > 0 ? (
-          <div className="live-results-stack">
-            {searchResultProspects.map((prospect) => (
-              <LiveSearchResultCard
-                key={prospect.id}
-                prospect={prospect}
-                isSaved={savedIds.includes(prospect.id)}
-                isInRoute={routeIds.includes(prospect.id)}
-                onNavigate={handleNavigateProspect}
-                onOpenSaved={openSavedProspects}
-                onFindFoodNearby={openFoodNearby}
-                onUpdatePriority={updateProspectPriority}
-                onRequestRemove={openRemoveProspectPrompt}
-                onToggleSaved={toggleSaved}
-                onToggleRoute={toggleRoute}
-                onToggleCompleted={toggleRouteCompleted}
-              />
-            ))}
-          </div>
+          <>
+            <section className="search-results-header panel section-panel section-panel--compact">
+              <div className="search-results-header__copy">
+                <h2 className="search-results-header__title">{uiText.search.resultsSectionTitle}</h2>
+                <p className="search-results-header__legend">
+                  <span className="meta-pill meta-pill--search">{uiText.search.resultsLegend.searchResult}</span>
+                  <span className="meta-pill meta-pill--saved">{uiText.search.resultsLegend.saved}</span>
+                  <span className="meta-pill meta-pill--route">{uiText.search.resultsLegend.onRoute}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="button button--ghost search-results-header__clear"
+                onClick={handleClearSearchRequest}
+              >
+                {uiText.search.clearSearch}
+              </button>
+            </section>
+            <div className="live-results-stack">
+              {searchResultProspects.map((prospect) => (
+                <LiveSearchResultCard
+                  key={prospect.id}
+                  prospect={prospect}
+                  isSaved={savedIds.includes(prospect.id)}
+                  isInRoute={routeIds.includes(prospect.id)}
+                  onNavigate={handleNavigateProspect}
+                  onOpenSaved={openSavedProspects}
+                  onFindFoodNearby={openFoodNearby}
+                  onUpdatePriority={updateProspectPriority}
+                  onRequestRemove={openRemoveProspectPrompt}
+                  onToggleSaved={toggleSaved}
+                  onToggleRoute={toggleRoute}
+                  onToggleCompleted={toggleRouteCompleted}
+                />
+              ))}
+            </div>
+          </>
         ) : (
           <EmptyState
             title={
-              !googleMapsApiKey
-                ? uiText.emptyStates.connectGooglePlacesTitle
-                : effectiveSearchStatus.source === 'api-error'
-                  ? uiText.emptyStates.googlePlacesSearchFailedTitle
-                  : uiText.emptyStates.noSearchResultsTitle
+              searchSessionCleared
+                ? uiText.search.clearedEmptyTitle
+                : !googleMapsApiKey
+                  ? uiText.emptyStates.connectGooglePlacesTitle
+                  : effectiveSearchStatus.source === 'api-error'
+                    ? uiText.emptyStates.googlePlacesSearchFailedTitle
+                    : uiText.emptyStates.noSearchResultsTitle
             }
             copy={
-              !googleMapsApiKey
-                ? uiText.emptyStates.noRealProspectsCopy
-                : effectiveSearchStatus.source === 'api-error'
-                  ? effectiveSearchStatus.message
-                  : uiText.emptyStates.noSearchResultsCopy
+              searchSessionCleared
+                ? uiText.search.clearedEmptyCopy
+                : !googleMapsApiKey
+                  ? uiText.emptyStates.noRealProspectsCopy
+                  : effectiveSearchStatus.source === 'api-error'
+                    ? effectiveSearchStatus.message
+                    : uiText.emptyStates.noSearchResultsCopy
             }
             icon={Search}
             actionLabel={
@@ -7098,6 +7223,13 @@ function App() {
             prospectName={removeFromRouteProspect.businessName}
             onConfirm={() => handleRemoveFromRoute(removeFromRouteProspect.id)}
             onCancel={closeRemoveFromRoutePrompt}
+          />
+        ) : null}
+
+        {clearSearchPromptOpen ? (
+          <ClearSearchConfirmSheet
+            onConfirm={executeClearSearch}
+            onCancel={() => setClearSearchPromptOpen(false)}
           />
         ) : null}
 
