@@ -445,6 +445,10 @@ export const uiText = {
     todayListSummary: (count: number) => `${count} stops in today’s list`,
     navigateEntireRoute: 'Open in Maps',
     clearRoute: 'Clear Route',
+    clearRouteConfirmTitle: 'Clear all stops from today’s route?',
+    clearRouteConfirmMessage:
+      'Saved Prospects, search results, Follow-Ups, and CRM data are not affected.',
+    clearRouteClearedToast: 'Route cleared.',
     tab: {
       title: 'Route',
       stops: (count: number) => `${count} stop${count === 1 ? '' : 's'}`,

@@ -1214,6 +1214,39 @@ function EmptyState({
   )
 }
 
+function ClearRouteConfirmSheet({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="clear-route-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-sheet__handle" aria-hidden="true" />
+        <h2 id="clear-route-title">{uiText.routes.clearRouteConfirmTitle}</h2>
+        <p className="section-copy">{uiText.routes.clearRouteConfirmMessage}</p>
+
+        <div className="modal-sheet__actions">
+          <button type="button" className="button" onClick={onConfirm}>
+            {uiText.routes.clearRoute}
+          </button>
+          <button type="button" className="button button--ghost" onClick={onCancel}>
+            {uiText.routes.removal.cancel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ClearSearchConfirmSheet({
   onConfirm,
   onCancel,
@@ -2028,6 +2061,7 @@ function App() {
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
   const [searchSessionCleared, setSearchSessionCleared] = useState(false)
   const [clearSearchPromptOpen, setClearSearchPromptOpen] = useState(false)
+  const [clearRoutePromptOpen, setClearRoutePromptOpen] = useState(false)
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
   const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -4916,8 +4950,36 @@ function App() {
     }
   }
 
-  function clearRoute() {
+  function executeClearRoute() {
     setRouteIds([])
+    setRouteCalculationContext(null)
+    setNavigationActiveStopId(null)
+    setNavigationArrivedStopIds({})
+    setRouteNavigationDirections(null)
+    setRouteDirectionsApiStatus(null)
+    setRouteNavigationLoading(false)
+    setRouteNavigationError(null)
+    setRouteRenderDebug(null)
+    setRouteLineRenderStatus('idle')
+    setRouteOptimization({ status: 'idle' })
+    setRouteActionMessage(null)
+    setClearRoutePromptOpen(false)
+
+    if (routeNavigationOpen) {
+      routeNavHistoryPushedRef.current = false
+      setRouteNavigationOpen(false)
+    }
+
+    setEtaTick(Date.now())
+    setActionToast({ type: 'success', text: uiText.routes.clearRouteClearedToast })
+  }
+
+  function requestClearRoute() {
+    if (routeIds.length === 0) {
+      return
+    }
+
+    setClearRoutePromptOpen(true)
   }
 
   function resetRouteCompletedStops() {
@@ -5834,7 +5896,12 @@ function App() {
                   {uiText.routes.calculation.addStopsToOptimizeHint}
                 </p>
               ) : null}
-              <button type="button" className="button button--wide button--ghost route-actions-bar__clear" onClick={clearRoute}>
+              <button
+                type="button"
+                className="button button--wide button--ghost route-actions-bar__clear"
+                onClick={requestClearRoute}
+                disabled={routeIds.length === 0}
+              >
                 <Trash2 size={18} />
                 {uiText.routes.clearRoute}
               </button>
@@ -6302,15 +6369,26 @@ function App() {
         </section>
 
         <section className="panel section-panel search-route-calculate">
-          <button
-            type="button"
-            className="button button--wide search-route-calculate__button"
-            disabled={routeIds.length === 0}
-            onClick={handleCalculateRouteFromSearch}
-          >
-            <Route size={18} />
-            {uiText.routes.calculation.button}
-          </button>
+          <div className="search-route-calculate__actions">
+            <button
+              type="button"
+              className="button button--wide search-route-calculate__button"
+              disabled={routeIds.length === 0}
+              onClick={handleCalculateRouteFromSearch}
+            >
+              <Route size={18} />
+              {uiText.routes.calculation.button}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost button--wide search-route-calculate__clear"
+              disabled={routeIds.length === 0}
+              onClick={requestClearRoute}
+            >
+              <Trash2 size={18} />
+              {uiText.routes.clearRoute}
+            </button>
+          </div>
           <p className="search-route-calculate__hint">
             {routeIds.length === 0
               ? uiText.routes.calculation.emptyState
@@ -7197,6 +7275,13 @@ function App() {
           <ClearSearchConfirmSheet
             onConfirm={executeClearSearch}
             onCancel={() => setClearSearchPromptOpen(false)}
+          />
+        ) : null}
+
+        {clearRoutePromptOpen ? (
+          <ClearRouteConfirmSheet
+            onConfirm={executeClearRoute}
+            onCancel={() => setClearRoutePromptOpen(false)}
           />
         ) : null}
 
