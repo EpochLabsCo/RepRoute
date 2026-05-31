@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   BellRing,
   Bookmark,
+  Building2,
   CalendarClock,
   CheckCircle2,
   ChevronDown,
@@ -59,6 +60,18 @@ import RouteNavigationView from './components/RouteNavigationView'
 import RouteRemainingStopCard from './components/RouteRemainingStopCard'
 import VisitWorkflowDrawer from './components/VisitWorkflowDrawer'
 import SavedProspectsSheet from './components/SavedProspectsSheet'
+import CompanyCatalogView from './components/CompanyCatalogView'
+import CompanyCatalogDetailSheet from './components/CompanyCatalogDetailSheet'
+import CompanyCatalogAddSheet, {
+  type CatalogAddCompanyInput,
+} from './components/CompanyCatalogAddSheet'
+import {
+  buildCatalogCompanies,
+  createCatalogCompanyId,
+  sanitizeCatalogContacts,
+  sanitizeVisitHistory,
+  type CompanyContact,
+} from './lib/companyCatalog'
 import {
   buildCrmExportRecord,
   buildCrmExportRows,
@@ -160,7 +173,14 @@ import {
 type AssignedPriority = 'Hot' | 'Warm' | 'Cold'
 type Priority = AssignedPriority | 'Unassigned'
 type Theme = 'dark' | 'light'
-type View = 'dashboard' | 'map' | 'search' | 'crm-export' | 'follow-ups' | 'settings'
+type View =
+  | 'dashboard'
+  | 'map'
+  | 'search'
+  | 'crm-export'
+  | 'follow-ups'
+  | 'settings'
+  | 'company-catalog'
 
 type FoodNearbySession = {
   anchor: Prospect
@@ -200,7 +220,7 @@ type BaseProspect = {
   }
 }
 
-type ProspectImportSource = 'live-search' | 'food-nearby'
+type ProspectImportSource = 'live-search' | 'food-nearby' | 'catalog-manual'
 
 type ProspectRecord = {
   contactName?: string
@@ -228,6 +248,10 @@ type ProspectRecord = {
   businessCardCapturedAt?: string
   businessCardMimeType?: string
   businessCardImageDataUrl?: string
+  contacts?: CompanyContact[]
+  visitHistory?: import('./lib/companyCatalog').VisitHistoryEntry[]
+  crmExportedAt?: string
+  catalogAddedAt?: string
 }
 
 type Prospect = BaseProspect & {
@@ -912,8 +936,30 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
         nextRecord.notes = normalizeProspectNotes(record.notes)
       }
 
-      if (record.importSource === 'live-search' || record.importSource === 'food-nearby') {
+      if (
+        record.importSource === 'live-search' ||
+        record.importSource === 'food-nearby' ||
+        record.importSource === 'catalog-manual'
+      ) {
         nextRecord.importSource = record.importSource
+      }
+
+      const contacts = sanitizeCatalogContacts(record.contacts)
+      if (contacts) {
+        nextRecord.contacts = contacts
+      }
+
+      const visitHistory = sanitizeVisitHistory(record.visitHistory)
+      if (visitHistory) {
+        nextRecord.visitHistory = visitHistory
+      }
+
+      if (isIsoDateTime(record.crmExportedAt)) {
+        nextRecord.crmExportedAt = record.crmExportedAt
+      }
+
+      if (isIsoDateTime(record.catalogAddedAt)) {
+        nextRecord.catalogAddedAt = record.catalogAddedAt
       }
 
       if (isAssignedPriority(record.priority)) {
@@ -997,11 +1043,37 @@ function summarizeBackupPayload(payload: BackupPayload) {
   return {
     liveProspects: payload.liveProspects.length,
     saved: payload.savedProspects.length,
+    catalogCompanies: payload.savedProspects.length,
     route: payload.routeList.length,
     notes: records.filter((record) => typeof record.notes === 'string').length,
     priorities: records.filter((record) => typeof record.priority === 'string').length,
     followUps: Object.keys(payload.followUpEntries ?? {}).length,
     businessCards: records.filter((record) => typeof record.businessCardCapturedAt === 'string').length,
+  }
+}
+
+function buildManualCatalogProspect(input: CatalogAddCompanyInput): BaseProspect {
+  const address = input.address.trim() || 'Address not set'
+
+  return {
+    id: createCatalogCompanyId(),
+    googlePlaceId: '',
+    businessName: input.businessName.trim() || 'Unnamed company',
+    contactName: input.contactName.trim(),
+    contactTitle: input.contactTitle.trim(),
+    contactEmail: input.contactEmail.trim(),
+    category: input.category.trim() || 'Business',
+    distance: 0,
+    priority: input.priority,
+    lastContact: 'Not contacted yet',
+    notes: normalizeProspectNotes(input.notes),
+    city: extractCity(address, address),
+    nextTouch: 'Review fit, save if promising, and add to route if qualified.',
+    address,
+    rating: null,
+    phone: input.phone.trim() || input.contactPhone.trim() || 'Phone unavailable',
+    website: input.website.trim() || 'Website unavailable',
+    location: { lat: 0, lng: 0 },
   }
 }
 
@@ -2058,6 +2130,9 @@ function App() {
   const [crmExportIncludeBusinessCard, setCrmExportIncludeBusinessCard] = useState(true)
   const [crmExportPreviewOpen, setCrmExportPreviewOpen] = useState(false)
   const [savedProspectsOpen, setSavedProspectsOpen] = useState(false)
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
+  const [catalogAddOpen, setCatalogAddOpen] = useState(false)
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
   const [searchSessionCleared, setSearchSessionCleared] = useState(false)
   const [clearSearchPromptOpen, setClearSearchPromptOpen] = useState(false)
@@ -2552,6 +2627,39 @@ function App() {
     })
   }, [routeIds, savedIds, setFollowUpEntries])
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || savedIds.length === 0) {
+      return
+    }
+
+    const migrationKey = 'reproute:company-catalog-migration-v1'
+    if (window.localStorage.getItem(migrationKey)) {
+      return
+    }
+
+    setProspectRecords((current) => {
+      let changed = false
+      const next = { ...current }
+      const stampedAt = new Date().toISOString()
+
+      for (const prospectId of savedIds) {
+        if (next[prospectId]?.catalogAddedAt) {
+          continue
+        }
+
+        next[prospectId] = {
+          ...next[prospectId],
+          catalogAddedAt: stampedAt,
+        }
+        changed = true
+      }
+
+      return changed ? next : current
+    })
+
+    window.localStorage.setItem(migrationKey, '1')
+  }, [savedIds, setProspectRecords])
+
   const promptedProspect = useMemo(
     () => (removeProspectPrompt ? prospectMap.get(removeProspectPrompt.prospectId) ?? null : null),
     [prospectMap, removeProspectPrompt],
@@ -2577,6 +2685,17 @@ function App() {
         .map((id) => prospectMap.get(id))
         .filter((prospect): prospect is Prospect => Boolean(prospect)),
     [prospectMap, savedIds],
+  )
+
+  const catalogCompanies = useMemo(
+    () =>
+      buildCatalogCompanies(savedIds, prospectMap, prospectRecords, followUpEntries, routeIds),
+    [followUpEntries, prospectMap, prospectRecords, routeIds, savedIds],
+  )
+
+  const selectedCatalogCompany = useMemo(
+    () => catalogCompanies.find((company) => company.id === selectedCatalogId) ?? null,
+    [catalogCompanies, selectedCatalogId],
   )
 
   const routeProspects = useMemo(
@@ -3355,6 +3474,193 @@ function App() {
   function openSavedProspects(prospectId?: string) {
     setExpandedProspectId(prospectId ?? null)
     setSavedProspectsOpen(true)
+  }
+
+  function openCompanyCatalog(companyId?: string) {
+    if (foodNearbySession) {
+      dismissFoodNearby(false)
+    }
+
+    setActiveView('company-catalog')
+    setSelectedCatalogId(companyId ?? null)
+    setAccountMenuOpen(false)
+    setAccountMenuMessage(null)
+  }
+
+  function addCompanyToCatalog(input: CatalogAddCompanyInput) {
+    const prospect = buildManualCatalogProspect(input)
+
+    setLiveProspects((current) => mergeProspectCatalog(current, [prospect]))
+    setSavedIds((current) =>
+      current.includes(prospect.id) ? current : [...current, prospect.id],
+    )
+    setProspectRecords((current) => ({
+      ...current,
+      [prospect.id]: {
+        importSource: 'catalog-manual',
+        catalogAddedAt: new Date().toISOString(),
+        contactName: input.contactName.trim(),
+        contactTitle: input.contactTitle.trim(),
+        contactPhone: input.contactPhone.trim() || input.phone.trim(),
+        contactEmail: input.contactEmail.trim(),
+        contactWebsite: input.website.trim(),
+        addressOverride: input.address.trim(),
+        priority: input.priority,
+        notes: normalizeProspectNotes(input.notes),
+        editedByRepRouteUser: true,
+      },
+    }))
+    setSelectedCatalogId(prospect.id)
+    setCatalogAddOpen(false)
+    setActionToast({ type: 'success', text: uiText.companyCatalog.addedToast })
+  }
+
+  function handleCatalogSaveCompany(
+    companyId: string,
+    fields: {
+      businessName: string
+      address: string
+      phone: string
+      website: string
+      category: string
+      priority: 'Hot' | 'Warm' | 'Cold'
+      notes: string
+    },
+  ) {
+    setLiveProspects((current) =>
+      current.map((prospect) =>
+        prospect.id === companyId
+          ? {
+              ...prospect,
+              businessName: fields.businessName.trim() || prospect.businessName,
+              address: fields.address.trim() || prospect.address,
+              phone: fields.phone.trim() || prospect.phone,
+              website: fields.website.trim() || prospect.website,
+              category: fields.category.trim() || prospect.category,
+              priority: fields.priority,
+              notes: normalizeProspectNotes(fields.notes),
+            }
+          : prospect,
+      ),
+    )
+
+    updateProspectRecord(companyId, (current) => ({
+      ...current,
+      addressOverride: fields.address.trim(),
+      contactPhone: fields.phone.trim(),
+      contactWebsite: fields.website.trim(),
+      priority: fields.priority,
+      notes: normalizeProspectNotes(fields.notes),
+    }))
+  }
+
+  function handleCatalogSaveContacts(companyId: string, contacts: CompanyContact[]) {
+    const primary = contacts.find((contact) => contact.isPrimary) ?? contacts[0]
+    const additional = contacts.filter((contact) => contact.id !== 'primary' && !contact.isPrimary)
+
+    updateProspectRecord(companyId, (current) => ({
+      ...current,
+      contactName: primary?.name?.trim() ?? '',
+      contactTitle: primary?.title?.trim() ?? '',
+      contactPhone: primary?.phone?.trim() ?? '',
+      contactEmail: primary?.email?.trim() ?? '',
+      contacts: additional.length > 0 ? additional : undefined,
+    }))
+
+    setLiveProspects((current) =>
+      current.map((prospect) =>
+        prospect.id === companyId
+          ? {
+              ...prospect,
+              contactName: primary?.name?.trim() ?? prospect.contactName,
+              contactTitle: primary?.title?.trim() ?? prospect.contactTitle,
+              contactEmail: primary?.email?.trim() ?? prospect.contactEmail,
+              phone: primary?.phone?.trim() || prospect.phone,
+            }
+          : prospect,
+      ),
+    )
+  }
+
+  function openCatalogFollowUp(companyId: string) {
+    const prospect = prospectMap.get(companyId)
+    const existing = followUpEntries[companyId]
+
+    if (!existing) {
+      savePendingFollowUp(companyId, { silent: true })
+    }
+
+    setFollowUpEditDraft({
+      date: existing?.followUpDate ?? '',
+      time: existing?.followUpTime ?? DEFAULT_FOLLOW_UP_TIME,
+      notes: existing?.notes ?? prospect?.notes ?? '',
+    })
+    setEditingFollowUpId(companyId)
+    setSelectedCatalogId(null)
+    setActiveView('follow-ups')
+  }
+
+  function exportCatalogCompanyToCrm(companyId: string) {
+    const prospect = prospectMap.get(companyId)
+
+    if (!prospect) {
+      return
+    }
+
+    const followUpEntry = followUpEntries[companyId]
+    const record = buildCrmExportRecord({
+      address: prospect.address,
+      businessName: prospect.businessName,
+      category: prospect.category,
+      contactName: prospect.contactName,
+      contactEmail: prospect.contactEmail,
+      contactTitle: prospect.contactTitle,
+      editedByRepRouteUser: prospect.editedByRepRouteUser,
+      followUpDate: followUpEntry?.followUpDate ?? prospect.followUpDate,
+      followUpTime: followUpEntry?.followUpTime ?? prospect.followUpTime,
+      followUpNotes: followUpEntry?.notes ?? '',
+      followUpCompleted: followUpEntry?.completed,
+      followUpRouteStatus: followUpEntry?.routeStatus,
+      googlePlaceId: prospect.googlePlaceId,
+      lastContactedDate:
+        prospect.lastContactDate ||
+        (prospect.lastContact === 'Not contacted yet' ? '' : prospect.lastContact),
+      notes: prospect.notes,
+      phone: prospect.phone,
+      priority: prospect.priority,
+      routeOutcomeTag: prospect.visitOutcome,
+      visitCompleted: prospect.routeCompleted,
+      visitCompletedDateTime: prospect.visitCompletedAt,
+      visitNotes: prospect.visitNote,
+      website: prospect.website,
+      businessCardCapturedAt: prospect.businessCardCapturedAt,
+    })
+
+    try {
+      const exportRows = buildCrmExportRows([record], crmExportFormat, crmExportOptions)
+      const csv = buildCsvContent(exportRows.columns, exportRows.rows)
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      const dateStamp = new Date().toISOString().slice(0, 10)
+      const safeName = prospect.businessName.replace(/[^\w.-]+/g, '-').slice(0, 40) || 'company'
+
+      link.href = url
+      link.download = `${exportRows.profile.fileStem}-${safeName}-${dateStamp}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 0)
+
+      updateProspectRecord(companyId, (current) => ({
+        ...current,
+        crmExportedAt: new Date().toISOString(),
+      }))
+
+      setActionToast({ type: 'success', text: uiText.companyCatalog.exportedToast })
+    } catch {
+      setActionToast({ type: 'error', text: uiText.errors.crmExportFailed })
+    }
   }
 
   function openCrmExportView() {
@@ -5906,6 +6212,10 @@ function App() {
                 {uiText.routes.clearRoute}
               </button>
               <CardMoreActions>
+                <CardMoreMenuButton onClick={() => openCompanyCatalog()}>
+                  <Building2 size={16} />
+                  {uiText.companyCatalog.openCompanyCatalog}
+                </CardMoreMenuButton>
                 <CardMoreMenuButton onClick={() => openSavedProspects()}>
                   <Bookmark size={16} />
                   {uiText.saved.openSavedProspects}
@@ -6347,6 +6657,16 @@ function App() {
             <button
               type="button"
               className="button button--ghost button--wide search-saved-prospects-btn"
+              onClick={() => openCompanyCatalog()}
+            >
+              <Building2 size={16} />
+              {savedIds.length > 0
+                ? uiText.companyCatalog.openCompanyCatalogWithCount(savedIds.length)
+                : uiText.companyCatalog.openCompanyCatalog}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost button--wide search-saved-prospects-btn"
               onClick={() => openSavedProspects()}
             >
               <Bookmark size={16} />
@@ -6488,6 +6808,45 @@ function App() {
     )
   }
 
+  function renderCompanyCatalogView() {
+    return (
+      <>
+        <CompanyCatalogView
+          companies={catalogCompanies}
+          query={catalogQuery}
+          onQueryChange={setCatalogQuery}
+          onSelectCompany={setSelectedCatalogId}
+          onAddCompany={() => setCatalogAddOpen(true)}
+        />
+
+        {selectedCatalogCompany ? (
+          <CompanyCatalogDetailSheet
+            company={selectedCatalogCompany}
+            cardPreviewUrl={businessCardPreviewUrls[selectedCatalogCompany.id] ?? null}
+            onClose={() => setSelectedCatalogId(null)}
+            onSaveCompany={(fields) => handleCatalogSaveCompany(selectedCatalogCompany.id, fields)}
+            onSaveContacts={(contacts) => handleCatalogSaveContacts(selectedCatalogCompany.id, contacts)}
+            onToggleRoute={() => toggleRoute(selectedCatalogCompany.id)}
+            onToggleSaved={() => {
+              toggleSaved(selectedCatalogCompany.id)
+              setSelectedCatalogId(null)
+            }}
+            onSetFollowUp={() => openCatalogFollowUp(selectedCatalogCompany.id)}
+            onExportCrm={() => exportCatalogCompanyToCrm(selectedCatalogCompany.id)}
+            onScanBusinessCard={(file) => void captureBusinessCard(selectedCatalogCompany.id, file)}
+            onRemoveBusinessCard={() => removeBusinessCard(selectedCatalogCompany.id)}
+            onNavigate={() => {
+              const prospect = prospectMap.get(selectedCatalogCompany.id)
+              if (prospect) {
+                openProspectInGoogleMaps(prospect)
+              }
+            }}
+          />
+        ) : null}
+      </>
+    )
+  }
+
   function renderCrmExportView() {
     const onlyCompletedDisabled = crmExportScope === 'routeCompleted'
 
@@ -6496,6 +6855,12 @@ function App() {
         <section className="panel section-panel section-panel--compact">
           <div className="eyebrow eyebrow--tight">{uiText.crmExport.eyebrow}</div>
           <p className="section-copy">{uiText.crmExport.description}</p>
+          <button type="button" className="button button--ghost button--wide" onClick={() => openCompanyCatalog()}>
+            <Building2 size={16} />
+            {savedIds.length > 0
+              ? uiText.companyCatalog.openCompanyCatalogWithCount(savedIds.length)
+              : uiText.companyCatalog.openCompanyCatalog}
+          </button>
           <button type="button" className="button button--ghost button--wide" onClick={() => openSavedProspects()}>
             <Bookmark size={16} />
             {savedIds.length > 0
@@ -7023,6 +7388,10 @@ function App() {
               <strong>{currentBackupSummary.saved}</strong>
             </div>
             <div className="backup-summary-card">
+              <span className="field-label">{uiText.settings.backupSummaryLabels.companyCatalog}</span>
+              <strong>{currentBackupSummary.catalogCompanies}</strong>
+            </div>
+            <div className="backup-summary-card">
               <span className="field-label">{uiText.settings.backupSummaryLabels.routeStops}</span>
               <strong>{currentBackupSummary.route}</strong>
             </div>
@@ -7059,6 +7428,10 @@ function App() {
                 <div className="backup-summary-card">
                   <span className="field-label">{uiText.settings.backupSummaryLabels.savedProspects}</span>
                   <strong>{importPreviewSummary.saved}</strong>
+                </div>
+                <div className="backup-summary-card">
+                  <span className="field-label">{uiText.settings.backupSummaryLabels.companyCatalog}</span>
+                  <strong>{importPreviewSummary.catalogCompanies}</strong>
                 </div>
                 <div className="backup-summary-card">
                   <span className="field-label">{uiText.settings.backupSummaryLabels.routeStops}</span>
@@ -7113,6 +7486,8 @@ function App() {
         return renderFollowUpsView()
       case 'settings':
         return renderSettingsView()
+      case 'company-catalog':
+        return renderCompanyCatalogView()
       default:
         return null
     }
@@ -7309,6 +7684,13 @@ function App() {
         ) : null}
 
       </main>
+
+      {catalogAddOpen ? (
+        <CompanyCatalogAddSheet
+          onClose={() => setCatalogAddOpen(false)}
+          onSave={addCompanyToCatalog}
+        />
+      ) : null}
 
       <SavedProspectsSheet
         open={savedProspectsOpen}
