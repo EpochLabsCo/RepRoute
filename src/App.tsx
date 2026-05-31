@@ -110,9 +110,6 @@ import {
   destinationFromProspect,
   openMapsNavigation,
   openMapsSearch,
-  readMapsAppPreference,
-  sanitizeMapsAppPreference,
-  type MapsApp,
 } from './lib/mapsNavigation'
 import { normalizeProspectNotes } from './lib/prospectNotes'
 import {
@@ -385,7 +382,6 @@ const STORAGE_KEYS = {
   notificationPreferences: 'reproute:notification-preferences',
   notificationReminderLog: 'reproute:notification-reminder-log',
   arrivalDetectionRadiusFeet: 'reproute:arrival-detection-radius-feet',
-  mapsAppPreference: 'reproute:maps-app-preference',
   defaultStopDurationMinutes: 'reproute:default-stop-duration-minutes',
   theme: 'reproute:theme',
   routeReorderHintDismissed: 'reproute:route-reorder-hint-dismissed',
@@ -1976,7 +1972,6 @@ function App() {
     )
   const [arrivalDetectionRadiusFeet, setArrivalDetectionRadiusFeet] =
     usePersistentState<ArrivalDetectionRadiusFeet>(STORAGE_KEYS.arrivalDetectionRadiusFeet, 300)
-  const [mapsAppPreference, setMapsAppPreference] = useState<MapsApp>(() => readMapsAppPreference())
   const [defaultStopDurationMinutes, setDefaultStopDurationMinutes] =
     usePersistentState<DefaultStopDurationMinutes>(
       STORAGE_KEYS.defaultStopDurationMinutes,
@@ -1985,9 +1980,6 @@ function App() {
   const [etaTick, setEtaTick] = useState(() => Date.now())
   const [gpsToNextStopLeg, setGpsToNextStopLeg] = useState<RouteSegmentLeg | null>(null)
 
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.mapsAppPreference, JSON.stringify(mapsAppPreference))
-  }, [mapsAppPreference])
   const [companyNameQuery, setCompanyNameQuery] = useState('')
   const [manualMarket, setManualMarket] = useState('')
   const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>(10)
@@ -4093,30 +4085,24 @@ function App() {
     })
   }
 
-  function openProspectInPreferredMaps(prospect: Prospect) {
-    const result = openMapsNavigation(
-      {
-        destinations: [destinationFromProspect(prospect)],
-      },
-      mapsAppPreference,
-    )
+  function openProspectInGoogleMaps(prospect: Prospect) {
+    const result = openMapsNavigation({
+      destinations: [destinationFromProspect(prospect)],
+    })
 
     if (!result.opened) {
       showMapsOpenBlockedToast()
     }
   }
 
-  function openRouteInPreferredMaps(
+  function openRouteInGoogleMaps(
     origin: string | { lat: number; lng: number } | null,
     stops: Prospect[],
   ) {
-    const result = openMapsNavigation(
-      {
-        origin,
-        destinations: stops.map((stop) => destinationFromProspect(stop)),
-      },
-      mapsAppPreference,
-    )
+    const result = openMapsNavigation({
+      origin,
+      destinations: stops.map((stop) => destinationFromProspect(stop)),
+    })
 
     if (!result.opened) {
       showMapsOpenBlockedToast()
@@ -4127,12 +4113,12 @@ function App() {
     const prospect = prospectMap.get(entry.prospectId)
 
     if (prospect && isFiniteLatLng(prospect.location)) {
-      openProspectInPreferredMaps(prospect)
+      openProspectInGoogleMaps(prospect)
       return
     }
 
     if (entry.address.trim()) {
-      const result = openMapsSearch(entry.address, mapsAppPreference)
+      const result = openMapsSearch(entry.address)
       if (!result.opened) {
         showMapsOpenBlockedToast()
       }
@@ -4394,7 +4380,7 @@ function App() {
       return
     }
 
-    openProspectInPreferredMaps(prospect)
+    openProspectInGoogleMaps(prospect)
   }
 
   async function loadRouteNavigationDirections() {
@@ -4704,7 +4690,7 @@ function App() {
       return
     }
 
-    openRouteInPreferredMaps(startOrigin, stopsForNavigation)
+    openRouteInGoogleMaps(startOrigin, stopsForNavigation)
   }
 
   useEffect(() => {
@@ -6685,25 +6671,6 @@ function App() {
                   </option>
                 ))}
               </select>
-            </label>
-
-            <label className="field-group">
-              <span className="field-label">{uiText.settings.mapsPreference.label}</span>
-              <p className="section-copy settings-field-hint">{uiText.settings.mapsPreference.description}</p>
-              <select
-                className="text-input filter-select"
-                value={mapsAppPreference}
-                onChange={(event) =>
-                  setMapsAppPreference(sanitizeMapsAppPreference(event.target.value))
-                }
-              >
-                {uiText.settings.mapsPreference.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <p className="editor-hint">{uiText.settings.mapsPreference.defaultHint(mapsAppPreference)}</p>
             </label>
 
             <label className="field-group">

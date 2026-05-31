@@ -493,7 +493,7 @@ export const uiText = {
       heading: 'Following Today’s Route',
       back: 'Back to Route Overview',
       addToRouteToNavigate: 'Add this prospect to Today’s Route to navigate inside RepRoute.',
-      mapsPopupBlocked: 'Allow pop-ups in your browser to open directions in your maps app.',
+      mapsPopupBlocked: 'Allow pop-ups in your browser to open Google Maps directions.',
       overviewEyebrow: 'Route guidance',
       overviewHeading: 'Today’s Route overview',
       currentStopLabel: 'Current stop',
@@ -502,7 +502,7 @@ export const uiText = {
       distanceLabel: 'Distance',
       startRoute: 'Start Route',
       openInMaps: 'Open in Maps',
-      openInMapsHint: 'Open the optimized route in your preferred maps app.',
+      openInMapsHint: 'Open the optimized route in Google Maps with your current stop order.',
       loadingRoute: 'Loading route line…',
       needOrigin: 'Add a starting location or enable location access to start route navigation.',
       routeLineError: 'Could not draw the route line. Stops and visit actions are still available.',
@@ -793,26 +793,6 @@ export const uiText = {
       description:
         'Time added at each stop when projecting arrival times for later stops on Today’s Route.',
       option: (minutes: number) => (minutes === 0 ? '0 minutes' : `${minutes} minutes`),
-    },
-    mapsPreference: {
-      label: 'Preferred Maps App',
-      description: 'Choose which maps app opens for Navigate, Open in Maps, and food stop directions.',
-      options: [
-        { value: 'google-maps', label: 'Google Maps' },
-        { value: 'apple-maps', label: 'Apple Maps' },
-        { value: 'waze', label: 'Waze' },
-      ] as const,
-      defaultHint: (app: string) => {
-        if (app === 'google-maps') {
-          return 'Opens Google Maps app links on mobile, with web directions as fallback.'
-        }
-
-        if (app === 'apple-maps') {
-          return 'Opens Apple Maps on iPhone, iPad, and Mac Safari when available.'
-        }
-
-        return 'Waze supports one stop at a time; multi-stop routes open in Google Maps web with your optimized order.'
-      },
     },
     googlePlacesEyebrow: 'Live Search',
     googlePlacesHeading: 'Search Connection',
