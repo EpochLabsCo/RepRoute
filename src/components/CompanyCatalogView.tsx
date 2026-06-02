@@ -14,6 +14,8 @@ type CompanyCatalogViewProps = {
   onQueryChange: (value: string) => void
   onSelectCompany: (companyId: string) => void
   onAddCompany: () => void
+  territoryFilterLabel?: string | null
+  onClearTerritoryFilter?: () => void
 }
 
 export default function CompanyCatalogView({
@@ -22,6 +24,8 @@ export default function CompanyCatalogView({
   onQueryChange,
   onSelectCompany,
   onAddCompany,
+  territoryFilterLabel = null,
+  onClearTerritoryFilter,
 }: CompanyCatalogViewProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const filtered = useMemo(() => filterCatalogCompanies(companies, query), [companies, query])
@@ -45,6 +49,17 @@ export default function CompanyCatalogView({
           <span className="meta-pill meta-pill--route">{uiText.companyCatalog.legend.onRoute}</span>
         </p>
       </section>
+
+      {territoryFilterLabel ? (
+        <section className="panel section-panel section-panel--compact company-catalog__filter-banner">
+          <p className="company-catalog__filter-label">{territoryFilterLabel}</p>
+          {onClearTerritoryFilter ? (
+            <button type="button" className="button button--ghost" onClick={onClearTerritoryFilter}>
+              {uiText.territories.catalogFilterClear}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="panel section-panel section-panel--compact company-catalog__toolbar">
         <label className="field-group">

@@ -70,6 +70,7 @@ import CompanyCatalogAddSheet, {
 } from './components/CompanyCatalogAddSheet'
 import {
   buildCatalogCompanies,
+  filterCatalogByProspectIds,
   createCatalogCompanyId,
   sanitizeCatalogContacts,
   sanitizeVisitHistory,
@@ -132,7 +133,15 @@ import { warnRecoverable } from './lib/reprouteLog'
 import { applyStorageHygiene, uniqueProspectIds } from './lib/storageHygiene'
 import TerritoryPulseDashboard from './components/TerritoryPulseDashboard'
 import TerritoriesView from './components/TerritoriesView'
-import type { Territory } from './lib/territories/types'
+import type { TerritoryConfig } from './lib/territories/types'
+import {
+  buildTerritoryReportCsv,
+  computeTerritoryDashboardStats,
+  downloadTerritoryReportCsv,
+  getProspectsForTerritory,
+  prospectMatchesTerritory,
+  TEXAS_TERRITORIES,
+} from './lib/territories'
 import {
   buildPriorityAccounts,
   computeTerritoryPulseMetrics,
@@ -2186,6 +2195,7 @@ function App() {
   const [crmExportPreviewOpen, setCrmExportPreviewOpen] = useState(false)
   const [savedProspectsOpen, setSavedProspectsOpen] = useState(false)
   const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalogTerritoryFilterId, setCatalogTerritoryFilterId] = useState<string | null>(null)
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
   const [catalogAddOpen, setCatalogAddOpen] = useState(false)
   const storageHygieneAppliedRef = useRef(false)
@@ -3678,15 +3688,28 @@ function App() {
     setSavedProspectsOpen(true)
   }
 
-  function openCompanyCatalog(companyId?: string) {
+  function openCompanyCatalog(companyId?: string, options?: { territoryId?: string | null }) {
     if (foodNearbySession) {
       dismissFoodNearby(false)
+    }
+
+    if (options && 'territoryId' in options) {
+      setCatalogTerritoryFilterId(options.territoryId ?? null)
     }
 
     setActiveView('company-catalog')
     setSelectedCatalogId(companyId ?? null)
     setAccountMenuOpen(false)
     setAccountMenuMessage(null)
+  }
+
+  function openCompanyCatalogForTerritory(territory: TerritoryConfig) {
+    setCatalogQuery('')
+    openCompanyCatalog(undefined, { territoryId: territory.id })
+  }
+
+  function clearCatalogTerritoryFilter() {
+    setCatalogTerritoryFilterId(null)
   }
 
   function addCompanyToCatalog(input: CatalogAddCompanyInput) {
@@ -7062,30 +7085,148 @@ function App() {
     [routeProspects],
   )
 
+  function createRouteFromTerritory(territory: TerritoryConfig) {
+    const territoryProspectIds = savedIds.filter((id) => {
+      const prospect = prospectMap.get(id)
+      if (!prospect) {
+        return false
+      }
+      return prospectMatchesTerritory(
+        {
+          id: prospect.id,
+          businessName: prospect.businessName,
+          city: prospect.city,
+          address: prospect.address,
+        },
+        territory,
+      )
+    })
+
+    if (territoryProspectIds.length === 0) {
+      setActionToast({
+        type: 'info',
+        text: uiText.territories.routeFromTerritoryEmpty(territory.shortName),
+      })
+      setActiveView('search')
+      return
+    }
+
+    let addedCount = 0
+    setRouteIds((current) => {
+      const next = uniqueProspectIds([...current, ...territoryProspectIds])
+      addedCount = next.length - current.length
+      return next
+    })
+
+    setActionToast({
+      type: 'success',
+      text: uiText.territories.routeFromTerritoryToast(addedCount, territory.shortName),
+    })
+    setActiveView('map')
+  }
+
+  function generateTerritoryReport(territory: TerritoryConfig) {
+    const stats = computeTerritoryDashboardStats(
+      territory,
+      prospectsForTerritoryMatch,
+      routeStopsForTerritoryMatch,
+    )
+
+    const prospectRows = savedIds
+      .map((id) => prospectMap.get(id))
+      .filter((prospect): prospect is Prospect => Boolean(prospect))
+      .filter((prospect) =>
+        prospectMatchesTerritory(
+          {
+            id: prospect.id,
+            businessName: prospect.businessName,
+            city: prospect.city,
+            address: prospect.address,
+          },
+          territory,
+        ),
+      )
+      .map((prospect) => ({
+        id: prospect.id,
+        businessName: prospect.businessName,
+        city: prospect.city,
+        address: prospect.address,
+        priority: prospect.priority,
+        onRoute: routeIds.includes(prospect.id),
+      }))
+
+    if (prospectRows.length === 0 && stats.stopCount === 0) {
+      setActionToast({
+        type: 'info',
+        text: uiText.territories.reportEmptyToast(territory.shortName),
+      })
+      return
+    }
+
+    try {
+      const csv = buildTerritoryReportCsv(territory, stats, prospectRows)
+      downloadTerritoryReportCsv(territory, csv)
+      setActionToast({
+        type: 'success',
+        text: uiText.territories.reportGeneratedToast(territory.shortName),
+      })
+    } catch {
+      setActionToast({ type: 'error', text: uiText.errors.crmExportFailed })
+    }
+  }
+
   function renderTerritoriesView() {
     return (
       <TerritoriesView
         liveProspects={prospectsForTerritoryMatch}
         routeStopProspects={routeStopsForTerritoryMatch}
-        onViewProspects={() => openCompanyCatalog()}
-        onViewRoutes={() => setActiveView('map')}
-        onCreateRoute={() => setActiveView('search')}
-        onEditTerritory={(_territory: Territory) => {
-          setActionToast({ type: 'info', text: uiText.territories.editComingSoon })
-        }}
+        onViewProspects={openCompanyCatalogForTerritory}
+        onCreateRoute={createRouteFromTerritory}
+        onGenerateReport={generateTerritoryReport}
       />
     )
   }
+
+  const catalogTerritoryProspectIds = useMemo(() => {
+    if (!catalogTerritoryFilterId) {
+      return null
+    }
+
+    const territory = TEXAS_TERRITORIES.find((entry) => entry.id === catalogTerritoryFilterId)
+    if (!territory) {
+      return null
+    }
+
+    return new Set(
+      getProspectsForTerritory(territory, prospectsForTerritoryMatch).map((prospect) => prospect.id),
+    )
+  }, [catalogTerritoryFilterId, prospectsForTerritoryMatch])
+
+  const catalogTerritoryFilterLabel = useMemo(() => {
+    if (!catalogTerritoryFilterId) {
+      return null
+    }
+
+    const territory = TEXAS_TERRITORIES.find((entry) => entry.id === catalogTerritoryFilterId)
+    return territory ? uiText.territories.catalogFilterLabel(territory.shortName) : null
+  }, [catalogTerritoryFilterId])
+
+  const catalogCompaniesForView = useMemo(
+    () => filterCatalogByProspectIds(catalogCompanies, catalogTerritoryProspectIds),
+    [catalogCompanies, catalogTerritoryProspectIds],
+  )
 
   function renderCompanyCatalogView() {
     return (
       <>
         <CompanyCatalogView
-          companies={catalogCompanies}
+          companies={catalogCompaniesForView}
           query={catalogQuery}
           onQueryChange={setCatalogQuery}
           onSelectCompany={setSelectedCatalogId}
           onAddCompany={() => setCatalogAddOpen(true)}
+          territoryFilterLabel={catalogTerritoryFilterLabel}
+          onClearTerritoryFilter={clearCatalogTerritoryFilter}
         />
 
         {selectedCatalogCompany ? (

@@ -1,60 +1,53 @@
 import { useMemo, useState } from 'react'
 import TexasTerritoryMap from './TexasTerritoryMap'
-import TerritoryDetailSheet from './TerritoryDetailSheet'
+import TerritoryDashboard from './TerritoryDashboard'
+import TerritoryList from './TerritoryList'
 import {
-  computeTerritoryLiveStats,
-  countProspectsInTerritories,
-  getTerritoryById,
+  computeAllTerritoryStats,
+  countUniqueProspectsInTerritories,
   TEXAS_MAP_REGIONS,
-  TEXAS_TERRITORY_DEFAULTS,
+  TEXAS_TERRITORIES,
   type ProspectForTerritoryMatch,
-  type Territory,
+  type TerritoryConfig,
 } from '../lib/territories'
 import { uiText } from '../constants/uiText'
 
 type TerritoriesViewProps = {
-  territories?: Territory[]
+  territories?: TerritoryConfig[]
   liveProspects: ProspectForTerritoryMatch[]
   routeStopProspects: ProspectForTerritoryMatch[]
-  onViewProspects: () => void
-  onViewRoutes: () => void
-  onCreateRoute: () => void
-  onEditTerritory: (territory: Territory) => void
+  onViewProspects: (territory: TerritoryConfig) => void
+  onCreateRoute: (territory: TerritoryConfig) => void
+  onGenerateReport: (territory: TerritoryConfig) => void
 }
 
 export default function TerritoriesView({
-  territories = TEXAS_TERRITORY_DEFAULTS,
+  territories = TEXAS_TERRITORIES,
   liveProspects,
   routeStopProspects,
   onViewProspects,
-  onViewRoutes,
   onCreateRoute,
-  onEditTerritory,
+  onGenerateReport,
 }: TerritoriesViewProps) {
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null)
+  const [mapExpanded, setMapExpanded] = useState(false)
 
-  const selectedTerritory = useMemo(
-    () => (selectedTerritoryId ? getTerritoryById(selectedTerritoryId, territories) : null),
-    [selectedTerritoryId, territories],
+  const territoryRows = useMemo(() => {
+    const rows = computeAllTerritoryStats(territories, liveProspects, routeStopProspects)
+    return [...rows].sort((left, right) => {
+      const leftScore = left.stats.prospectCount * 2 + left.stats.stopCount
+      const rightScore = right.stats.prospectCount * 2 + right.stats.stopCount
+      return rightScore - leftScore
+    })
+  }, [liveProspects, routeStopProspects, territories])
+
+  const selectedRow = useMemo(
+    () => territoryRows.find((row) => row.territory.id === selectedTerritoryId) ?? null,
+    [selectedTerritoryId, territoryRows],
   )
 
-  const selectedStats = useMemo(() => {
-    if (!selectedTerritory) {
-      return null
-    }
-
-    return computeTerritoryLiveStats(
-      selectedTerritory.cities,
-      liveProspects,
-      routeStopProspects,
-    )
-  }, [liveProspects, routeStopProspects, selectedTerritory])
-
-  const territoryMatchedProspectCount = useMemo(
-    () => countProspectsInTerritories(
-      territories.map((territory) => territory.cities),
-      liveProspects,
-    ),
+  const matchedProspectCount = useMemo(
+    () => countUniqueProspectsInTerritories(territories, liveProspects),
     [liveProspects, territories],
   )
 
@@ -64,48 +57,57 @@ export default function TerritoriesView({
         <div className="eyebrow eyebrow--tight">{uiText.territories.eyebrow}</div>
         <h2 className="territories-view__title">{uiText.territories.title}</h2>
         <p className="section-copy">{uiText.territories.subtitle}</p>
-        <p className="editor-hint territories-view__hint">{uiText.territories.mapHint}</p>
-      </section>
-
-      <section className="panel section-panel territories-view__map-panel">
         <div className="territories-view__summary">
           <span className="meta-pill">{uiText.territories.regionCount(territories.length)}</span>
           <span className="meta-pill meta-pill--search">
-            {uiText.territories.liveProspects(territoryMatchedProspectCount)}
+            {uiText.territories.liveProspects(matchedProspectCount)}
           </span>
         </div>
-        <TexasTerritoryMap
-          territories={territories}
-          mapRegions={TEXAS_MAP_REGIONS}
-          selectedTerritoryId={selectedTerritoryId}
-          onSelectTerritory={setSelectedTerritoryId}
-        />
-        {!selectedTerritoryId ? (
-          <p className="editor-hint territories-view__select-prompt">{uiText.territories.selectPrompt}</p>
-        ) : null}
       </section>
 
-      {selectedTerritory && selectedStats ? (
-        <TerritoryDetailSheet
-          key={selectedTerritory.id}
-          territory={selectedTerritory}
-          stats={selectedStats}
-          onClose={() => setSelectedTerritoryId(null)}
-          onViewProspects={() => {
-            setSelectedTerritoryId(null)
-            onViewProspects()
-          }}
-          onViewRoutes={() => {
-            setSelectedTerritoryId(null)
-            onViewRoutes()
-          }}
-          onCreateRoute={() => {
-            setSelectedTerritoryId(null)
-            onCreateRoute()
-          }}
-          onEditTerritory={() => onEditTerritory(selectedTerritory)}
+      <TerritoryList
+        items={territoryRows}
+        selectedTerritoryId={selectedTerritoryId}
+        onSelectTerritory={setSelectedTerritoryId}
+      />
+
+      {selectedRow ? (
+        <TerritoryDashboard
+          key={selectedRow.territory.id}
+          territory={selectedRow.territory}
+          stats={selectedRow.stats}
+          onViewProspects={() => onViewProspects(selectedRow.territory)}
+          onCreateRoute={() => onCreateRoute(selectedRow.territory)}
+          onGenerateReport={() => onGenerateReport(selectedRow.territory)}
         />
-      ) : null}
+      ) : (
+        <section className="panel section-panel territories-view__prompt">
+          <h3>{uiText.territories.dashboard.selectTitle}</h3>
+          <p>{uiText.territories.selectPrompt}</p>
+        </section>
+      )}
+
+      <section className="panel section-panel territories-view__map-panel">
+        <button
+          type="button"
+          className="territories-view__map-toggle"
+          onClick={() => setMapExpanded((current) => !current)}
+          aria-expanded={mapExpanded}
+        >
+          {mapExpanded ? uiText.territories.dashboard.hideMap : uiText.territories.dashboard.showMap}
+        </button>
+        {mapExpanded ? (
+          <>
+            <TexasTerritoryMap
+              territories={territories}
+              mapRegions={TEXAS_MAP_REGIONS}
+              selectedTerritoryId={selectedTerritoryId}
+              onSelectTerritory={setSelectedTerritoryId}
+            />
+            <p className="editor-hint territories-view__map-hint">{uiText.territories.mapHint}</p>
+          </>
+        ) : null}
+      </section>
     </div>
   )
 }

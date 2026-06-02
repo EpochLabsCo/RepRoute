@@ -5,48 +5,46 @@ export type TerritoryProspectRef = {
   priority?: string
 }
 
-export type TerritoryCustomerRef = {
-  id: string
-  businessName: string
-  city: string
-  lastOrder?: string
-}
-
-export type TerritoryRouteRef = {
-  id: string
-  name: string
+export type TerritoryRouteSummary = {
+  /** 1 when today's route includes this territory, else 0 */
+  activeRouteCount: number
   stopCount: number
-  status: 'planned' | 'active' | 'completed'
+  stops: TerritoryProspectRef[]
 }
 
 /**
- * Core territory record for RepRoute field-first CRM organization.
- * Region metadata is static; prospect/route/stop counts are computed from live RepRoute data.
+ * Field-sales territory configuration (static metadata).
+ * Live counts are computed via territoryData helpers.
  */
-export type Territory = {
+export type TerritoryConfig = {
   id: string
   name: string
+  shortName: string
   description: string
-  region: string
-  cities: string[]
+  exampleCities: string[]
+  regionType: string
+  targetIndustries: string[]
+  priorityAccounts: string[]
   color: string
-  prospects: TerritoryProspectRef[]
-  customers: TerritoryCustomerRef[]
-  routes: TerritoryRouteRef[]
-  notes: string
+  cityKeywords: string[]
+  notes?: string
   createdAt: string
   updatedAt: string
 }
 
-/**
- * Map geometry for a territory region on the static Texas SVG.
- */
 export type TerritoryMapRegion = {
-  territoryId: Territory['id']
+  territoryId: TerritoryConfig['id']
   /** SVG path `d` attribute */
   path: string
-  /** Optional short label on map */
-  mapLabel: string
   labelX: number
   labelY: number
+}
+
+/** @deprecated Use TerritoryConfig */
+export type Territory = TerritoryConfig & {
+  region: string
+  cities: string[]
+  prospects: TerritoryProspectRef[]
+  customers: unknown[]
+  routes: unknown[]
 }

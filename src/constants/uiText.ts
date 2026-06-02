@@ -5,27 +5,76 @@ export const uiText = {
   territories: {
     eyebrow: 'Field-First CRM',
     title: 'Territories',
-    subtitle: 'Organize your pipeline by Texas sales regions — cities support the territory, not the other way around.',
-    mapHint: 'Tap a region to view live prospect and route counts from your RepRoute data.',
-    selectPrompt: 'Select a region on the map to view territory details.',
+    subtitle: 'Where should you work today? Pick a territory to see live prospects, route stops, and top cities.',
+    mapHint: 'Optional map — tap a region to switch territories.',
+    selectPrompt: 'Choose a territory above to plan today’s field work.',
     regionCount: (count: number) => `${count} regions`,
     liveProspects: (count: number) => `${count} prospect${count === 1 ? '' : 's'} in territories`,
+    listHeading: 'Choose your territory',
+    listCopy: 'Sorted by activity — territories with prospects and route stops appear first.',
     exampleCities: 'Example cities',
+    targetIndustries: 'Target industries',
+    priorityAccounts: 'Priority accounts',
     prospectCount: 'Prospects',
+    prospectCountShort: 'prospects',
     routeCount: 'Active route',
+    routeCountShort: 'routes',
     stopCount: 'Route stops',
+    stopCountShort: 'stops',
     emptyTitle: 'No RepRoute data in this territory yet',
     emptyCopy:
-      'Search businesses in these cities, save prospects to your catalog, or add stops to your route to see activity here.',
+      'Search businesses in these cities, save prospects to your catalog, then build a route from this territory.',
     emptyProspects: 'No prospects match this territory’s cities yet.',
     emptyStops: 'No route stops in this territory yet.',
     notes: 'Territory notes',
     viewProspects: 'View Prospects',
     viewRoutes: 'View Routes',
-    createRoute: 'Create Route',
+    createRoute: 'Build Route from Territory',
+    generateReport: 'Generate Territory Report',
     editTerritory: 'Edit Territory',
     close: 'Close territory details',
     editComingSoon: 'Custom territory editing is coming soon.',
+    routeFromTerritoryToast: (added: number, territory: string) =>
+      added > 0
+        ? `Added ${added} stop${added === 1 ? '' : 's'} to your route in ${territory}.`
+        : `All catalog prospects in ${territory} are already on your route.`,
+    routeFromTerritoryEmpty: (territory: string) =>
+      `No saved prospects in ${territory} yet. Search and save companies first.`,
+    reportGeneratedToast: (territory: string) => `Territory report downloaded for ${territory}.`,
+    reportEmptyToast: (territory: string) =>
+      `No prospect data to export for ${territory} yet.`,
+    dashboard: {
+      eyebrow: 'Territory dashboard',
+      selectTitle: 'Pick a territory to start',
+      statsLabel: 'Territory activity',
+      topCities: 'Top cities in this territory',
+      noCityData: 'No city-level activity yet — save prospects with city names to see breakdowns.',
+      cityCounts: (prospects: number, stops: number) => {
+        const parts: string[] = []
+        if (prospects > 0) {
+          parts.push(`${prospects} prospect${prospects === 1 ? '' : 's'}`)
+        }
+        if (stops > 0) {
+          parts.push(`${stops} stop${stops === 1 ? '' : 's'}`)
+        }
+        return parts.length > 0 ? parts.join(' · ') : 'No activity'
+      },
+      inCatalog: 'In your catalog',
+      notInCatalog: 'Not in catalog yet',
+      routeStopsHeading: 'On your route today',
+      prospectsHeading: 'Prospects in territory',
+      viewAllProspects: (count: number) => `View all ${count} prospects`,
+      workTodayOnRoute: (stops: number) =>
+        `${stops} stop${stops === 1 ? '' : 's'} already on your route here — good place to work today.`,
+      workTodayProspects: (count: number) =>
+        `${count} prospect${count === 1 ? '' : 's'} ready — build a route and get in the field.`,
+      workTodayEmpty: 'No saved prospects here yet — search these cities and add to your catalog.',
+      showMap: 'Show territory map',
+      hideMap: 'Hide territory map',
+      listSortHint: 'Sorted by prospects and route stops',
+    },
+    catalogFilterLabel: (territory: string) => `Showing catalog: ${territory}`,
+    catalogFilterClear: 'Show all companies',
   },
   territoryPulse: {
     eyebrow: 'Territory Intelligence',

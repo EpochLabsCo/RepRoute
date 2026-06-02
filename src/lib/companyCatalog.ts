@@ -243,6 +243,17 @@ export function buildCatalogCompanies(
     )
 }
 
+export function filterCatalogByProspectIds(
+  companies: CatalogCompany[],
+  prospectIds: Set<string> | null,
+) {
+  if (!prospectIds || prospectIds.size === 0) {
+    return companies
+  }
+
+  return companies.filter((company) => prospectIds.has(company.id))
+}
+
 export function filterCatalogCompanies(companies: CatalogCompany[], query: string) {
   const normalized = query.trim().toLowerCase()
   if (!normalized) {
