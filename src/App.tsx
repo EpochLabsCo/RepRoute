@@ -386,12 +386,15 @@ type ImportPreview = {
   payload: BackupPayload
 }
 
+type SearchMode = 'nearby' | 'company'
+
 type SearchStatus = {
   source: SearchDataSource
   message: string
   details?: string
   resultsCount?: number
   query?: string
+  mode?: SearchMode
 }
 
 type ConnectionTestState = {
@@ -1263,24 +1266,12 @@ function summarizeSearchFilters({
   return parts.join(' · ')
 }
 
-function buildLiveSearchTerms(companyName: string, industries: SearchIndustry[]) {
-  const trimmedCompany = companyName.trim()
-
-  if (trimmedCompany) {
-    if (industries.length === 0) {
-      return [trimmedCompany]
-    }
-
-    const combinedTerms = industries
-      .slice(0, 6)
-      .map((industry) => `${trimmedCompany} ${industry}`.trim())
-
-    return [trimmedCompany, ...combinedTerms].filter(
-      (term, index, terms) => terms.indexOf(term) === index,
-    )
-  }
-
+function buildNearbySearchTerms(industries: SearchIndustry[]) {
   return [...industries]
+}
+
+function summarizeCompanySearchFilters(companyName: string, market: string) {
+  return uiText.search.companySearchSummary(companyName, market)
 }
 
 function scoreCompanyNameMatch(businessName: string, companyQuery: string) {
@@ -2149,6 +2140,7 @@ function App() {
   const [etaTick, setEtaTick] = useState(() => Date.now())
   const [gpsToNextStopLeg, setGpsToNextStopLeg] = useState<RouteSegmentLeg | null>(null)
 
+  const [searchMode, setSearchMode] = useState<SearchMode>('nearby')
   const [companyNameQuery, setCompanyNameQuery] = useState('')
   const [manualMarket, setManualMarket] = useState('')
   const [searchRadiusChoice, setSearchRadiusChoice] = useState<SearchRadiusChoice>(10)
@@ -2276,15 +2268,12 @@ function App() {
     })
 
     const shouldRefreshSearch =
-      selectedIndustries.length > 0 ||
-      companyNameQuery.trim().length > 0 ||
-      liveSearchIds.length > 0
+      searchMode === 'nearby' && (selectedIndustries.length > 0 || liveSearchIds.length > 0)
 
     if (shouldRefreshSearch) {
-      void runLiveSearch({
+      void runNearbySearch({
         market: manualMarket,
         industries: selectedIndustries,
-        companyName: companyNameQuery,
       })
     }
   }
@@ -5746,26 +5735,24 @@ function App() {
     }
   }
 
-  async function runLiveSearch({
+  async function runNearbySearch({
     market,
     industries,
-    companyName,
   }: {
     market: string
     industries: SearchIndustry[]
-    companyName?: string
   }) {
     setSearchSessionCleared(false)
     const trimmedMarket = market.trim()
-    const trimmedCompanyName = companyName?.trim() ?? ''
-    const searchTerms = buildLiveSearchTerms(trimmedCompanyName, industries)
+    const searchTerms = buildNearbySearchTerms(industries)
 
     if (searchTerms.length === 0) {
       setLiveSearchIds([])
       setSearchStatus({
         source: 'api-error',
-        message: uiText.errors.searchMissingFields,
-        details: uiText.errors.searchMissingFieldsDetail,
+        message: uiText.errors.searchMissingIndustries,
+        details: uiText.errors.searchMissingIndustriesDetail,
+        mode: 'nearby',
       })
       return
     }
@@ -5776,6 +5763,7 @@ function App() {
         source: 'api-error',
         message: `${uiText.search.customRadiusLabel} is required.`,
         details: `${uiText.search.customRadiusLabel} must be greater than 0.`,
+        mode: 'nearby',
       })
       return
     }
@@ -5791,6 +5779,7 @@ function App() {
           source: 'api-error',
           message: uiText.errors.locationRequired,
           details: uiText.search.location.denied,
+          mode: 'nearby',
         })
         return
       }
@@ -5806,6 +5795,7 @@ function App() {
         setSearchStatus({
           source: 'api-error',
           message: uiText.errors.searchFailedDetail,
+          mode: 'nearby',
         })
         return
       }
@@ -5819,7 +5809,7 @@ function App() {
       const searchRadiusMiles = capSearchRadiusMiles(effectiveRadiusMiles)
       const { convertedMeters, finalMeters } = resolvePlacesSearchRadius(searchRadiusMiles)
       const filterSummary = summarizeSearchFilters({
-        companyName: trimmedCompanyName,
+        companyName: '',
         selectedIndustries: industries,
         radiusLabel: uiText.search.filters.radius(searchRadiusMiles),
         market: shouldUseCurrentLocation ? '' : trimmedMarket,
@@ -5841,7 +5831,7 @@ function App() {
       console.info('finalClampedMeters', finalMeters)
       console.groupEnd()
 
-      const maxResultsPerTerm = trimmedCompanyName ? 10 : 8
+      const maxResultsPerTerm = 8
 
       const results = await Promise.all(
         searchTerms.map(async (term) => ({
@@ -5901,7 +5891,7 @@ function App() {
         const distanceMilesPrecise = calculateDistanceMilesPrecise(activeSearchCenter, { lat, lng })
         const prospect = toLiveProspect(
           place,
-          matchingEntry?.term ?? industries[0] ?? trimmedCompanyName,
+          matchingEntry?.term ?? industries[0] ?? 'Nearby Search',
           fallbackLocationLabel,
           activeSearchCenter,
           distanceMilesPrecise,
@@ -5917,21 +5907,7 @@ function App() {
       const withinRadius = normalizedProspectsWithDistance.filter(
         (entry) => entry.distanceMilesPrecise <= searchRadiusMiles,
       )
-      if (trimmedCompanyName) {
-        withinRadius.sort((left, right) => {
-          const nameScore =
-            scoreCompanyNameMatch(right.prospect.businessName, trimmedCompanyName) -
-            scoreCompanyNameMatch(left.prospect.businessName, trimmedCompanyName)
-
-          if (nameScore !== 0) {
-            return nameScore
-          }
-
-          return left.distanceMilesPrecise - right.distanceMilesPrecise
-        })
-      } else {
-        withinRadius.sort((left, right) => left.distanceMilesPrecise - right.distanceMilesPrecise)
-      }
+      withinRadius.sort((left, right) => left.distanceMilesPrecise - right.distanceMilesPrecise)
 
       const normalizedProspects = withinRadius.map((entry) => entry.prospect)
 
@@ -5958,7 +5934,7 @@ function App() {
         setLiveSearchIds(searchProspectIds)
         setSearchStatus({
           source: 'live',
-          message: uiText.search.statusMessages.liveResults(
+          message: uiText.search.statusMessages.nearbyResults(
             normalizedProspects.length,
             filterSummary || 'your filters',
           ),
@@ -5966,6 +5942,7 @@ function App() {
             failedResults.length > 0 ? uiText.search.statusMessages.someTermsIncomplete : undefined,
           resultsCount: normalizedProspects.length,
           query: radiusHardFilterSummary,
+          mode: 'nearby',
         })
         return
       }
@@ -5981,6 +5958,7 @@ function App() {
           source: 'api-error',
           message: failureMessage.message,
           query: radiusHardFilterSummary,
+          mode: 'nearby',
         })
       } else {
         setSearchStatus({
@@ -5988,9 +5966,10 @@ function App() {
           message:
             normalizedProspectsWithDistance.length > 0
               ? uiText.search.statusMessages.noLiveResultsWithinRadius
-              : uiText.search.statusMessages.noLiveResults(filterSummary || 'your filters'),
+              : uiText.search.statusMessages.noNearbyResults(filterSummary || 'your filters'),
           resultsCount: 0,
           query: radiusHardFilterSummary,
+          mode: 'nearby',
         })
       }
     } finally {
@@ -5998,12 +5977,189 @@ function App() {
     }
   }
 
+  async function runCompanySearch({
+    companyName,
+    market,
+  }: {
+    companyName: string
+    market: string
+  }) {
+    setSearchSessionCleared(false)
+    const trimmedCompanyName = companyName.trim()
+    const trimmedMarket = market.trim()
+
+    if (!trimmedCompanyName) {
+      setLiveSearchIds([])
+      setSearchStatus({
+        source: 'api-error',
+        message: uiText.errors.searchMissingCompanyName,
+        details: uiText.errors.searchMissingCompanyNameDetail,
+        mode: 'company',
+      })
+      return
+    }
+
+    const filterSummary = summarizeCompanySearchFilters(trimmedCompanyName, trimmedMarket)
+    let optionalCenter: { lat: number; lng: number } | null = null
+    let fallbackLocationLabel = trimmedMarket || 'Company Search'
+
+    if (trimmedMarket) {
+      const marketCenterResult = await resolveMarketSearchCenter(trimmedMarket)
+
+      if (!marketCenterResult.ok) {
+        warnRecoverable('search', 'Company search market lookup failed', marketCenterResult)
+        setLiveSearchIds([])
+        setSearchStatus({
+          source: 'api-error',
+          message: uiText.errors.searchFailedDetail,
+          mode: 'company',
+        })
+        return
+      }
+
+      optionalCenter = marketCenterResult.center
+      fallbackLocationLabel = trimmedMarket
+    } else if (searchLocationState === 'granted' && searchCenter) {
+      optionalCenter = searchCenter
+      fallbackLocationLabel = uiText.routes.currentLocation
+    }
+
+    setIsSearchingPlaces(true)
+
+    try {
+      const textQuery = trimmedMarket
+        ? `${trimmedCompanyName} ${trimmedMarket}`.trim()
+        : trimmedCompanyName
+
+      const locationBias = optionalCenter
+        ? {
+            latitude: optionalCenter.lat,
+            longitude: optionalCenter.lng,
+            radiusMeters: 80_000,
+          }
+        : undefined
+
+      const result = await searchGooglePlaces({
+        apiKey: googleMapsApiKey,
+        query: textQuery,
+        maxResultCount: 20,
+        locationBias,
+      })
+
+      if (!result.ok) {
+        setLiveSearchIds([])
+        setSearchStatus({
+          source: 'api-error',
+          message: result.error || uiText.errors.searchFailedDetail,
+          mode: 'company',
+        })
+        return
+      }
+
+      const referenceCenter =
+        optionalCenter ??
+        (searchLocationState === 'granted' && searchCenter ? searchCenter : null)
+
+      const normalizedProspectsWithDistance = dedupePlaces(result.places).reduce<
+        Array<{ prospect: BaseProspect; distanceMilesPrecise: number | null; lat: number; lng: number }>
+      >((collection, place) => {
+        const lat = place.location?.latitude
+        const lng = place.location?.longitude
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          return collection
+        }
+
+        const distanceMilesPrecise = referenceCenter
+          ? calculateDistanceMilesPrecise(referenceCenter, { lat, lng })
+          : null
+        const prospect = toLiveProspect(
+          place,
+          trimmedCompanyName,
+          fallbackLocationLabel,
+          referenceCenter ?? { lat, lng },
+          distanceMilesPrecise ?? undefined,
+        )
+
+        if (prospect) {
+          collection.push({
+            prospect,
+            distanceMilesPrecise,
+            lat,
+            lng,
+          })
+        }
+
+        return collection
+      }, [])
+
+      normalizedProspectsWithDistance.sort((left, right) => {
+        const nameScore =
+          scoreCompanyNameMatch(right.prospect.businessName, trimmedCompanyName) -
+          scoreCompanyNameMatch(left.prospect.businessName, trimmedCompanyName)
+
+        if (nameScore !== 0) {
+          return nameScore
+        }
+
+        if (
+          left.distanceMilesPrecise !== null &&
+          right.distanceMilesPrecise !== null &&
+          left.distanceMilesPrecise !== right.distanceMilesPrecise
+        ) {
+          return left.distanceMilesPrecise - right.distanceMilesPrecise
+        }
+
+        return left.prospect.businessName.localeCompare(right.prospect.businessName)
+      })
+
+      const normalizedProspects = normalizedProspectsWithDistance.map((entry) => entry.prospect)
+
+      if (normalizedProspects.length > 0) {
+        const searchProspectIds = normalizedProspects.map((prospect) => prospect.id)
+        setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
+        stampProspectImportSources(searchProspectIds, 'live-search')
+        stampProspectCreatedAt(searchProspectIds)
+        setLiveSearchIds(searchProspectIds)
+        setSearchStatus({
+          source: 'live',
+          message: uiText.search.statusMessages.companyResults(
+            normalizedProspects.length,
+            filterSummary,
+          ),
+          resultsCount: normalizedProspects.length,
+          query: filterSummary,
+          mode: 'company',
+        })
+        return
+      }
+
+      setLiveSearchIds([])
+      setSearchStatus({
+        source: 'live',
+        message: uiText.search.statusMessages.noCompanyResults(filterSummary),
+        resultsCount: 0,
+        query: filterSummary,
+        mode: 'company',
+      })
+    } finally {
+      setIsSearchingPlaces(false)
+    }
+  }
+
   async function handleLiveSearch(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault()
-    await runLiveSearch({
+
+    if (searchMode === 'company') {
+      await runCompanySearch({
+        companyName: companyNameQuery,
+        market: manualMarket,
+      })
+      return
+    }
+
+    await runNearbySearch({
       market: manualMarket,
       industries: selectedIndustries,
-      companyName: companyNameQuery,
     })
   }
 
@@ -6634,6 +6790,13 @@ function App() {
     const locationEnabled = searchLocationState === 'granted'
     const locationLocating = searchLocationState === 'requesting'
     const locationPulse = !locationEnabled && !locationLocating
+    const isNearbySearch = searchMode === 'nearby'
+    const isCompanySearch = searchMode === 'company'
+    const activeResultsMode = searchStatus?.mode ?? searchMode
+    const resultsHeading =
+      activeResultsMode === 'company'
+        ? uiText.search.resultsHeadingCompany
+        : uiText.search.resultsHeadingNearby
 
     return (
       <>
@@ -6648,46 +6811,91 @@ function App() {
 
         <section className="panel section-panel section-panel--compact">
           <form className="live-search-form" onSubmit={handleLiveSearch}>
-            <label className="field-group">
-              <span className="field-label">{uiText.search.companyNameLabel}</span>
-              <div className="search-field search-field--with-clear">
-                <Search size={18} />
-                <input
-                  type="search"
-                  value={companyNameQuery}
-                  onChange={(event) => setCompanyNameQuery(event.target.value)}
-                  placeholder={uiText.search.companyNamePlaceholder}
-                  aria-label={uiText.search.companyNameLabel}
-                />
-                {companyNameQuery.trim() ? (
-                  <button
-                    type="button"
-                    className="search-field__clear"
-                    onClick={() => setCompanyNameQuery('')}
-                    aria-label={uiText.search.companyNameClear}
-                  >
-                    <X size={16} />
-                  </button>
-                ) : null}
-              </div>
-            </label>
+            <div className="search-mode-toggle" role="tablist" aria-label="Search mode">
+              <button
+                type="button"
+                role="tab"
+                className={`search-mode-toggle__option ${isNearbySearch ? 'search-mode-toggle__option--active' : ''}`}
+                aria-selected={isNearbySearch}
+                onClick={() => setSearchMode('nearby')}
+              >
+                {uiText.search.modeNearby}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`search-mode-toggle__option ${isCompanySearch ? 'search-mode-toggle__option--active' : ''}`}
+                aria-selected={isCompanySearch}
+                onClick={() => setSearchMode('company')}
+              >
+                {uiText.search.modeCompany}
+              </button>
+            </div>
+            <p className="field-hint search-mode-toggle__hint">
+              {isNearbySearch ? uiText.search.modeNearbyHint : uiText.search.modeCompanyHint}
+            </p>
 
-            <label className="field-group field-group--secondary">
-              <span className="field-label">{uiText.search.marketSecondaryLabel}</span>
-              <div className="search-field search-field--secondary">
-                <MapIcon size={18} />
-                <input
-                  type="search"
-                  value={manualMarket}
-                  onChange={(event) => setManualMarket(event.target.value)}
-                  placeholder={uiText.search.marketPlaceholder}
-                  aria-label={uiText.search.marketSecondaryLabel}
-                />
-              </div>
-              <p className="field-hint">{uiText.search.marketHelp}</p>
-            </label>
+            {isCompanySearch ? (
+              <>
+                <label className="field-group">
+                  <span className="field-label">{uiText.search.companySearchNameLabel}</span>
+                  <div className="search-field search-field--with-clear">
+                    <Search size={18} />
+                    <input
+                      type="search"
+                      value={companyNameQuery}
+                      onChange={(event) => setCompanyNameQuery(event.target.value)}
+                      placeholder={uiText.search.companySearchNamePlaceholder}
+                      aria-label={uiText.search.companySearchNameLabel}
+                    />
+                    {companyNameQuery.trim() ? (
+                      <button
+                        type="button"
+                        className="search-field__clear"
+                        onClick={() => setCompanyNameQuery('')}
+                        aria-label={uiText.search.companyNameClear}
+                      >
+                        <X size={16} />
+                      </button>
+                    ) : null}
+                  </div>
+                </label>
 
-            <div className="search-location-cluster">
+                <label className="field-group field-group--secondary">
+                  <span className="field-label">{uiText.search.companySearchMarketLabel}</span>
+                  <div className="search-field search-field--secondary">
+                    <MapIcon size={18} />
+                    <input
+                      type="search"
+                      value={manualMarket}
+                      onChange={(event) => setManualMarket(event.target.value)}
+                      placeholder={uiText.search.companySearchMarketPlaceholder}
+                      aria-label={uiText.search.companySearchMarketLabel}
+                    />
+                  </div>
+                  <p className="field-hint">{uiText.search.companySearchMarketHelp}</p>
+                </label>
+              </>
+            ) : null}
+
+            {isNearbySearch ? (
+              <>
+                <label className="field-group field-group--secondary">
+                  <span className="field-label">{uiText.search.marketSecondaryLabel}</span>
+                  <div className="search-field search-field--secondary">
+                    <MapIcon size={18} />
+                    <input
+                      type="search"
+                      value={manualMarket}
+                      onChange={(event) => setManualMarket(event.target.value)}
+                      placeholder={uiText.search.marketPlaceholder}
+                      aria-label={uiText.search.marketSecondaryLabel}
+                    />
+                  </div>
+                  <p className="field-hint">{uiText.search.marketHelp}</p>
+                </label>
+
+                <div className="search-location-cluster">
               {locationEnabled ? (
                 <div className="search-location-enabled" role="status" aria-live="polite">
                   <div className="search-location-enabled__main">
@@ -6747,8 +6955,14 @@ function App() {
               {searchLocationState === 'denied' ? (
                 <p className="search-location-cluster__blocked">{uiText.search.locationPanel.blocked}</p>
               ) : null}
-            </div>
+                </div>
+              </>
+            ) : null}
 
+            <div
+              className={`search-form-nearby-only ${isNearbySearch ? '' : 'search-form-nearby-only--hidden'}`}
+              hidden={!isNearbySearch}
+            >
             <label className="field-group">
               <span className="field-label">{uiText.search.radiusLabel}</span>
               <select
@@ -6905,10 +7119,17 @@ function App() {
                 </div>
               </details>
             </div>
+            </div>
 
             <div className="search-form-actions">
               <button type="submit" className="button button--wide" disabled={isSearchingPlaces}>
-                {isSearchingPlaces ? uiText.search.searchingButton : uiText.search.searchButton}
+                {isSearchingPlaces
+                  ? isCompanySearch
+                    ? uiText.search.companySearchingButton
+                    : uiText.search.nearbySearchingButton
+                  : isCompanySearch
+                    ? uiText.search.companySearchButton
+                    : uiText.search.nearbySearchButton}
               </button>
               <button
                 type="button"
@@ -6975,7 +7196,7 @@ function App() {
           <>
             <section className="search-results-header panel section-panel section-panel--compact">
               <div className="search-results-header__copy">
-                <h2 className="search-results-header__title">{uiText.search.resultsSectionTitle}</h2>
+                <h2 className="search-results-header__title">{resultsHeading}</h2>
                 <p className="search-results-header__legend">
                   <span className="meta-pill meta-pill--search">{uiText.search.resultsLegend.searchResult}</span>
                   <span className="meta-pill meta-pill--saved">{uiText.search.resultsLegend.saved}</span>

@@ -3204,6 +3204,44 @@
   gap: 12px;
 }
 
+.search-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.search-mode-toggle__option {
+  padding: 0.6rem 0.75rem;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.search-mode-toggle__option--active {
+  background: rgba(49, 196, 190, 0.18);
+  color: var(--text-primary);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.search-mode-toggle__hint {
+  margin: -4px 0 0;
+}
+
+.search-form-nearby-only--hidden {
+  display: none;
+}
+
 .search-form-actions {
   display: grid;
   gap: 8px;

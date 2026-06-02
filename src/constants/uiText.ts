@@ -208,9 +208,23 @@ export const uiText = {
     prominentTitle: 'Find prospects',
     prominentDescription:
       'Run a Live Search by target industry and radius, then save qualified Prospects or add them to a Route.',
+    modeNearby: 'Nearby Search',
+    modeCompany: 'Company Search',
+    modeNearbyHint: 'Find businesses by industry within your mileage radius.',
+    modeCompanyHint: 'Find a specific company by name — no radius limit.',
     companyNameLabel: 'Company name',
     companyNamePlaceholder: 'Search for a specific company',
     companyNameClear: 'Clear company name',
+    companySearchNameLabel: 'Company name',
+    companySearchNamePlaceholder: 'e.g. Enterprise Products, Halliburton',
+    companySearchMarketLabel: 'City or market (optional)',
+    companySearchMarketPlaceholder: 'Narrow results — leave blank to search broadly',
+    companySearchMarketHelp:
+      'Optional. Add a city or market to focus results, or leave blank to search without a radius limit.',
+    companySearchButton: 'Search Company',
+    companySearchingButton: 'Searching Company...',
+    nearbySearchButton: 'Search Nearby',
+    nearbySearchingButton: 'Searching Nearby...',
     marketLabel: 'City or market',
     marketPlaceholder: 'Optional city or market',
     marketHelp: 'Leave blank to search near your current location.',
@@ -370,6 +384,8 @@ export const uiText = {
     clearedEmptyTitle: 'Ready to search',
     clearedEmptyCopy: 'Search for businesses near your territory.',
     resultsSectionTitle: 'Live Search Results',
+    resultsHeadingNearby: 'Nearby Search Results',
+    resultsHeadingCompany: 'Company Search Results',
     resultsLegend: {
       searchResult: 'Search result',
       saved: 'Saved',
@@ -411,12 +427,22 @@ export const uiText = {
     statusMessages: {
       liveResults: (count: number, summary: string) =>
         `Live Search returned ${count} business result${count === 1 ? '' : 's'} for ${summary}.`,
+      nearbyResults: (count: number, summary: string) =>
+        `Nearby Search returned ${count} business result${count === 1 ? '' : 's'} for ${summary}.`,
+      companyResults: (count: number, summary: string) =>
+        `Company Search returned ${count} result${count === 1 ? '' : 's'} for ${summary}.`,
       noLiveResults: (summary: string) => `No business results found for ${summary}.`,
+      noNearbyResults: (summary: string) => `No businesses found nearby for ${summary}.`,
+      noCompanyResults: (summary: string) => `No companies found for ${summary}.`,
       noLiveResultsWithinRadius:
         'No businesses found within this radius. Try increasing the mileage radius.',
       someTermsIncomplete:
         'Some industry searches did not complete. Results shown are from successful searches only.',
     },
+    companySearchSummary: (companyName: string, market: string) =>
+      market.trim()
+        ? `${companyName} near ${market.trim()}`
+        : companyName,
     radiusHardFilterSummary: (miles: number, centerLabel: string) =>
       `Showing businesses within ${miles} miles of ${centerLabel}.`,
     summary: {
@@ -1150,6 +1176,12 @@ export const uiText = {
     searchMissingFields: 'Enter a company name or select at least one target industry.',
     searchMissingFieldsDetail:
       'Live Search needs a company name or at least one target industry to return business results.',
+    searchMissingIndustries: 'Select at least one target industry for Nearby Search.',
+    searchMissingIndustriesDetail:
+      'Choose industries to search within your mileage radius.',
+    searchMissingCompanyName: 'Enter a company name for Company Search.',
+    searchMissingCompanyNameDetail:
+      'Company Search looks up a specific business by name and does not use mileage radius.',
     searchFailedDetail: 'Live Search failed. Review the response and try again.',
     searchRadiusTooLarge: 'Search radius too large. Please reduce the mileage radius.',
     connectGooglePlaces: 'Enable Live Search to find businesses.',
