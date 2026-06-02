@@ -1,10 +1,12 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type SetStateAction,
 } from 'react'
 import {
   closestCenter,
@@ -125,6 +127,8 @@ import {
   openMapsSearch,
 } from './lib/mapsNavigation'
 import { normalizeProspectNotes } from './lib/prospectNotes'
+import { warnRecoverable } from './lib/reprouteLog'
+import { applyStorageHygiene, uniqueProspectIds } from './lib/storageHygiene'
 import {
   buildStopLegMap,
   metersToMiles,
@@ -419,21 +423,37 @@ const AUSTIN_FALLBACK = { lat: 30.2672, lng: -97.7431 }
 
 const screenMeta: Record<View, { title: string; subtitle: string }> = uiText.navigation.screenMeta
 
-function usePersistentState<T>(key: string, initialValue: T) {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = window.localStorage.getItem(key)
-      return stored ? (JSON.parse(stored) as T) : initialValue
-    } catch {
-      return initialValue
-    }
-  })
+function readPersistentValue<T>(key: string, initialValue: T): T {
+  try {
+    const stored = window.localStorage.getItem(key)
+    return stored ? (JSON.parse(stored) as T) : initialValue
+  } catch (error) {
+    warnRecoverable('storage', `Could not read ${key}`, error)
+    return initialValue
+  }
+}
 
-  useEffect(() => {
+function writePersistentValue<T>(key: string, value: T) {
+  try {
     window.localStorage.setItem(key, JSON.stringify(value))
-  }, [key, value])
+  } catch (error) {
+    warnRecoverable('storage', `Could not write ${key}`, error)
+  }
+}
 
-  return [value, setValue] as const
+function usePersistentState<T>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => readPersistentValue(key, initialValue))
+
+  const setPersistentValue = useCallback((update: SetStateAction<T>) => {
+    setValue((current) => {
+      const next =
+        typeof update === 'function' ? (update as (previous: T) => T)(current) : update
+      writePersistentValue(key, next)
+      return next
+    })
+  }, [key])
+
+  return [value, setPersistentValue] as const
 }
 
 function formatDistance(distance: number) {
@@ -2133,6 +2153,7 @@ function App() {
   const [catalogQuery, setCatalogQuery] = useState('')
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
   const [catalogAddOpen, setCatalogAddOpen] = useState(false)
+  const storageHygieneAppliedRef = useRef(false)
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
   const [searchSessionCleared, setSearchSessionCleared] = useState(false)
   const [clearSearchPromptOpen, setClearSearchPromptOpen] = useState(false)
@@ -2377,14 +2398,6 @@ function App() {
   }, [activeView])
 
   useEffect(() => {
-    if (routeIds.length > 0) {
-      return
-    }
-
-    setRouteCalculationContext(null)
-  }, [routeIds.length])
-
-  useEffect(() => {
     if (activeView !== 'map' || !pendingRouteScrollTargetRef.current) {
       return
     }
@@ -2440,22 +2453,7 @@ function App() {
     }
   }, [routeActionMessage])
 
-  useEffect(() => {
-    if (!industryDropdownOpen) {
-      setIndustrySearchQuery('')
-    }
-  }, [industryDropdownOpen])
-
-  useEffect(() => {
-    if (routeOptimization.status !== 'success') {
-      return
-    }
-
-    const routeKey = routeIds.join('|')
-    if (routeOptimization.forRouteKey !== routeKey) {
-      setRouteOptimization({ status: 'idle' })
-    }
-  }, [routeIds, routeOptimization])
+  const routeKey = useMemo(() => routeIds.join('|'), [routeIds])
 
   const effectiveSearchStatus = useMemo<SearchStatus>(
     () =>
@@ -2606,6 +2604,60 @@ function App() {
   }, [liveProspects, prospectMap, prospectRecords, routeIds, savedIds, setFollowUpEntries])
 
   useEffect(() => {
+    if (storageHygieneAppliedRef.current) {
+      return
+    }
+
+    storageHygieneAppliedRef.current = true
+    const validIds = new Set(liveProspects.map((prospect) => prospect.id))
+    const hygiene = applyStorageHygiene({
+      liveProspectIds: validIds,
+      savedIds,
+      routeIds,
+      prospectRecords,
+      followUpEntries,
+    })
+
+    if (!hygiene.changed) {
+      return
+    }
+
+    warnRecoverable('storage', 'Pruned stale saved prospects, route stops, or records from local storage')
+
+    if (hygiene.savedIds.join('|') !== savedIds.join('|')) {
+      setSavedIds(hygiene.savedIds)
+    }
+
+    if (hygiene.routeIds.join('|') !== routeIds.join('|')) {
+      setRouteIds(hygiene.routeIds)
+    }
+
+    if (hygiene.prospectRecords !== prospectRecords) {
+      setProspectRecords(hygiene.prospectRecords)
+    }
+
+    if (hygiene.followUpEntries !== followUpEntries) {
+      setFollowUpEntries(hygiene.followUpEntries)
+    }
+    // Run once after initial hydration from localStorage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const validIds = new Set(liveProspects.map((prospect) => prospect.id))
+    const prunedRoute = uniqueProspectIds(routeIds.filter((id) => validIds.has(id)))
+
+    if (prunedRoute.join('|') === routeIds.join('|')) {
+      return
+    }
+
+    warnRecoverable('route', 'Removed route stops that no longer exist in your prospect catalog', {
+      removedCount: routeIds.length - prunedRoute.length,
+    })
+    setRouteIds(prunedRoute)
+  }, [liveProspects, routeIds, setRouteIds])
+
+  useEffect(() => {
     setFollowUpEntries((current) => {
       let changed = false
       const next: Record<string, FollowUpEntry> = { ...current }
@@ -2706,7 +2758,6 @@ function App() {
     [prospectMap, routeIds],
   )
   const canOptimizeRoute = routeProspects.length >= 2
-  const routeKey = useMemo(() => routeIds.join('|'), [routeIds])
   const foodStopIds = useMemo(
     () =>
       new Set(
@@ -2761,33 +2812,23 @@ function App() {
     return []
   }, [effectiveSearchStatus.source, liveSearchProspects])
 
-  const mapMarkers = useMemo<RepRouteMapMarker[]>(() => {
-    const filteredIds = new Set(searchResultProspects.map((prospect) => prospect.id))
+  const routeMapMarkers = useMemo<RepRouteMapMarker[]>(() => {
     const savedSet = new Set(savedIds)
-    const routeSet = new Set(routeIds)
     const routeOrderById = new globalThis.Map(routeIds.map((id, index) => [id, index + 1]))
 
-    return prospects
-      .filter(
-        (prospect) =>
-          filteredIds.has(prospect.id) || savedSet.has(prospect.id) || routeSet.has(prospect.id),
-      )
+    return routeIds
+      .map((id) => prospectMap.get(id))
+      .filter((prospect): prospect is Prospect => Boolean(prospect))
+      .filter((prospect) => isFiniteLatLng(prospect.location))
       .map((prospect) => {
-        const categories: RepRouteMapMarker['categories'] = []
+        const categories: RepRouteMapMarker['categories'] = ['route']
 
-        if (filteredIds.has(prospect.id)) {
-          categories.push('search')
+        if (prospect.isFoodStop) {
+          categories.push('food')
         }
 
         if (savedSet.has(prospect.id)) {
           categories.push('saved')
-        }
-
-        if (routeSet.has(prospect.id)) {
-          categories.push('route')
-        }
-        if (routeSet.has(prospect.id) && prospect.isFoodStop) {
-          categories.push('food')
         }
 
         return {
@@ -2799,14 +2840,17 @@ function App() {
           rating: prospect.rating,
           position: prospect.location,
           isSaved: savedSet.has(prospect.id),
-          isInRoute: routeSet.has(prospect.id),
+          isInRoute: true,
           isFoodStop: prospect.isFoodStop,
           routeCompleted: prospect.routeCompleted,
           categories,
           routeOrder: routeOrderById.get(prospect.id),
         }
       })
-  }, [prospects, routeIds, savedIds, searchResultProspects])
+  }, [prospectMap, routeIds, savedIds])
+
+  const effectiveRouteCalculationContext =
+    routeIds.length > 0 ? routeCalculationContext : null
 
   const scheduledFollowUps = useMemo(() => {
     return Object.values(followUpEntries)
@@ -3178,6 +3222,17 @@ function App() {
     return map
   }, [fromCurrentLocationStopId, prospectMap, userGpsFix])
 
+  const displayedGpsToNextStopLeg = useMemo(() => {
+    const routeTabActive = activeView === 'map' || routeNavigationOpen
+    const nextStop = routeProspects.find((prospect) => !prospect.routeCompleted) ?? null
+
+    if (!routeTabActive || !nextStop || !userGpsFix || !isGpsFixFresh(userGpsFix)) {
+      return null
+    }
+
+    return gpsToNextStopLeg
+  }, [activeView, gpsToNextStopLeg, routeNavigationOpen, routeProspects, userGpsFix])
+
   const routeStopEtaById = useMemo(
     () =>
       buildRouteStopEtaSchedule({
@@ -3189,7 +3244,7 @@ function App() {
         legByStopId: navigationLegByStopId,
         nowMs: etaTick,
         defaultStopDurationMinutes: sanitizeDefaultStopDurationMinutes(defaultStopDurationMinutes),
-        gpsDriveSecondsToNextStop: gpsToNextStopLeg?.durationSeconds ?? null,
+        gpsDriveSecondsToNextStop: displayedGpsToNextStopLeg?.durationSeconds ?? null,
         labels: {
           arriveBy: uiText.routes.stopEta.arriveBy,
           completedAt: uiText.routes.stopEta.completedAt,
@@ -3205,7 +3260,7 @@ function App() {
     [
       defaultStopDurationMinutes,
       etaTick,
-      gpsToNextStopLeg,
+      displayedGpsToNextStopLeg,
       navigationLegByStopId,
       routeProspects,
     ],
@@ -3226,7 +3281,13 @@ function App() {
   }, [activeView])
 
   useEffect(() => {
-    setEtaTick(Date.now())
+    const frameId = window.requestAnimationFrame(() => {
+      setEtaTick(Date.now())
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
   }, [routeIds, routeNavigationDirections])
 
   useEffect(() => {
@@ -3234,7 +3295,6 @@ function App() {
     const nextStop = routeProspects.find((prospect) => !prospect.routeCompleted) ?? null
 
     if (!routeTabActive || !nextStop || !userGpsFix || !isGpsFixFresh(userGpsFix)) {
-      setGpsToNextStopLeg(null)
       return
     }
 
@@ -3710,7 +3770,7 @@ function App() {
     setRouteIds((current) =>
       current.includes(prospectId)
         ? current.filter((id) => id !== prospectId)
-        : [...current, prospectId],
+        : uniqueProspectIds([...current, prospectId]),
     )
 
     if (!wasInRoute) {
@@ -3985,6 +4045,7 @@ function App() {
 
     if (nextRouteIds.length === 0) {
       setNavigationActiveStopId(null)
+      setRouteCalculationContext(null)
       if (routeNavigationOpen) {
         routeNavHistoryPushedRef.current = false
         setRouteNavigationOpen(false)
@@ -4066,7 +4127,12 @@ function App() {
     })
 
     if (!result.ok) {
-      setRouteActionMessage({ tone: 'error', text: result.error, persistent: true })
+      warnRecoverable('address', 'Could not verify edited stop address', result.error)
+      setRouteActionMessage({
+        tone: 'error',
+        text: uiText.errors.searchFailedDetail,
+        persistent: true,
+      })
       return
     }
 
@@ -4092,7 +4158,7 @@ function App() {
   }
 
   function removeStopFromRoute(prospectId: string) {
-    setRouteIds((current) => current.filter((id) => id !== prospectId))
+    handleRemoveFromRoute(prospectId)
   }
 
   async function removeInvalidStopsAndRecalculate() {
@@ -4627,7 +4693,13 @@ function App() {
       return
     }
 
-    void runFoodNearbySearch(foodNearbyAnchorProspect)
+    const timeoutId = window.setTimeout(() => {
+      void runFoodNearbySearch(foodNearbyAnchorProspect)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- use foodNearby state intentionally
   }, [foodNearbySession, foodNearbyRadiusMiles, foodNearbyActiveChip])
 
@@ -5087,14 +5159,20 @@ function App() {
 
   useEffect(() => {
     if (routeIds.length === 0 && routeNavigationOpen) {
-      routeNavHistoryPushedRef.current = false
-      setRouteNavigationOpen(false)
-      setRouteNavigationDirections(null)
-      setRouteDirectionsApiStatus(null)
-      setRouteNavigationLoading(false)
-      setRouteNavigationError(null)
-      setRouteRenderDebug(null)
-      setRouteLineRenderStatus('idle')
+      const timeoutId = window.setTimeout(() => {
+        routeNavHistoryPushedRef.current = false
+        setRouteNavigationOpen(false)
+        setRouteNavigationDirections(null)
+        setRouteDirectionsApiStatus(null)
+        setRouteNavigationLoading(false)
+        setRouteNavigationError(null)
+        setRouteRenderDebug(null)
+        setRouteLineRenderStatus('idle')
+      }, 0)
+
+      return () => {
+        window.clearTimeout(timeoutId)
+      }
     }
   }, [routeIds.length, routeNavigationOpen])
 
@@ -5553,14 +5631,11 @@ function App() {
       const marketCenterResult = await resolveMarketSearchCenter(trimmedMarket)
 
       if (!marketCenterResult.ok) {
+        warnRecoverable('search', 'Market center lookup failed', marketCenterResult)
         setLiveSearchIds([])
         setSearchStatus({
           source: 'api-error',
-          message: marketCenterResult.error,
-          details:
-            typeof marketCenterResult.details === 'string'
-              ? marketCenterResult.details
-              : undefined,
+          message: uiText.errors.searchFailedDetail,
         })
         return
       }
@@ -6146,9 +6221,9 @@ function App() {
               </div>
             </header>
 
-            {routeCalculationContext ? (
+            {effectiveRouteCalculationContext ? (
               <p className="route-builder-hint editor-hint">
-                {uiText.routes.calculation.filters(routeCalculationContext.filterSummary)}
+                {uiText.routes.calculation.filters(effectiveRouteCalculationContext.filterSummary)}
               </p>
             ) : null}
 
@@ -6239,7 +6314,7 @@ function App() {
 
             <section ref={routeMapSectionRef} className="panel section-panel route-map-panel route-map-panel--primary">
               <RepRouteMap
-                markers={mapMarkers}
+                markers={routeMapMarkers}
                 directions={routeNavigationDirections}
                 directionsApiStatus={routeDirectionsApiStatus}
                 userLocation={userGpsMapPosition}
@@ -6249,6 +6324,11 @@ function App() {
                 onToggleSaved={toggleSaved}
                 onToggleRoute={toggleRoute}
               />
+              {routeProspects.length > 0 && routeMapMarkers.length === 0 ? (
+                <p className="editor-hint route-map-panel__empty-pins">
+                  {uiText.routes.optimization.missingCoordinates}
+                </p>
+              ) : null}
               <div className="route-map-external">
                 <button
                   type="button"
@@ -6540,7 +6620,13 @@ function App() {
               <details
                 className="filter-dropdown"
                 open={industryDropdownOpen}
-                onToggle={(event) => setIndustryDropdownOpen(event.currentTarget.open)}
+                onToggle={(event) => {
+                  const open = event.currentTarget.open
+                  setIndustryDropdownOpen(open)
+                  if (!open) {
+                    setIndustrySearchQuery('')
+                  }
+                }}
               >
                 <summary className="filter-dropdown__trigger">
                   <span>{uiText.search.industriesSelected(selectedIndustries.length)}</span>
@@ -6664,22 +6750,11 @@ function App() {
                 ? uiText.companyCatalog.openCompanyCatalogWithCount(savedIds.length)
                 : uiText.companyCatalog.openCompanyCatalog}
             </button>
-            <button
-              type="button"
-              className="button button--ghost button--wide search-saved-prospects-btn"
-              onClick={() => openSavedProspects()}
-            >
-              <Bookmark size={16} />
-              {savedIds.length > 0
-                ? uiText.saved.openSavedProspectsWithCount(savedIds.length)
-                : uiText.saved.openSavedProspects}
-            </button>
           </form>
 
           {effectiveSearchStatus.source === 'api-error' ? (
             <div className="status-banner status-banner--error">
               <p>{effectiveSearchStatus.message}</p>
-              {effectiveSearchStatus.details ? <p>{effectiveSearchStatus.details}</p> : null}
             </div>
           ) : effectiveSearchStatus.source === 'live' && searchResultProspects.length > 0 ? (
             <p className="inline-summary inline-summary--compact">
@@ -6821,6 +6896,7 @@ function App() {
 
         {selectedCatalogCompany ? (
           <CompanyCatalogDetailSheet
+            key={selectedCatalogCompany.id}
             company={selectedCatalogCompany}
             cardPreviewUrl={businessCardPreviewUrls[selectedCatalogCompany.id] ?? null}
             onClose={() => setSelectedCatalogId(null)}
@@ -6860,12 +6936,6 @@ function App() {
             {savedIds.length > 0
               ? uiText.companyCatalog.openCompanyCatalogWithCount(savedIds.length)
               : uiText.companyCatalog.openCompanyCatalog}
-          </button>
-          <button type="button" className="button button--ghost button--wide" onClick={() => openSavedProspects()}>
-            <Bookmark size={16} />
-            {savedIds.length > 0
-              ? uiText.saved.openSavedProspectsWithCount(savedIds.length)
-              : uiText.crmExport.viewSavedProspects}
           </button>
         </section>
 

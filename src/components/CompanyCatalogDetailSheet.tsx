@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Bookmark,
   CalendarClock,
@@ -66,21 +66,6 @@ export default function CompanyCatalogDetailSheet({
   )
   const [notes, setNotes] = useState(company.notes)
   const [contacts, setContacts] = useState<CompanyContact[]>(company.contacts)
-
-  useEffect(() => {
-    setBusinessName(company.businessName)
-    setAddress(company.address)
-    setPhone(company.phone)
-    setWebsite(company.website)
-    setCategory(company.category)
-    setPriority(
-      company.priority === 'Hot' || company.priority === 'Warm' || company.priority === 'Cold'
-        ? company.priority
-        : 'Warm',
-    )
-    setNotes(company.notes)
-    setContacts(company.contacts)
-  }, [company])
 
   function handleSave() {
     onSaveCompany({

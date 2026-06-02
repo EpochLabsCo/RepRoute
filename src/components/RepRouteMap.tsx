@@ -16,6 +16,17 @@ import {
 } from '../lib/mapPinStyles'
 
 const AUSTIN_CENTER = { lat: 30.2672, lng: -97.7431 }
+
+function isFiniteLatLng(value: { lat: number; lng: number } | null | undefined) {
+  return (
+    Boolean(value) &&
+    typeof value?.lat === 'number' &&
+    typeof value?.lng === 'number' &&
+    Number.isFinite(value.lat) &&
+    Number.isFinite(value.lng) &&
+    !(value.lat === 0 && value.lng === 0)
+  )
+}
 const GOOGLE_MAPS_LIBRARIES: Libraries = ['places']
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' }
 
@@ -138,6 +149,11 @@ function RepRouteMap({
   })
 
   const userLocation = userLocationProp ?? internalUserLocation
+  const mapCenter = userLocationProp ?? center
+  const visibleMarkers = useMemo(
+    () => markers.filter((marker) => isFiniteLatLng(marker.position)),
+    [markers],
+  )
   const canRenderRouteLine = Boolean(
     map && isLoaded && directionsResponseReady(directions, directionsApiStatus),
   )
@@ -201,12 +217,6 @@ function RepRouteMap({
     )
   }, [userLocationProp])
 
-  useEffect(() => {
-    if (userLocationProp) {
-      setCenter(userLocationProp)
-    }
-  }, [userLocationProp])
-
   const fitRouteBounds = useCallback(() => {
     if (!map) {
       return
@@ -218,7 +228,7 @@ function RepRouteMap({
       bounds.extend(userLocation)
     }
 
-    for (const marker of markers) {
+    for (const marker of visibleMarkers) {
       bounds.extend(marker.position)
     }
 
@@ -230,15 +240,15 @@ function RepRouteMap({
     if (!bounds.isEmpty()) {
       map.fitBounds(bounds, { top: 48, right: 40, bottom: 48, left: 40 })
     }
-  }, [directions, map, markers, userLocation])
+  }, [directions, map, userLocation, visibleMarkers])
 
   useEffect(() => {
     fitRouteBounds()
   }, [fitRouteBounds])
 
   const selectedMarker = useMemo(
-    () => markers.find((marker) => marker.id === selectedMarkerId) ?? null,
-    [markers, selectedMarkerId],
+    () => visibleMarkers.find((marker) => marker.id === selectedMarkerId) ?? null,
+    [visibleMarkers, selectedMarkerId],
   )
 
   if (!hasApiKey) {
@@ -270,7 +280,7 @@ function RepRouteMap({
       <GoogleMap
         mapContainerClassName="google-map-canvas"
         mapContainerStyle={MAP_CONTAINER_STYLE}
-        center={center}
+        center={mapCenter}
         zoom={10}
         onLoad={setMap}
         options={{
@@ -308,7 +318,7 @@ function RepRouteMap({
           />
         ) : null}
 
-        {markers.map((marker) => {
+        {visibleMarkers.map((marker) => {
           const appearance = resolveMapPinAppearance(marker, {
             activeRouteStopId,
             invalidStopIds,
