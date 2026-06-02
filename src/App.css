@@ -4530,3 +4530,113 @@
   display: grid;
   gap: 0.5rem;
 }
+
+.territory-pulse {
+  display: grid;
+  gap: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+.territory-pulse__title {
+  margin: 0.35rem 0 0;
+  font-size: 1.4rem;
+}
+
+.territory-pulse__metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.territory-pulse__metric-card {
+  padding: 0.9rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.territory-pulse__metric-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.territory-pulse__metric-value {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.territory-pulse__priority-head h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.territory-pulse__account-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.territory-pulse__account-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 12, 22, 0.22);
+}
+
+.territory-pulse__account-main {
+  min-width: 0;
+}
+
+.territory-pulse__account-main strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.territory-pulse__account-city {
+  margin: 0.2rem 0 0.55rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.territory-pulse__account-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.75rem;
+  margin: 0;
+}
+
+.territory-pulse__account-meta dt {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.territory-pulse__account-meta dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.84rem;
+}
+
+.territory-pulse__route-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.territory-pulse__route-btn--on-route {
+  opacity: 0.72;
+}
+
+.territory-pulse__empty {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.65rem;
+  text-align: center;
+}

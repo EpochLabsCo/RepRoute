@@ -129,6 +129,19 @@ import {
 import { normalizeProspectNotes } from './lib/prospectNotes'
 import { warnRecoverable } from './lib/reprouteLog'
 import { applyStorageHygiene, uniqueProspectIds } from './lib/storageHygiene'
+import TerritoryPulseDashboard from './components/TerritoryPulseDashboard'
+import {
+  buildPriorityAccounts,
+  computeTerritoryPulseMetrics,
+  type TerritoryPulseProspectInput,
+} from './lib/territoryPulse'
+import {
+  buildVisitCompletionPatch,
+  buildVisitUncompletePatch,
+  resolveCreatedAt,
+  resolveLastVisitedAt,
+  resolveVisitCount,
+} from './lib/visitTracking'
 import {
   buildStopLegMap,
   metersToMiles,
@@ -256,6 +269,9 @@ type ProspectRecord = {
   visitHistory?: import('./lib/companyCatalog').VisitHistoryEntry[]
   crmExportedAt?: string
   catalogAddedAt?: string
+  createdAt?: string
+  lastVisitedAt?: string
+  visitCount?: number
 }
 
 type Prospect = BaseProspect & {
@@ -269,6 +285,9 @@ type Prospect = BaseProspect & {
   isFoodStop: boolean
   editedByRepRouteUser: boolean
   businessCardCapturedAt: string
+  createdAt: string
+  lastVisitedAt: string
+  visitCount: number
 }
 
 type BackupPayload = {
@@ -980,6 +999,18 @@ function sanitizeBackupPayload(value: unknown): BackupPayload {
 
       if (isIsoDateTime(record.catalogAddedAt)) {
         nextRecord.catalogAddedAt = record.catalogAddedAt
+      }
+
+      if (isIsoDateTime(record.createdAt)) {
+        nextRecord.createdAt = record.createdAt
+      }
+
+      if (record.lastVisitedAt === '' || isIsoDateTime(record.lastVisitedAt)) {
+        nextRecord.lastVisitedAt = record.lastVisitedAt
+      }
+
+      if (typeof record.visitCount === 'number' && Number.isFinite(record.visitCount)) {
+        nextRecord.visitCount = Math.max(0, Math.floor(record.visitCount))
       }
 
       if (isAssignedPriority(record.priority)) {
@@ -2154,6 +2185,7 @@ function App() {
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null)
   const [catalogAddOpen, setCatalogAddOpen] = useState(false)
   const storageHygieneAppliedRef = useRef(false)
+  const visitTrackingMigrationAppliedRef = useRef(false)
   const [liveSearchIds, setLiveSearchIds] = useState<string[]>([])
   const [searchSessionCleared, setSearchSessionCleared] = useState(false)
   const [clearSearchPromptOpen, setClearSearchPromptOpen] = useState(false)
@@ -2538,6 +2570,9 @@ function App() {
           isFoodStop: record?.isFoodStop ?? false,
           editedByRepRouteUser: record?.editedByRepRouteUser ?? false,
           businessCardCapturedAt: record?.businessCardCapturedAt ?? '',
+          createdAt: resolveCreatedAt(record),
+          lastVisitedAt: resolveLastVisitedAt(record) ?? '',
+          visitCount: resolveVisitCount(record),
         }
       }),
     [followUpEntries, liveProspects, prospectRecords],
@@ -2656,6 +2691,77 @@ function App() {
     })
     setRouteIds(prunedRoute)
   }, [liveProspects, routeIds, setRouteIds])
+
+  useEffect(() => {
+    if (visitTrackingMigrationAppliedRef.current) {
+      return
+    }
+
+    visitTrackingMigrationAppliedRef.current = true
+
+    setProspectRecords((current) => {
+      let changed = false
+      const next = { ...current }
+
+      for (const prospect of liveProspects) {
+        const record = next[prospect.id] ?? {}
+        const patch: ProspectRecord = { ...record }
+        let recordChanged = false
+
+        if (!patch.createdAt) {
+          patch.createdAt = resolveCreatedAt(patch)
+          recordChanged = true
+        }
+
+        if (typeof patch.visitCount !== 'number') {
+          patch.visitCount = resolveVisitCount(patch)
+          recordChanged = true
+        }
+
+        if (!patch.lastVisitedAt && patch.visitCompletedAt) {
+          patch.lastVisitedAt = patch.visitCompletedAt
+          recordChanged = true
+        }
+
+        if (recordChanged) {
+          next[prospect.id] = patch
+          changed = true
+        }
+      }
+
+      return changed ? next : current
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const territoryPulseProspects = useMemo<TerritoryPulseProspectInput[]>(() => {
+    const territoryIds =
+      savedIds.length > 0 ? savedIds : liveProspects.map((prospect) => prospect.id)
+
+    return territoryIds
+      .map((id) => prospectMap.get(id))
+      .filter((prospect): prospect is Prospect => Boolean(prospect))
+      .map((prospect) => ({
+        id: prospect.id,
+        businessName: prospect.businessName,
+        city: prospect.city,
+        record: prospectRecords[prospect.id],
+      }))
+  }, [liveProspects, prospectMap, prospectRecords, savedIds])
+
+  const territoryPulseMetrics = useMemo(
+    () => computeTerritoryPulseMetrics(territoryPulseProspects, routeIds.length),
+    [routeIds.length, territoryPulseProspects],
+  )
+
+  const priorityAccounts = useMemo(
+    () =>
+      buildPriorityAccounts(territoryPulseProspects, routeIds, {
+        never: uiText.territoryPulse.priorityAccounts.lastVisitNever,
+        unknown: uiText.territoryPulse.priorityAccounts.lastVisitUnknown,
+      }),
+    [routeIds, territoryPulseProspects],
+  )
 
   useEffect(() => {
     setFollowUpEntries((current) => {
@@ -2896,6 +3002,9 @@ function App() {
           isFoodStop: false,
           editedByRepRouteUser: false,
           businessCardCapturedAt: '',
+          createdAt: '',
+          lastVisitedAt: '',
+          visitCount: 0,
         } satisfies Prospect
       })
       .sort((left, right) => {
@@ -3510,6 +3619,34 @@ function App() {
     }))
   }
 
+  function stampProspectCreatedAt(prospectIds: string[]) {
+    if (prospectIds.length === 0) {
+      return
+    }
+
+    const stampedAt = new Date().toISOString()
+
+    setProspectRecords((current) => {
+      let changed = false
+      const next = { ...current }
+
+      for (const prospectId of prospectIds) {
+        if (next[prospectId]?.createdAt) {
+          continue
+        }
+
+        next[prospectId] = {
+          ...next[prospectId],
+          createdAt: stampedAt,
+          visitCount: next[prospectId]?.visitCount ?? 0,
+        }
+        changed = true
+      }
+
+      return changed ? next : current
+    })
+  }
+
   function stampProspectImportSources(prospectIds: string[], source: ProspectImportSource) {
     setProspectRecords((current) => {
       let changed = false
@@ -3554,11 +3691,15 @@ function App() {
     setSavedIds((current) =>
       current.includes(prospect.id) ? current : [...current, prospect.id],
     )
+    const createdAt = new Date().toISOString()
+
     setProspectRecords((current) => ({
       ...current,
       [prospect.id]: {
         importSource: 'catalog-manual',
-        catalogAddedAt: new Date().toISOString(),
+        catalogAddedAt: createdAt,
+        createdAt,
+        visitCount: 0,
         contactName: input.contactName.trim(),
         contactTitle: input.contactTitle.trim(),
         contactPhone: input.contactPhone.trim() || input.phone.trim(),
@@ -3757,6 +3898,7 @@ function App() {
     }
 
     if (!isSaved) {
+      stampProspectCreatedAt([prospectId])
       setActionToast({
         type: 'success',
         text: uiText.saved.savedMessage,
@@ -3971,6 +4113,7 @@ function App() {
       const foodProspectIds = normalizedProspects.map((prospect) => prospect.id)
       setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
       stampProspectImportSources(foodProspectIds, 'food-nearby')
+      stampProspectCreatedAt(foodProspectIds)
       setFoodNearbyResultIds(foodProspectIds)
       setFoodNearbyLoading(false)
       return
@@ -4080,16 +4223,15 @@ function App() {
   }
 
   function toggleRouteCompleted(prospectId: string) {
-    updateProspectRecord(prospectId, (current) => ({
-      ...current,
-      routeCompleted: !(current?.routeCompleted ?? false),
-      lastContactDate:
-        !(current?.routeCompleted ?? false)
-          ? new Date().toISOString().slice(0, 10)
-          : current?.lastContactDate || '',
-      visitCompletedAt:
-        !(current?.routeCompleted ?? false) ? new Date().toISOString() : '',
-    }))
+    updateProspectRecord(prospectId, (current) => {
+      const wasCompleted = current?.routeCompleted ?? false
+
+      if (!wasCompleted) {
+        return buildVisitCompletionPatch(current) as ProspectRecord
+      }
+
+      return buildVisitUncompletePatch(current) as ProspectRecord
+    })
     setEtaTick(Date.now())
   }
 
@@ -5784,6 +5926,7 @@ function App() {
         const searchProspectIds = normalizedProspects.map((prospect) => prospect.id)
         setLiveProspects((current) => mergeProspectCatalog(current, normalizedProspects))
         stampProspectImportSources(searchProspectIds, 'live-search')
+        stampProspectCreatedAt(searchProspectIds)
         setLiveSearchIds(searchProspectIds)
         setSearchStatus({
           source: 'live',
@@ -6459,13 +6602,22 @@ function App() {
     )
   }
 
-  function renderSearchView() {
+  function renderSearchView(options?: { showTerritoryPulse?: boolean }) {
     const locationEnabled = searchLocationState === 'granted'
     const locationLocating = searchLocationState === 'requesting'
     const locationPulse = !locationEnabled && !locationLocating
 
     return (
       <>
+        {options?.showTerritoryPulse ? (
+          <TerritoryPulseDashboard
+            metrics={territoryPulseMetrics}
+            priorityAccounts={priorityAccounts}
+            onAddToRoute={toggleRoute}
+            onOpenSearch={() => setActiveView('search')}
+          />
+        ) : null}
+
         <section className="panel section-panel section-panel--compact">
           <form className="live-search-form" onSubmit={handleLiveSearch}>
             <label className="field-group">
@@ -7545,7 +7697,7 @@ function App() {
   function renderActiveView() {
     switch (activeView) {
       case 'dashboard':
-        return renderSearchView()
+        return renderSearchView({ showTerritoryPulse: true })
       case 'map':
         return renderMapView()
       case 'search':

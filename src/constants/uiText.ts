@@ -2,6 +2,41 @@ export const uiText = {
   common: {
     more: 'More',
   },
+  territoryPulse: {
+    eyebrow: 'Territory Intelligence',
+    title: 'Territory Pulse',
+    subtitle: 'Accounts that deserve attention',
+    metrics: {
+      newProspects: {
+        label: 'New Prospects',
+        value: (count: number) => `${count} New Prospect${count === 1 ? '' : 's'}`,
+      },
+      neverVisited: {
+        label: 'Never Visited',
+        value: (count: number) => `${count} Never Visited`,
+      },
+      overdueAccounts: {
+        label: 'Overdue Accounts',
+        value: (count: number) => `${count} Overdue Account${count === 1 ? '' : 's'}`,
+      },
+      plannedStops: {
+        label: 'Planned Stops',
+        value: (count: number) => `${count} Stop${count === 1 ? '' : 's'} Planned`,
+      },
+    },
+    priorityAccounts: {
+      title: 'Priority Accounts',
+      description: 'Top accounts that need a visit or follow-up touch.',
+      lastVisit: 'Last Visit',
+      visitCount: 'Visit Count',
+      addToRoute: 'Add To Route',
+      onRoute: 'On Route',
+      empty: 'No priority accounts right now. Save prospects from Search to build your territory.',
+      emptyAction: 'Find Prospects',
+      lastVisitNever: 'Never',
+      lastVisitUnknown: 'Unknown',
+    },
+  },
   onboarding: {
     title: 'Get Started',
     description: 'Set up your workspace and start building a Prospect pipeline.',
@@ -47,9 +82,8 @@ export const uiText = {
     },
     screenMeta: {
       dashboard: {
-        title: 'Territory Command',
-        subtitle:
-          'Search businesses with Prospect Search and keep your Route activity saved locally.',
+        title: 'Territory Pulse',
+        subtitle: 'Accounts that deserve attention — then search and plan your route.',
       },
       map: {
         title: 'Route',
