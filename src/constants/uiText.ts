@@ -2,6 +2,31 @@ export const uiText = {
   common: {
     more: 'More',
   },
+  territories: {
+    eyebrow: 'Field-First CRM',
+    title: 'Territories',
+    subtitle: 'Organize your pipeline by Texas sales regions — cities support the territory, not the other way around.',
+    mapHint: 'Tap a region to view live prospect and route counts from your RepRoute data.',
+    selectPrompt: 'Select a region on the map to view territory details.',
+    regionCount: (count: number) => `${count} regions`,
+    liveProspects: (count: number) => `${count} prospect${count === 1 ? '' : 's'} in territories`,
+    exampleCities: 'Example cities',
+    prospectCount: 'Prospects',
+    routeCount: 'Active route',
+    stopCount: 'Route stops',
+    emptyTitle: 'No RepRoute data in this territory yet',
+    emptyCopy:
+      'Search businesses in these cities, save prospects to your catalog, or add stops to your route to see activity here.',
+    emptyProspects: 'No prospects match this territory’s cities yet.',
+    emptyStops: 'No route stops in this territory yet.',
+    notes: 'Territory notes',
+    viewProspects: 'View Prospects',
+    viewRoutes: 'View Routes',
+    createRoute: 'Create Route',
+    editTerritory: 'Edit Territory',
+    close: 'Close territory details',
+    editComingSoon: 'Custom territory editing is coming soon.',
+  },
   territoryPulse: {
     eyebrow: 'Territory Intelligence',
     title: 'Territory Pulse',
@@ -76,6 +101,7 @@ export const uiText = {
       dashboard: 'Home',
       map: 'Route',
       search: 'Search',
+      territories: 'Territories',
       crmExport: 'CRM Export',
       followUps: 'Follow-Ups',
       settings: 'Settings',
@@ -92,6 +118,10 @@ export const uiText = {
       search: {
         title: 'Search',
         subtitle: 'Find businesses and add them to your route.',
+      },
+      territories: {
+        title: 'Territories',
+        subtitle: 'Texas sales regions — select a territory to plan coverage.',
       },
       'crm-export': {
         title: 'CRM Export',

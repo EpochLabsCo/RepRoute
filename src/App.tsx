@@ -36,6 +36,7 @@ import {
   LocateFixed,
   ExternalLink,
   UtensilsCrossed,
+  Layers,
   Map as MapIcon,
   MapPin,
   Navigation,
@@ -130,6 +131,8 @@ import { normalizeProspectNotes } from './lib/prospectNotes'
 import { warnRecoverable } from './lib/reprouteLog'
 import { applyStorageHygiene, uniqueProspectIds } from './lib/storageHygiene'
 import TerritoryPulseDashboard from './components/TerritoryPulseDashboard'
+import TerritoriesView from './components/TerritoriesView'
+import type { Territory } from './lib/territories/types'
 import {
   buildPriorityAccounts,
   computeTerritoryPulseMetrics,
@@ -198,6 +201,7 @@ type View =
   | 'follow-ups'
   | 'settings'
   | 'company-catalog'
+  | 'territories'
 
 type FoodNearbySession = {
   anchor: Prospect
@@ -2509,6 +2513,7 @@ function App() {
   >(
     () => [
       { id: 'search', label: uiText.navigation.items.search, icon: Search },
+      { id: 'territories', label: uiText.navigation.items.territories, icon: Layers },
       { id: 'map', label: uiText.navigation.items.map, icon: MapIcon },
       {
         id: 'crm-export',
@@ -7035,6 +7040,43 @@ function App() {
     )
   }
 
+  const prospectsForTerritoryMatch = useMemo(
+    () =>
+      prospects.map((prospect) => ({
+        id: prospect.id,
+        businessName: prospect.businessName,
+        city: prospect.city,
+        address: prospect.address,
+      })),
+    [prospects],
+  )
+
+  const routeStopsForTerritoryMatch = useMemo(
+    () =>
+      routeProspects.map((prospect) => ({
+        id: prospect.id,
+        businessName: prospect.businessName,
+        city: prospect.city,
+        address: prospect.address,
+      })),
+    [routeProspects],
+  )
+
+  function renderTerritoriesView() {
+    return (
+      <TerritoriesView
+        liveProspects={prospectsForTerritoryMatch}
+        routeStopProspects={routeStopsForTerritoryMatch}
+        onViewProspects={() => openCompanyCatalog()}
+        onViewRoutes={() => setActiveView('map')}
+        onCreateRoute={() => setActiveView('search')}
+        onEditTerritory={(_territory: Territory) => {
+          setActionToast({ type: 'info', text: uiText.territories.editComingSoon })
+        }}
+      />
+    )
+  }
+
   function renderCompanyCatalogView() {
     return (
       <>
@@ -7710,6 +7752,8 @@ function App() {
         return renderSettingsView()
       case 'company-catalog':
         return renderCompanyCatalogView()
+      case 'territories':
+        return renderTerritoriesView()
       default:
         return null
     }

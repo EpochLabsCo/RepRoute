@@ -4640,3 +4640,198 @@
   gap: 0.65rem;
   text-align: center;
 }
+
+.territories-view {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.territories-view__title {
+  margin: 0.35rem 0 0;
+  font-size: 1.35rem;
+}
+
+.territories-view__hint {
+  margin-top: 0.5rem;
+}
+
+.territories-view__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.territories-view__map-panel {
+  padding-bottom: 1rem;
+}
+
+.territories-view__select-prompt {
+  margin: 0.75rem 0 0;
+  text-align: center;
+}
+
+.texas-territory-map {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(7, 12, 22, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.texas-territory-map__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.texas-territory-map__region {
+  cursor: pointer;
+  transition:
+    fill-opacity 0.15s ease,
+    stroke-width 0.15s ease;
+}
+
+.texas-territory-map__region:hover,
+.texas-territory-map__region:focus-visible {
+  fill-opacity: 0.78;
+  outline: none;
+}
+
+.texas-territory-map__region--selected {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.25));
+}
+
+.texas-territory-map__label {
+  fill: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(7, 12, 22, 0.65);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.texas-territory-map__outline {
+  pointer-events: none;
+}
+
+.territory-detail-sheet {
+  max-height: min(92vh, 720px);
+}
+
+.territory-detail-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.territory-detail-sheet__title-wrap {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.territory-detail-sheet__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  margin-top: 0.35rem;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.territory-detail-sheet__body {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.territory-detail-sheet__cities p {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.territory-detail-sheet__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.territory-detail-sheet__stat {
+  padding: 0.75rem 0.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.territory-detail-sheet__stat-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.territory-detail-sheet__stat-label {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.territory-detail-sheet__actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.territory-detail-sheet__empty {
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.territory-detail-sheet__empty h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.territory-detail-sheet__preview-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.territory-detail-sheet__preview-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.territory-detail-sheet__preview-list strong {
+  font-size: 0.88rem;
+}
+
+.territory-detail-sheet__preview-list span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.territory-detail-sheet__preview-more {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: transparent !important;
+  border: none !important;
+}
